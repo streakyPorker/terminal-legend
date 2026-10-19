@@ -262,7 +262,17 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
             <Text dimColor wrap="truncate">{BUILDINGS[id].note}</Text>
           </Box>
         ))}
-        <Text dimColor>基础设施 {Math.round(econ.infrastructure)} · 市场接入 {fmtPercent(econ.marketAccess)} · 失业 {econ.unemployment}%</Text>
+        <Text dimColor>交通基础设施 {Math.round(econ.transportInfrastructure)} · 行政能力 {Math.round(econ.administrativeCapacity)} · 市场接入 {fmtPercent(econ.marketAccess)} · 失业 {econ.unemployment.toFixed(1)}%</Text>
+      </Box>
+
+      <Box flexDirection="column" marginTop={1}>
+        <Heading ui={props.ui} text="官僚效能" hint={`行动预算 ${player.bureaucracy.actionBudget} 项/月`} />
+        <Box flexDirection="row" columnGap={1}>
+          <Text dimColor>{padEnd('效能', 8)}</Text>
+          <Text color="cyan">{padEnd(bar(player.bureaucracy.score, player.bureaucracy.ceiling, 14), 15)}</Text>
+          <Text>{Math.round(player.bureaucracy.score)} / {Math.round(player.bureaucracy.ceiling)}</Text>
+        </Box>
+        <Text dimColor>资金效率 {fmtPercent(player.bureaucracy.fundEfficiency)} · 延迟概率 {fmtPercent(player.bureaucracy.delayChance)} · 信息失真 {fmtPercent(player.bureaucracy.infoDistortion)}</Text>
       </Box>
 
       <Box flexDirection="column" marginTop={1}>

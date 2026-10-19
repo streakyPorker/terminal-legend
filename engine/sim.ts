@@ -15,6 +15,7 @@ import {
   GOOD_IDS,
   buildOf,
   createWorld,
+  deriveBureaucracy,
   makeRngForWorld,
   spawnEvent,
   successorFor,
@@ -73,7 +74,7 @@ const techMultiplier = (country: Country): number => 1 + country.tech.level * 0.
 function computeProduction(country: Country): Record<GoodId, number> {
   const tech = techMultiplier(country)
   const access = 0.55 + country.econ.marketAccess * 0.9
-  const infra = 0.6 + country.econ.infrastructure / 160
+  const infra = 0.6 + country.econ.transportInfrastructure / 160
   const b = country.econ.buildings
   const out = zeroGoods()
 
@@ -336,6 +337,9 @@ function simulateCountry(
   )
   country.government.legitimacy +=
     (legitimacyTarget - country.government.legitimacy) * 0.08
+
+  // Bureaucratic effectiveness and the four constraints it feeds.
+  country.bureaucracy = deriveBureaucracy(country, true)
 
   // Technology.
   country.tech.pointsPerMonth =
@@ -715,14 +719,32 @@ export function applyDecision(
       country.econ.treasury -= affordable * unitCost
       country.econ.buildings[building] += affordable
       if (building === 'railroads') {
-        country.econ.infrastructure = clamp(country.econ.infrastructure + affordable * 3, 0, 100)
+        country.econ.transportInfrastructure = clamp(
+          country.econ.transportInfrastructure + affordable * 3,
+          0,
+          100,
+        )
         country.econ.marketAccess = clamp(country.econ.marketAccess + affordable * 0.02, 0, 1)
       }
       if (building === 'ports') {
         country.econ.marketAccess = clamp(country.econ.marketAccess + affordable * 0.01, 0, 1)
       }
       if (building === 'universities') {
-        country.econ.infrastructure = clamp(country.econ.infrastructure + affordable, 0, 100)
+        country.econ.administrativeCapacity = clamp(
+          country.econ.administrativeCapacity + affordable * 0.5,
+          0,
+          100,
+        )
+      }
+      if (building === 'offices') {
+        country.econ.administrativeCapacity = clamp(
+          country.econ.administrativeCapacity + affordable,
+          0,
+          100,
+        )
+      }
+      if (building === 'railroads' || building === 'universities' || building === 'offices') {
+        country.bureaucracy = deriveBureaucracy(country, true)
       }
       return {
         ok: true,

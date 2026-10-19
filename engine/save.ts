@@ -1,5 +1,17 @@
 import type { EngineInterface } from 'claude-code'
-import type { WorldState } from '../types'
+import type {
+  Bureaucracy,
+  Country,
+  Economy,
+  SecretaryState,
+  WorldState,
+} from '../types'
+import {
+  administrativeCapacityFor,
+  defaultSecretaryState,
+  deriveBureaucracy,
+  deriveUnemployment,
+} from './data'
 
 const ACTIVE_TTL_MS = 12 * 60 * 60 * 1000
 
@@ -31,6 +43,63 @@ export async function saveGame(
   return path
 }
 
+type LegacyEconomy = Economy & { infrastructure?: number }
+type LegacyCountry = Omit<Country, 'econ' | 'bureaucracy'> & {
+  econ: LegacyEconomy
+  bureaucracy?: Bureaucracy
+}
+type LegacyWorld = Omit<WorldState, 'countries' | 'secretary' | 'ironman'> & {
+  version: number
+  countries: Record<string, LegacyCountry>
+  secretary?: SecretaryState
+  ironman?: boolean
+}
+
+/**
+ * Brings a v1 (or already-v2) save up to the current world shape. Returns
+ * undefined for anything that is not a game world, so a stray file read as
+ * JSON cannot brick the session.
+ */
+export function migrateWorld(raw: unknown): WorldState | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const world = raw as LegacyWorld
+  if (world.version !== 1 && world.version !== 2) return undefined
+  if (typeof world.tick !== 'number' || typeof world.playerId !== 'string') return undefined
+  if (typeof world.date !== 'object' || world.date === null) return undefined
+  if (typeof world.countries !== 'object' || world.countries === null) return undefined
+
+  for (const country of Object.values(world.countries)) {
+    if (typeof country !== 'object' || country === null) return undefined
+    const econ = country.econ
+    if (typeof econ !== 'object' || econ === null) return undefined
+
+    if (typeof econ.transportInfrastructure !== 'number') {
+      econ.transportInfrastructure =
+        typeof econ.infrastructure === 'number' ? econ.infrastructure : 25
+    }
+    delete econ.infrastructure
+    if (typeof econ.administrativeCapacity !== 'number') {
+      econ.administrativeCapacity = administrativeCapacityFor(
+        country.pops.literacy,
+        econ.spending.bureaucracy,
+      )
+    }
+    if (typeof econ.buildings.offices !== 'number') econ.buildings.offices = 0
+    if (!Array.isArray(econ.constructionQueue)) econ.constructionQueue = []
+    if (typeof country.bureaucracy !== 'object' || country.bureaucracy === null) {
+      country.bureaucracy = deriveBureaucracy(country as unknown as Country, false)
+    }
+    if (typeof econ.unemployment !== 'number') {
+      econ.unemployment = deriveUnemployment(country as unknown as Country)
+    }
+  }
+
+  world.version = 2
+  world.secretary ??= defaultSecretaryState()
+  world.ironman ??= false
+  return world as unknown as WorldState
+}
+
 export async function loadGame(
   $: EngineInterface,
   name?: string,
@@ -40,10 +109,7 @@ export async function loadGame(
   if (!exists) return undefined
   try {
     const text = await $.fs.read(path)
-    const parsed = JSON.parse(text) as WorldState
-    if (parsed.version !== 1 || typeof parsed.tick !== 'number') return undefined
-    if (parsed.countries === undefined || parsed.date === undefined) return undefined
-    return parsed
+    return migrateWorld(JSON.parse(text))
   } catch {
     return undefined
   }
@@ -85,8 +151,8 @@ async function readActive($: EngineInterface, path: string): Promise<ActiveEntry
 }
 
 /**
- * Tells the statusline dispatcher whether this session is running a game, so
- * claude-hud yields the line while a campaign is active.
+ * Notes that this session is running a game. The status line now always shows
+ * claude-hud and the campaign's band together, so this is bookkeeping only.
  */
 export async function setActive($: EngineInterface, isActive: boolean): Promise<void> {
   const path = await activePath($)

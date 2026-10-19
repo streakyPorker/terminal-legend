@@ -26,6 +26,7 @@ export type BuildingId =
   | 'ports'
   | 'universities'
   | 'barracks'
+  | 'offices'
 
 export type SpendingCategory =
   | 'army'
@@ -80,6 +81,33 @@ export type Pops = {
 
 export type Spending = Record<SpendingCategory, number>
 
+export type Bureaucracy = {
+  /** 0..100, smoothed actual effectiveness. */
+  score: number
+  /** 0..100, ceiling set by offices and the form of government. */
+  ceiling: number
+  /** Policies the secretary may execute each month (the player is not limited). */
+  actionBudget: number
+  /** 0.5..1.0 share of appropriated money that reaches the project. */
+  fundEfficiency: number
+  /** 0..0.35 chance a project slips by one extra month on completion. */
+  delayChance: number
+  /** 0..0.30 chance a report or event is distorted. */
+  infoDistortion: number
+}
+
+export type ConstructionProject = {
+  id: string
+  building: BuildingId
+  count: number
+  monthsLeft: number
+  /** Book cost per month, before bureaucratic leakage. */
+  monthlyCost: number
+  /** 0..1, funded share of the current month. */
+  progress: number
+  startedAt: GameDate
+}
+
 export type Economy = {
   gdp: number
   treasury: number
@@ -92,8 +120,11 @@ export type Economy = {
   buildings: Record<BuildingId, number>
   goods: Record<GoodId, number>
   prices: Record<GoodId, number>
-  /** 0..100 */
-  infrastructure: number
+  /** 0..100 transport conditions; drives the production multiplier. */
+  transportInfrastructure: number
+  /** 0..100 administrative conditions; feeds the bureaucracy score. */
+  administrativeCapacity: number
+  constructionQueue: ConstructionProject[]
   /** 0..1 */
   marketAccess: number
   /** 0..100 */
@@ -152,6 +183,7 @@ export type Country = {
   tech: Technology
   military: Military
   diplo: Diplomacy
+  bureaucracy: Bureaucracy
 }
 
 export type War = {
@@ -235,6 +267,30 @@ export type AiState = {
   lastError?: string
 }
 
+export type Delegation = {
+  /** Budget, taxes, construction, research, events. */
+  internal: boolean
+  /** Improve, ally, rival, gift; never war or peace. */
+  diplomacy: boolean
+  /** Months covered by this delegation. */
+  months: number
+}
+
+export type SecretaryState = {
+  delegation: Delegation
+  lastReport: string
+  lastPlan: string
+  isRunning: boolean
+  lastRunTick: number
+}
+
+export type CouncilState = {
+  isOpen: boolean
+  report: string
+  secretaryReport: string
+  isRunning: boolean
+}
+
 export type WorldState = {
   version: number
   seed: number
@@ -247,10 +303,13 @@ export type WorldState = {
   log: LogEntry[]
   auto: AutoState
   ai: AiState
+  secretary: SecretaryState
+  ironman: boolean
   createdAt: number
 }
 
 export type TabId =
+  | 'council'
   | 'overview'
   | 'economy'
   | 'pops'
@@ -269,6 +328,7 @@ export type UiState = {
   isBusy: boolean
   /** False after /v3 end, while the save stays on disk. */
   isActive: boolean
+  council: CouncilState
 }
 
 export type GameConfig = {

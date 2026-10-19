@@ -1,12 +1,15 @@
 import type {
+  Bureaucracy,
   BuildingId,
   Country,
   EventOption,
   GameEvent,
   GoodId,
   Leader,
+  SecretaryState,
   Spending,
   SpendingCategory,
+  UiState,
   WorldState,
 } from '../types'
 import { makeRng, type Rng } from './rng'
@@ -35,10 +38,23 @@ export const BUILDINGS: Record<BuildingId, { name: string; cost: number; note: s
   farms: { name: '农场', cost: 1.5, note: '粮食与原料，吸纳农业人口' },
   mines: { name: '矿场', cost: 2.5, note: '煤炭与钢铁，工业的起点' },
   factories: { name: '工厂', cost: 4, note: '工业品产能，推动城市化' },
-  railroads: { name: '铁路', cost: 7, note: '基础设施与市场接入' },
+  railroads: { name: '铁路', cost: 7, note: '交通基础设施与市场接入' },
   ports: { name: '港口', cost: 3, note: '贸易与海军补给' },
   universities: { name: '大学', cost: 5, note: '科技点数与识字率' },
   barracks: { name: '兵营', cost: 2.5, note: '陆军上限与人力' },
+  offices: { name: '官署', cost: 3, note: '行政能力与官僚效能上限' },
+}
+
+/** Months a project of each kind takes, before bureaucratic delay. */
+export const BUILDING_TIME: Record<BuildingId, number> = {
+  farms: 2,
+  mines: 3,
+  factories: 4,
+  railroads: 8,
+  ports: 3,
+  universities: 5,
+  barracks: 2,
+  offices: 3,
 }
 
 export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[]
@@ -107,7 +123,17 @@ const buildings = (
   ports: number,
   universities: number,
   barracks: number,
-): Record<BuildingId, number> => ({ farms, mines, factories, railroads, ports, universities, barracks })
+  offices: number,
+): Record<BuildingId, number> => ({
+  farms,
+  mines,
+  factories,
+  railroads,
+  ports,
+  universities,
+  barracks,
+  offices,
+})
 
 const spending = (
   army: number,
@@ -149,7 +175,7 @@ type CountrySeed = {
   tariff: number
   spending: Spending
   buildings: Record<BuildingId, number>
-  infrastructure: number
+  transportInfrastructure: number
   marketAccess: number
   unemployment: number
   techLevel: number
@@ -213,8 +239,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 12,
     tariff: 8,
     spending: spending(6, 0.8, 4, 1, 0.5, 1.5),
-    buildings: buildings(3000, 35, 20, 0, 14, 4, 40),
-    infrastructure: 25,
+    buildings: buildings(3000, 35, 20, 0, 14, 4, 40, 4),
+    transportInfrastructure: 25,
     marketAccess: 0.45,
     unemployment: 6,
     techLevel: 1,
@@ -267,8 +293,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 10,
     tariff: 5,
     spending: spending(4, 6, 2.5, 1.2, 1.5, 2),
-    buildings: buildings(110, 90, 160, 25, 60, 18, 20),
-    infrastructure: 85,
+    buildings: buildings(110, 90, 160, 25, 60, 18, 20, 14),
+    transportInfrastructure: 85,
     marketAccess: 0.9,
     unemployment: 8,
     techLevel: 6,
@@ -321,8 +347,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 12,
     tariff: 12,
     spending: spending(5, 3, 2.5, 1, 1.2, 1.8),
-    buildings: buildings(260, 55, 95, 8, 30, 12, 30),
-    infrastructure: 60,
+    buildings: buildings(260, 55, 95, 8, 30, 12, 30, 10),
+    transportInfrastructure: 60,
     marketAccess: 0.75,
     unemployment: 7,
     techLevel: 5,
@@ -375,8 +401,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 11,
     tariff: 8,
     spending: spending(4.5, 0.5, 1.8, 1.1, 0.8, 1.5),
-    buildings: buildings(180, 70, 60, 6, 10, 11, 22),
-    infrastructure: 55,
+    buildings: buildings(180, 70, 60, 6, 10, 11, 22, 8),
+    transportInfrastructure: 55,
     marketAccess: 0.7,
     unemployment: 5,
     techLevel: 4,
@@ -429,8 +455,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 14,
     tariff: 15,
     spending: spending(6, 1.2, 3, 0.3, 0.4, 1),
-    buildings: buildings(900, 70, 35, 2, 12, 6, 50),
-    infrastructure: 20,
+    buildings: buildings(900, 70, 35, 2, 12, 6, 50, 6),
+    transportInfrastructure: 20,
     marketAccess: 0.5,
     unemployment: 4,
     techLevel: 2,
@@ -483,8 +509,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 13,
     tariff: 10,
     spending: spending(4, 0.6, 2.2, 0.6, 0.7, 1),
-    buildings: buildings(420, 60, 45, 4, 5, 8, 30),
-    infrastructure: 45,
+    buildings: buildings(420, 60, 45, 4, 5, 8, 30, 7),
+    transportInfrastructure: 45,
     marketAccess: 0.65,
     unemployment: 6,
     techLevel: 3,
@@ -537,8 +563,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 8,
     tariff: 20,
     spending: spending(1.5, 1.2, 1.2, 0.8, 0.5, 1.5),
-    buildings: buildings(300, 55, 55, 6, 25, 10, 12),
-    infrastructure: 50,
+    buildings: buildings(300, 55, 55, 6, 25, 10, 12, 8),
+    transportInfrastructure: 50,
     marketAccess: 0.7,
     unemployment: 5,
     techLevel: 3,
@@ -591,8 +617,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 14,
     tariff: 5,
     spending: spending(2.5, 0.6, 1.5, 0.5, 0.3, 0.8),
-    buildings: buildings(380, 22, 12, 0, 10, 4, 15),
-    infrastructure: 22,
+    buildings: buildings(380, 22, 12, 0, 10, 4, 15, 4),
+    transportInfrastructure: 22,
     marketAccess: 0.4,
     unemployment: 3,
     techLevel: 1,
@@ -645,8 +671,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 15,
     tariff: 12,
     spending: spending(3, 0.8, 2, 0.3, 0.3, 0.6),
-    buildings: buildings(420, 25, 14, 0, 12, 3, 22),
-    infrastructure: 18,
+    buildings: buildings(420, 25, 14, 0, 12, 3, 22, 4),
+    transportInfrastructure: 18,
     marketAccess: 0.45,
     unemployment: 8,
     techLevel: 1,
@@ -699,8 +725,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 14,
     tariff: 12,
     spending: spending(2, 0.8, 1.5, 0.4, 0.4, 0.6),
-    buildings: buildings(220, 30, 20, 2, 14, 6, 14),
-    infrastructure: 35,
+    buildings: buildings(220, 30, 20, 2, 14, 6, 14, 4),
+    transportInfrastructure: 35,
     marketAccess: 0.55,
     unemployment: 10,
     techLevel: 3,
@@ -721,21 +747,108 @@ export function defaultSpending(): Spending {
   return spending(2, 1, 1.5, 1, 1, 1)
 }
 
-export function initialUi() {
+const clampValue = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value))
+
+const GOVERNMENT_BUREAUCRACY_BONUS: Record<string, number> = {
+  专制君主制: -5,
+  君主立宪制: 8,
+  共和制: 10,
+  民主制: 12,
+  寡头制: -2,
+}
+
+const GOVERNMENT_CEILING_BONUS: Record<string, number> = {
+  专制君主制: 10,
+  君主立宪制: 20,
+  共和制: 25,
+  民主制: 30,
+  寡头制: 12,
+  神权制: 15,
+}
+
+export function administrativeCapacityFor(
+  literacy: number,
+  bureaucracySpending: number,
+): number {
+  return clampValue(20 + literacy * 40 + bureaucracySpending * 2, 0, 100)
+}
+
+/**
+ * Bureaucratic effectiveness and the four constraints it feeds. With
+ * `smooth` the score moves 15% toward its target (monthly); without it the
+ * score snaps to the target (new worlds and migration).
+ */
+export function deriveBureaucracy(country: Country, smooth: boolean): Bureaucracy {
+  const type = country.government.type
+  const raw =
+    0.30 * (country.econ.spending.bureaucracy * 10) +
+    0.28 * (country.pops.literacy * 100) +
+    0.18 * country.econ.administrativeCapacity +
+    0.14 * (GOVERNMENT_BUREAUCRACY_BONUS[type] ?? 0) +
+    0.10 * (100 - country.pops.radicals)
+  const ceiling = clampValue(
+    20 + country.econ.buildings.offices * 3 + (GOVERNMENT_CEILING_BONUS[type] ?? 0),
+    20,
+    100,
+  )
+  const target = clampValue(raw, 0, ceiling)
+  const previous = country.bureaucracy?.score ?? target
+  const score = smooth ? previous + (target - previous) * 0.15 : target
   return {
-    tab: 'overview' as const,
+    score,
+    ceiling,
+    actionBudget: clampValue(1 + Math.floor(score / 25), 1, 5),
+    fundEfficiency: clampValue(0.5 + score / 200, 0.5, 1),
+    delayChance: clampValue(0.35 - score / 300, 0, 0.35),
+    infoDistortion: clampValue(0.30 - score / 350, 0, 0.30),
+  }
+}
+
+/** Unemployment follows factories, literacy and unrest (plan §7.4). */
+export function deriveUnemployment(country: Country): number {
+  const popFactor = Math.max(0.1, country.pops.total / 1000)
+  return clampValue(
+    4 +
+      (1 - country.econ.buildings.factories / Math.max(1, popFactor * 3)) * 30 +
+      country.pops.radicals * 0.15 -
+      country.pops.literacy * 10,
+    0,
+    30,
+  )
+}
+
+export function defaultSecretaryState(): SecretaryState {
+  return {
+    delegation: { internal: false, diplomacy: false, months: 1 },
+    lastReport: '',
+    lastPlan: '',
+    isRunning: false,
+    lastRunTick: 0,
+  }
+}
+
+export function initialUi(): UiState {
+  return {
+    tab: 'overview',
     isPaneOpen: false,
     notice: '',
     lastReport: '',
     isBusy: false,
     isActive: false,
+    council: {
+      isOpen: false,
+      report: '',
+      secretaryReport: '',
+      isRunning: false,
+    },
   }
 }
 
 export function createWorld(seed: number, playerId = 'QING'): WorldState {
   const countries: Record<string, Country> = {}
   for (const seedRow of COUNTRY_SEEDS) {
-    countries[seedRow.id] = {
+    const country: Country = {
       id: seedRow.id,
       name: seedRow.name,
       adjective: seedRow.adjective,
@@ -753,6 +866,14 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         ...seedRow.pops,
         growth: 0.001,
       },
+      bureaucracy: {
+        score: 0,
+        ceiling: 0,
+        actionBudget: 1,
+        fundEfficiency: 0.5,
+        delayChance: 0.35,
+        infoDistortion: 0.3,
+      },
       econ: {
         gdp: seedRow.gdp,
         treasury: seedRow.treasury,
@@ -765,7 +886,12 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         buildings: { ...seedRow.buildings },
         goods: zeroGoods(),
         prices: basePrices(),
-        infrastructure: seedRow.infrastructure,
+        transportInfrastructure: seedRow.transportInfrastructure,
+        administrativeCapacity: administrativeCapacityFor(
+          seedRow.pops.literacy,
+          seedRow.spending.bureaucracy,
+        ),
+        constructionQueue: [],
         marketAccess: seedRow.marketAccess,
         unemployment: seedRow.unemployment,
         history: {
@@ -800,6 +926,8 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         prestige: seedRow.prestige,
       },
     }
+    country.bureaucracy = deriveBureaucracy(country, false)
+    countries[seedRow.id] = country
   }
 
   // Every pair has a relation, so lookups stay simple.
@@ -811,7 +939,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
   }
 
   return {
-    version: 1,
+    version: 2,
     seed,
     date: { year: START_YEAR, month: START_MONTH },
     tick: 0,
@@ -839,6 +967,8 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
       intervalTicks: 3,
       lastDecisionTick: 0,
     },
+    secretary: defaultSecretaryState(),
+    ironman: false,
     createdAt: 0,
   }
 }
