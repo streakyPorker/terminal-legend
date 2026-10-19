@@ -1,7 +1,7 @@
 # 第一刀实现计划：官僚效能 → 秘书子代理 → 御前会议
 
-- Status: proposed
-- Depends on: ADR 0001（月度御前会议 + 子代理秘书）、ADR 0002（自由数值）、ADR 0003（引擎/LLM 边界）
+- Status: implemented（M1–M6）
+- Depends on: ADR 0001（月度御前会议 + 子代理秘书）、ADR 0002（自由数值）、ADR 0003（引擎/LLM 边界）、ADR 0004（修正叠算）、ADR 0005（不做存档兼容）
 - Scope: 把“实时自动推进”改成“每月御前会议 + 可托管”；引入官僚效能、秘书子代理、建造队列；修掉已知经济矛盾。
 - 后续切片：轻量双边贸易（Slice B）、外交博弈 + 战争目标（Slice C）。
 
@@ -186,7 +186,7 @@ export type CouncilState = {
    - 玩家的战争结束；
    - 历史议程达成；
    - 秘书报错、超时或越权审计命中。
-6. **移除实时时钟**：删除 `startAuto` / `tickOnce` / `$.clock.every`；`auto.*` 字段保留但不再驱动主循环，只用于兼容旧存档。
+6. **移除实时时钟**：删除 `startAuto` / `tickOnce` / `$.clock.every` 与整个 `auto` 状态（ADR 0005：不做兼容）。
 
 ## 5. 秘书子代理
 
@@ -311,7 +311,10 @@ const report = await answerOf(agentId)   // turn.complete 的 text，带 240s �
   - 状态行显示 `铁人`。
 - `/v3 ironman on|off` 仅在开局第一个月可切换。
 
-## 9. 迁移（v1 → v2）
+## 9. 迁移（已取消）
+
+实现时改为不做兼容（ADR 0005）：`WorldState.version` 不匹配即拒绝载入，旧存档直接删除。
+以下 v1 → v2 迁移规则不再实现，保留作历史记录。
 
 `migrateWorld(raw)`：
 
@@ -327,7 +330,7 @@ const report = await answerOf(agentId)   // turn.complete 的 text，带 240s �
 3. `world.secretary ??= { delegation: { internal:false, diplomacy:false, months:1 }, lastReport:'', lastPlan:'', isRunning:false, lastRunTick:0 }`。
 4. `world.ironman ??= false`。
 5. `ui.council ??= { isOpen:false, report:'', secretaryReport:'', isRunning:false }`。
-6. 旧 `auto` 字段保留但不驱动循环；旧存档载入后直接进入第一次御前会议。
+6. `auto` 字段与旧存档一并删除；载入当前版本存档后直接进入第一次御前会议。
 
 `loadGame` 先 `JSON.parse`，再 `migrateWorld`，然后校验版本。
 

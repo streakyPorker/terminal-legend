@@ -8,12 +8,14 @@ import {
   applyEventOption,
   clamp,
   clone,
+  councilInterrupt,
   newWorld,
   randomDecision,
   type AdvanceReport,
   type Decision,
 } from '../engine/sim'
 import { loadGame, saveGame, setActive } from '../engine/save'
+import { applyCheat, type CheatParams } from '../engine/cheat'
 import { SECRETARY_PROMPT, monthlyBriefing } from '../engine/secretary'
 import { countryTag, fmtDate, fmtDateLong, fmtNumber, statusLine } from '../view/format'
 import {
@@ -22,6 +24,7 @@ import {
   Report,
   helpText,
   type ControlAction,
+  type CouncilAction,
   type UiKit,
 } from '../view/panels'
 
@@ -30,8 +33,12 @@ const WORLD = { plugin: 'terminal-legend', key: 'world' } as const
 const UI = { plugin: 'terminal-legend', key: 'ui' } as const
 const SECRETARY_AGENT = 'terminal-legend:secretary'
 const SECRETARY_TIMEOUT_MS = 240_000
+// Full toolset per ADR 0001: misuse is caught by the prompt and audited
+// afterwards, not prevented by withholding tools.
 const SECRETARY_TOOLS = [
   'mcp__terminal-legend__v3_status',
+  'mcp__terminal-legend__v3_advance',
+  'mcp__terminal-legend__v3_cheat',
   'mcp__terminal-legend__v3_action',
   'mcp__terminal-legend__v3_diplomacy',
   'mcp__terminal-legend__v3_event',
@@ -84,7 +91,7 @@ function statusText(world: WorldState): string {
   for (const country of Object.values(world.countries)) {
     const playerMark = country.isPlayer ? '★' : ' '
     lines.push(
-      `${playerMark}[${country.flag}]${country.name}(${country.id}) 库${fmtNumber(country.econ.treasury)} GDP${fmtNumber(country.econ.gdp)} 合${Math.round(country.government.legitimacy)} 激${Math.round(country.pops.radicals)} 陆${fmtNumber(country.military.army)} 海${fmtNumber(country.military.navy)} 科${country.tech.level}`,
+      `${playerMark}[${country.flag}]${country.name}(${country.id}) 库${fmtNumber(country.econ.treasury)} GDP${fmtNumber(country.econ.gdp)} 合法性${Math.round(country.government.legitimacy)} 激进${Math.round(country.pops.radicals)} 陆军${fmtNumber(country.military.army)} 海军${fmtNumber(country.military.navy)} 科技${country.tech.level}`,
     )
   }
   const player = world.countries[world.playerId]
@@ -105,6 +112,7 @@ function statusText(world: WorldState): string {
               .join('；')
       }`,
       `秘书委托：内政${world.secretary.delegation.internal ? '开' : '关'}，外交${world.secretary.delegation.diplomacy ? '开' : '关'}${world.secretary.lastReport === '' ? '' : `｜上次报告：${world.secretary.lastReport.slice(0, 200)}`}`,
+      `国策修正：${player.modifiers.length === 0 ? '无' : player.modifiers.map(modifier => modifier.label).join('、')}`,
     )
   }
   const pending = pendingOf(world)
@@ -153,10 +161,11 @@ function narratorPrompt(world: WorldState): string {
     `你是这个 19 世纪世界的叙事者，同时也是各国领袖的扮演者。玩家扮演 ${countryTag(player)}。`,
     '硬性规则：',
     '1. 所有数值以工具返回为准；需要世界状态时调用 v3_status，绝不要编造数字。',
-    '2. 玩家用自然语言下达命令时，先判断意图，再调用对应工具：v3_action（内政/建造/税收/征兵/法案）、v3_diplomacy（外交/宣战/停战）、v3_event（处理事件）、v3_advance（推进时间）。',
+    '2. 玩家用自然语言下达命令时，先判断意图，再调用对应工具：v3_action（内政/建造/税收/征兵/法案）、v3_diplomacy（外交/宣战/停战）、v3_event（处理事件）、v3_advance（批准推进一月；months>1 视为托管）。',
     '3. 玩家与某国领袖交谈时，用该领袖的第一人称口吻回应，体现其人格、特质与议程；随后调用 v3_leader 记录这次交流（可带上 mood / relation 调整）。',
-    '4. 未经玩家明确要求，不要推进时间。',
-    '5. 回复使用中文，简洁但有画面感；重大转折可以引用编年史。',
+    '4. 时间按月推进：每月停在御前会议，只有玩家批准或托管后才推进；绝不要自行推进。',
+    '5. 月度秘书是独立子代理（玩家用 /v3 secretary 召见）。你可以解读它的报告，但不要假装自己执行了它的计划。',
+    '6. 回复使用中文，简洁但有画面感；重大转折可以引用编年史。',
     '',
     describeWorldForNarrator(world),
   ]
@@ -173,23 +182,8 @@ function narratorPrompt(world: WorldState): string {
 
 // ---------------------------------------------------------------- engine plumbing
 
-let autoTimer: { cancel: () => void } | undefined
+// Time moves only when the player approves an advance or delegates a run.
 let isAdvancing = false
-let isTurnRunning = false
-let resumeAfterTurn = false
-
-function stopAuto(): void {
-  autoTimer?.cancel()
-  autoTimer = undefined
-}
-
-function startAuto($: EngineInterface, seconds: number): void {
-  stopAuto()
-  const ms = Math.max(5, Math.floor(seconds)) * 1000
-  autoTimer = $.clock.every(ms, () => {
-    void tickOnce($).catch(() => undefined)
-  })
-}
 
 async function refreshStatus($: EngineInterface): Promise<void> {
   const world = await getWorld($)
@@ -198,7 +192,8 @@ async function refreshStatus($: EngineInterface): Promise<void> {
     $.ui.status(undefined)
     return
   }
-  $.ui.status(statusLine(world))
+  const council = ui.council?.isOpen === true ? ' · 待议' : ' · 已批'
+  $.ui.status(`${statusLine(world)}${council}`)
 }
 
 async function openPane($: EngineInterface): Promise<void> {
@@ -213,18 +208,11 @@ async function openPane($: EngineInterface): Promise<void> {
   }
 }
 
-async function tickOnce($: EngineInterface): Promise<void> {
-  if (isAdvancing || isTurnRunning) return
-  const current = await activeWorld($)
-  if (current === undefined) return
-  if (!current.world.auto.isOn || current.world.auto.isPaused) return
-  await advanceGame($, 1, false)
-}
-
 async function advanceGame(
   $: EngineInterface,
   months: number,
   announce: boolean,
+  openCouncil = true,
 ): Promise<string> {
   if (isAdvancing) return '时间正在推进，请稍候。'
   const current = await activeWorld($)
@@ -258,11 +246,18 @@ async function advanceGame(
       if (world.log.length > 400) world.log.splice(0, world.log.length - 400)
     }
 
+    const summary = summarize(report, months)
     await setWorld($, world)
     await patchUi($, {
       isBusy: false,
-      lastReport: summarize(report, months),
+      lastReport: summary,
       notice: aiError ?? '',
+      council: {
+        isOpen: openCouncil,
+        report: summary,
+        secretaryReport: '',
+        isRunning: false,
+      },
     })
     await refreshStatus($)
     try {
@@ -289,7 +284,7 @@ async function advanceGame(
     if (pending.length > 0 && announce) {
       $.ui.toast(`新事件：${pending.map(event => event.title).join('、')}`)
     }
-    return summarize(report, months)
+    return summary
   } finally {
     isAdvancing = false
     await patchUi($, { isBusy: false }).catch(() => undefined)
@@ -347,41 +342,63 @@ async function askSecretary(
   return { text: answer, isTimeout: answer === '' }
 }
 
-/** Runs one secretary turn and stores its report on the world. */
-async function runSecretary($: EngineInterface): Promise<string> {
+/**
+ * Starts a secretary turn without blocking the caller: the command and UI
+ * hooks have a short budget, while the subagent may take up to 240 seconds.
+ * The report lands later through finishSecretary.
+ */
+async function startSecretary($: EngineInterface): Promise<string> {
   const current = await activeWorld($)
   if (current === undefined) return '还没有进行中的游戏。输入 /v3 new 开始一局。'
+  if (isDelegatedRun) return '托管进行中，请等它结束再召见秘书。'
   if (current.world.secretary.isRunning || secretaryAnswers.size > 0) {
     return '秘书正在拟旨，请稍候。'
   }
   const world = clone(current.world)
   world.secretary.isRunning = true
   await setWorld($, world)
-  await patchUi($, { notice: '秘书正在拟旨…' })
+  await patchUi($, {
+    notice: '秘书正在拟旨…',
+    council: { ...current.ui.council, isRunning: true },
+  })
+  void finishSecretary($, world).catch(() => undefined)
+  return '秘书已受命，正在拟旨；报告到达后会提示。'
+}
 
+/** Waits for the subagent's answer, then stores it and tells the player. */
+async function finishSecretary(
+  $: EngineInterface,
+  briefingWorld: WorldState,
+): Promise<void> {
   try {
-    const answer = await askSecretary($, world)
+    const answer = await askSecretary($, briefingWorld)
     // The subagent's tool calls wrote their own world; reload rather than
-    // overwriting them with the pre-run copy.
-    const latest = await activeWorld($)
-    const next = clone(latest?.world ?? world)
+    // overwriting them with the pre-run copy. If the game was ended while the
+    // secretary ran, drop the report instead of resurrecting the world.
+    const latestWorld = await getWorld($)
+    if (latestWorld === undefined) return
+    const next = clone(latestWorld)
+    const report = answer.isTimeout ? '秘书未按时呈报' : answer.text
     next.secretary.isRunning = false
     next.secretary.lastRunTick = next.tick
-    next.secretary.lastReport = answer.isTimeout ? '秘书未按时呈报' : answer.text
-    if (!answer.isTimeout && answer.text !== '') {
+    next.secretary.lastReport = report
+    if (!answer.isTimeout && report !== '') {
       next.log.push({
         date: { ...next.date },
         kind: 'politics',
-        text: `[秘书] ${answer.text.replace(/\s+/g, ' ').slice(0, 160)}`,
+        text: `[秘书] ${report.replace(/\s+/g, ' ').slice(0, 160)}`,
       })
       if (next.log.length > 400) next.log.splice(0, next.log.length - 400)
     }
     await setWorld($, next)
     await saveGame($, next).catch(() => undefined)
     await refreshStatus($)
-    await patchUi($, { notice: answer.isTimeout ? '秘书未按时呈报' : '秘书已呈报，请审阅' })
+    const ui = await getUi($)
+    await patchUi($, {
+      notice: answer.isTimeout ? '秘书未按时呈报' : '秘书已呈报，请审阅',
+      council: { ...ui.council, secretaryReport: report, isRunning: false },
+    })
     $.ui.toast(answer.isTimeout ? '秘书未按时呈报' : '秘书已呈报')
-    return next.secretary.lastReport
   } catch (error) {
     const latest = await activeWorld($)
     if (latest !== undefined) {
@@ -390,7 +407,7 @@ async function runSecretary($: EngineInterface): Promise<string> {
       await setWorld($, next).catch(() => undefined)
     }
     await patchUi($, { notice: '秘书出错' }).catch(() => undefined)
-    return `秘书出错：${String(error)}`
+    $.ui.toast(`秘书出错：${String(error)}`)
   }
 }
 
@@ -399,6 +416,7 @@ async function runSecretary($: EngineInterface): Promise<string> {
  * and tells the player. Per ADR 0001 the call itself still runs.
  */
 async function auditOverreach($: EngineInterface, action: string): Promise<void> {
+  overreachDuringRun = true
   const current = await activeWorld($)
   if (current === undefined) return
   const world = clone(current.world)
@@ -420,43 +438,149 @@ async function controlGame($: EngineInterface, action: ControlAction): Promise<s
   const world = clone(current.world)
 
   if (action === 'next') {
+    if (isDelegatedRun) return '托管进行中，请等它结束。'
     return advanceGame($, 1, true)
   }
 
-  if (action === 'save') {
-    world.auto.resumeOnStart = true
-    await setWorld($, world)
-    const path = await saveGame($, world).catch(() => '（保存失败）')
-    $.ui.toast('已保存')
-    return `已保存到 ${path}`
+  if (action === 'council') {
+    await patchUi($, { tab: 'council' })
+    await openPane($)
+    return '已打开御前议事。'
   }
 
-  if (action === 'pause') {
-    world.auto.isOn = true
-    world.auto.isPaused = true
-    stopAuto()
-  } else if (action === 'resume') {
-    world.auto.isOn = true
-    world.auto.isPaused = false
-    startAuto($, world.auto.intervalSeconds)
-  } else {
-    world.auto.isOn = !world.auto.isOn
-    world.auto.isPaused = false
-    if (world.auto.isOn) startAuto($, world.auto.intervalSeconds)
-    else stopAuto()
-  }
-
+  world.resumeOnStart = true
   await setWorld($, world)
-  await saveGame($, world).catch(() => undefined)
-  await refreshStatus($)
+  const path = await saveGame($, world).catch(() => '（保存失败）')
+  $.ui.toast('已保存')
+  return `已保存到 ${path}`
+}
+
+// Set by auditOverreach when the secretary oversteps during a managed run.
+let overreachDuringRun = false
+
+/**
+ * Why a managed run should stop after the month that just passed, or '' to
+ * keep going. Plan §4.5; the historical-agenda check waits for agenda data.
+ */
+function interruptReason(before: WorldState, after: WorldState): string {
+  const reason = councilInterrupt(before, after)
+  if (reason !== '') return reason
+  if (overreachDuringRun) return '秘书越权'
+  return ''
+}
+
+let isDelegatedRun = false
+
+/**
+ * Starts a managed run and returns at once. The monthly loop continues in
+ * the background (command hooks have a short budget; a run may take minutes).
+ */
+async function startDelegated($: EngineInterface, months: number): Promise<string> {
+  const current = await activeWorld($)
+  if (current === undefined) return '还没有进行中的游戏。'
+  if (isDelegatedRun) return '已有托管在进行中，请等它结束。'
+  const total = clamp(Number.isFinite(months) ? Math.round(months) : 1, 1, 12)
+  overreachDuringRun = false
+  isDelegatedRun = true
   await patchUi($, {
-    notice: world.auto.isOn
-      ? world.auto.isPaused
-        ? '自动推进已暂停'
-        : `自动推进中：每 ${world.auto.intervalSeconds} 秒一个月`
-      : '已切换为手动推进',
+    council: { ...current.ui.council, isOpen: false, isRunning: true },
+    notice: `托管中：最多 ${total} 个月`,
   })
-  return 'ok'
+  void runDelegated($, total).catch(() => {
+    isDelegatedRun = false
+  })
+  return `托管已开始：最多 ${total} 个月；遇待决事件、战争或秘书越权会停下并提示。`
+}
+
+async function runDelegated($: EngineInterface, total: number): Promise<void> {
+  try {
+    let advancedCount = 0
+    let reason = ''
+    for (let index = 0; index < total; index += 1) {
+      const before = await activeWorld($)
+      if (before === undefined) break
+      const snapshot = clone(before.world)
+      const summary = await advanceGame($, 1, false, false)
+      if (!summary.startsWith('推进 ')) {
+        reason = summary
+        break
+      }
+      advancedCount += 1
+      const after = await activeWorld($)
+      if (after === undefined) break
+      reason = interruptReason(snapshot, after.world)
+      if (reason !== '') break
+    }
+
+    const latest = await activeWorld($)
+    if (latest === undefined) return
+    const lastReport = latest.ui.council.report
+    const header =
+      reason === ''
+        ? `托管完成：推进 ${advancedCount} 个月`
+        : `托管中断：推进 ${advancedCount} 个月后，因「${reason}」停下`
+    const report = `${header}\n${lastReport}`
+    await patchUi($, {
+      council: {
+        isOpen: true,
+        report,
+        secretaryReport: latest.ui.council.secretaryReport,
+        isRunning: false,
+      },
+      notice: header,
+    })
+    await refreshStatus($)
+    $.ui.toast(header)
+  } finally {
+    isDelegatedRun = false
+  }
+}
+
+async function councilAction(
+  $: EngineInterface,
+  action: CouncilAction,
+  value?: number,
+): Promise<string> {
+  const current = await activeWorld($)
+  if (current === undefined) return '还没有进行中的游戏。'
+  switch (action) {
+    case 'approve': {
+      if (isDelegatedRun) return '托管进行中，请等它结束。'
+      await patchUi($, {
+        council: { ...current.ui.council, isOpen: false },
+      })
+      return advanceGame($, 1, true)
+    }
+    case 'run':
+      return startDelegated($, value ?? current.world.secretary.delegation.months)
+    case 'recompose':
+      return startSecretary($)
+    case 'delegate-internal': {
+      const world = clone(current.world)
+      world.secretary.delegation.internal = !world.secretary.delegation.internal
+      await setWorld($, world)
+      await saveGame($, world).catch(() => undefined)
+      $.ui.toast(`内政委托已${world.secretary.delegation.internal ? '开启' : '关闭'}`)
+      return 'ok'
+    }
+    case 'delegate-diplomacy': {
+      const world = clone(current.world)
+      world.secretary.delegation.diplomacy = !world.secretary.delegation.diplomacy
+      await setWorld($, world)
+      await saveGame($, world).catch(() => undefined)
+      $.ui.toast(`外交委托已${world.secretary.delegation.diplomacy ? '开启' : '关闭'}`)
+      return 'ok'
+    }
+    case 'months': {
+      const world = clone(current.world)
+      world.secretary.delegation.months = clamp(Math.round(value ?? 1), 1, 12)
+      await setWorld($, world)
+      await saveGame($, world).catch(() => undefined)
+      return 'ok'
+    }
+    default:
+      return 'ok'
+  }
 }
 
 // ---------------------------------------------------------------- tool specs
@@ -475,7 +599,7 @@ const TOOL_SPECS: {
   {
     name: 'v3_advance',
     description:
-      '终末传奇：推进游戏时间。默认 1 个月，最多 24 个月。会先让各国 AI 领袖做决策，再确定性模拟经济、人口、科技、外交与战争，并返回编年史与待决事件。',
+      '终末传奇：批准并推进一个月（打开下一次御前会议）。months>1 启动后台托管并立即返回，遇待决事件、新的战争/战争结束、秘书越权即中断。会先让各国 AI 领袖做决策，再确定性模拟经济、人口、科技、外交与战争。仅玩家可调用；秘书调用会被审计。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -486,6 +610,60 @@ const TOOL_SPECS: {
           description: '推进的月数，默认 1。',
         },
       },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'v3_cheat',
+    description:
+      '终末传奇（天命）：修改玩家国家的金钱、科技点、建筑、关系、战争分数、日期，或触发事件、更换领袖、施加修正。铁人模式下拒绝。action 取值：treasury（amount）、techPoints（amount）、building（building/count）、relations（country/amount）、warScore（country/amount）、date（year/month）、event（kind 可选）、leader（name/title/persona）、modifier（stat/stack/value/months/label）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: [
+            'treasury',
+            'techPoints',
+            'building',
+            'relations',
+            'warScore',
+            'date',
+            'event',
+            'leader',
+            'modifier',
+          ],
+        },
+        amount: { type: 'number' },
+        building: {
+          type: 'string',
+          enum: [
+            'farms',
+            'mines',
+            'factories',
+            'railroads',
+            'ports',
+            'universities',
+            'barracks',
+            'offices',
+          ],
+        },
+        count: { type: 'integer', minimum: -20, maximum: 20 },
+        country: { type: 'string' },
+        year: { type: 'integer', minimum: 1800, maximum: 2200 },
+        month: { type: 'integer', minimum: 1, maximum: 12 },
+        kind: { type: 'string' },
+        name: { type: 'string' },
+        title: { type: 'string' },
+        persona: { type: 'string' },
+        stat: { type: 'string', description: 'modifier 时必填，例如 production / income / radicals。' },
+        stack: { type: 'string', enum: ['flat', 'percent', 'multiply'] },
+        value: { type: 'number' },
+        months: { type: 'integer', minimum: 0, maximum: 240 },
+        label: { type: 'string' },
+        id: { type: 'string' },
+      },
+      required: ['action'],
       additionalProperties: false,
     },
   },
@@ -502,7 +680,16 @@ const TOOL_SPECS: {
         },
         building: {
           type: 'string',
-          enum: ['farms', 'mines', 'factories', 'railroads', 'ports', 'universities', 'barracks'],
+          enum: [
+            'farms',
+            'mines',
+            'factories',
+            'railroads',
+            'ports',
+            'universities',
+            'barracks',
+            'offices',
+          ],
           description: 'build 时必填。',
         },
         count: { type: 'integer', minimum: 1, maximum: 20 },
@@ -617,8 +804,6 @@ const toolFail = (text: string) => ({ deny: text })
 
 export const register: Register = (on, options) => {
   const aiModel = String(options.aiModel ?? 'haiku')
-  const defaultSeconds = Math.max(5, Math.floor(Number(options.autoTickSeconds ?? 60)))
-  const autoStart = options.autoStart !== false
 
   // ------------------------------------------------------------ session
 
@@ -626,7 +811,7 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: 'v3',
       description: '终末传奇：维多利亚式大战略模拟（新游戏 / 推进 / 面板 / 事件 / 存档）',
-      argumentHint: '[new|next|auto|pause|resume|panel|status|events|save|load|play|end|help]',
+      argumentHint: '[new|next|run|council|secretary|delegate|panel|status|events|save|load|play|end|help]',
     })
     for (const spec of TOOL_SPECS) {
       await $.tool.register({ ...spec, isDeferred: false })
@@ -646,10 +831,8 @@ export const register: Register = (on, options) => {
     const ui = await getUi($)
     if (world !== undefined && ui.isActive) {
       await setActive($, true)
+      await patchUi($, { council: { ...ui.council, isOpen: true } })
       await refreshStatus($)
-      if (world.auto.isOn && !world.auto.isPaused) {
-        startAuto($, world.auto.intervalSeconds)
-      }
     } else if (world === undefined) {
       let loaded: WorldState | undefined
       try {
@@ -657,15 +840,17 @@ export const register: Register = (on, options) => {
       } catch {
         loaded = undefined
       }
-      if (loaded !== undefined && loaded.auto.resumeOnStart) {
+      if (loaded !== undefined && loaded.resumeOnStart) {
         await setWorld($, loaded)
-        await setUi($, { ...initialUi(), isActive: true })
+        await setUi($, {
+          ...initialUi(),
+          isActive: true,
+          tab: 'council',
+          council: { isOpen: true, report: '', secretaryReport: '', isRunning: false },
+        })
         await setActive($, true)
         await refreshStatus($)
-        if (loaded.auto.isOn && !loaded.auto.isPaused) {
-          startAuto($, loaded.auto.intervalSeconds)
-        }
-        $.ui.log(`终末传奇：已载入 ${fmtDateLong(loaded.date)} 的存档`)
+        $.ui.log(`终末传奇：已载入 ${fmtDateLong(loaded.date)} 的存档，御前会议已开始`)
       } else {
         await setActive($, false)
         $.ui.status(undefined)
@@ -676,7 +861,6 @@ export const register: Register = (on, options) => {
   })
 
   on('session.end', async ($, e, next) => {
-    stopAuto()
     const world = await getWorld($)
     if (world !== undefined) {
       await saveGame($, world).catch(() => undefined)
@@ -690,11 +874,6 @@ export const register: Register = (on, options) => {
   // The secretary is spawned only by this plugin; the model never sees it.
   on('agent.offer', { agent: SECRETARY_AGENT }, () => ({ isOffered: false }))
 
-  on('turn.start', ($, e, next) => {
-    if (e.agentId === undefined) isTurnRunning = true
-    return next(e)
-  })
-
   on('turn.complete', async ($, e, next) => {
     if (e.agentId !== undefined) {
       const settle = secretaryAnswers.get(e.agentId)
@@ -702,39 +881,6 @@ export const register: Register = (on, options) => {
         secretaryAnswers.delete(e.agentId)
         settle(e.answer)
       }
-      return next(e)
-    }
-    isTurnRunning = false
-    if (resumeAfterTurn) {
-      resumeAfterTurn = false
-      const current = await activeWorld($)
-      if (current !== undefined && current.world.auto.isOn) {
-        const world = clone(current.world)
-        world.auto.isPaused = false
-        await setWorld($, world)
-        await refreshStatus($)
-        startAuto($, world.auto.intervalSeconds)
-        await patchUi($, { notice: '玩家操作结束，自动推进继续' })
-      }
-    }
-    return next(e)
-  })
-
-  on('prompt.submit', async ($, e, next) => {
-    if (e.origin?.kind === 'plugin') return next(e)
-    const current = await activeWorld($)
-    if (
-      current !== undefined &&
-      current.world.auto.isOn &&
-      !current.world.auto.isPaused
-    ) {
-      const world = clone(current.world)
-      world.auto.isPaused = true
-      resumeAfterTurn = true
-      stopAuto()
-      await setWorld($, world)
-      await refreshStatus($)
-      await patchUi($, { notice: '玩家行动中，自动推进已暂停' })
     }
     return next(e)
   })
@@ -777,34 +923,53 @@ export const register: Register = (on, options) => {
           }
           const world = newWorld(Date.now(), requested)
           world.createdAt = Date.now()
-          world.auto.aiModel = aiModel
-          world.auto.intervalSeconds = defaultSeconds
-          world.auto.isOn = autoStart
-          world.auto.isPaused = false
-          world.auto.resumeOnStart = true
+          world.ai.model = aiModel
+          world.resumeOnStart = true
           await setWorld($, world)
-          await setUi($, { ...initialUi(), isActive: true })
+          await setUi($, {
+            ...initialUi(),
+            isActive: true,
+            tab: 'council',
+            council: {
+              isOpen: true,
+              report: `新局开始：${fmtDateLong(world.date)}。御前会议等你批准推进第一个月。`,
+              secretaryReport: '',
+              isRunning: false,
+            },
+          })
           await setActive($, true)
           await refreshStatus($)
-          if (autoStart) startAuto($, world.auto.intervalSeconds)
           await openPane($)
           await saveGame($, world).catch(() => undefined)
           const player = world.countries[requested]
           return {
-            text: `新游戏开始：${fmtDateLong(world.date)}，你扮演 ${player !== undefined ? countryTag(player) : requested}。自动推进每 ${world.auto.intervalSeconds} 秒一个月；你一发消息就会暂停。`,
+            text: `新游戏开始：${fmtDateLong(world.date)}，你扮演 ${player !== undefined ? countryTag(player) : requested}。御前会议已开始；用 /v3 next 批准推进一月，或 /v3 run N 托管。`,
           }
         }
 
         case 'next':
-        case 'advance': {
-          const months = clamp(Math.floor(Number(parts[1] ?? 1)), 1, 24)
-          const summary = await advanceGame($, months, true)
-          return { text: summary }
+        case 'advance':
+        case 'approve': {
+          if (isDelegatedRun) return { text: '托管进行中，请等它结束。' }
+          return { text: await advanceGame($, 1, true) }
+        }
+
+        case 'run': {
+          if (current === undefined) return { text: '还没有进行中的游戏。' }
+          const months = clamp(Math.floor(Number(parts[1] ?? current.world.secretary.delegation.months)), 1, 12)
+          return { text: await startDelegated($, months) }
+        }
+
+        case 'council': {
+          if (current === undefined) return { text: '还没有进行中的游戏。' }
+          await patchUi($, { tab: 'council' })
+          await openPane($)
+          return { text: '已切换到御前议事。' }
         }
 
         case 'secretary': {
           if (current === undefined) return { text: '还没有进行中的游戏。' }
-          return { text: await runSecretary($) }
+          return { text: await startSecretary($) }
         }
 
         case 'delegate': {
@@ -830,53 +995,65 @@ export const register: Register = (on, options) => {
           }
         }
 
-        case 'auto': {
-          if (current === undefined) return { text: '还没有进行中的游戏。先 /v3 new。' }
-          const world = clone(current.world)
-          const seconds = parts[1] !== undefined ? Math.max(5, Math.floor(Number(parts[1]))) : world.auto.intervalSeconds || defaultSeconds
-          world.auto.isOn = true
-          world.auto.isPaused = false
-          world.auto.intervalSeconds = seconds
-          await setWorld($, world)
-          startAuto($, seconds)
-          await saveGame($, world).catch(() => undefined)
-          await refreshStatus($)
-          return { text: `自动推进已开启：每 ${seconds} 秒一个月。` }
-        }
-
-        case 'pause': {
+        case 'cheat': {
           if (current === undefined) return { text: '还没有进行中的游戏。' }
+          const action = (parts[1] ?? '').toLowerCase()
+          const params: CheatParams = { action }
+          if (action === 'treasury' || action === 'techPoints') {
+            params.amount = Number(parts[2] ?? 0)
+          } else if (action === 'building') {
+            params.building = parts[2] ?? ''
+            params.count = Number(parts[3] ?? 1)
+          } else if (action === 'relations' || action === 'warScore') {
+            params.country = (parts[2] ?? '').toUpperCase()
+            params.amount = Number(parts[3] ?? 10)
+          } else if (action === 'date') {
+            params.year = Number(parts[2] ?? current.world.date.year)
+            params.month = Number(parts[3] ?? current.world.date.month)
+          } else if (action === 'event') {
+            if (parts[2] !== undefined) params.kind = parts[2]
+          } else if (action === 'leader') {
+            params.name = parts.slice(2).join(' ')
+          } else if (action === 'modifier') {
+            params.stat = parts[2] ?? ''
+            params.value = Number(parts[3] ?? 0)
+            params.stack = parts[4] ?? 'flat'
+            if (parts[5] !== undefined) params.months = Number(parts[5])
+          } else {
+            return {
+              text: '用法：/v3 cheat treasury|techPoints <数值>｜building <建筑> <数量>｜relations <国家> <数值>｜warScore <国家> <数值>｜date <年> <月>｜event [类型]｜leader <姓名>',
+            }
+          }
           const world = clone(current.world)
-          world.auto.isOn = true
-          world.auto.isPaused = true
-          stopAuto()
-          await setWorld($, world)
-          await saveGame($, world).catch(() => undefined)
-          await refreshStatus($)
-          return { text: '自动推进已暂停。' }
-        }
-
-        case 'resume': {
-          if (current === undefined) return { text: '还没有进行中的游戏。' }
-          const world = clone(current.world)
-          world.auto.isOn = true
-          world.auto.isPaused = false
-          await setWorld($, world)
-          startAuto($, world.auto.intervalSeconds)
-          await refreshStatus($)
-          return { text: `自动推进继续：每 ${world.auto.intervalSeconds} 秒一个月。` }
-        }
-
-        case 'stop': {
-          if (current === undefined) return { text: '还没有进行中的游戏。' }
-          const world = clone(current.world)
-          world.auto.isOn = false
-          world.auto.isPaused = false
-          stopAuto()
+          const result = applyCheat(world, params)
+          if (!result.ok) return { text: result.text }
           await setWorld($, world)
           await saveGame($, world).catch(() => undefined)
           await refreshStatus($)
-          return { text: '已切换为手动推进。' }
+          await patchUi($, { notice: result.text })
+          return { text: result.text }
+        }
+
+        case 'ironman': {
+          if (current === undefined) return { text: '还没有进行中的游戏。' }
+          const toggle = (parts[1] ?? '').toLowerCase()
+          if (toggle !== 'on' && toggle !== 'off') {
+            return { text: '用法：/v3 ironman on|off（仅开局第一个月可切换）。' }
+          }
+          if (current.world.tick !== 0) {
+            return { text: '铁人模式只能在开局第一个月切换。' }
+          }
+          const world = clone(current.world)
+          world.ironman = toggle === 'on'
+          await setWorld($, world)
+          await saveGame($, world).catch(() => undefined)
+          await refreshStatus($)
+          return {
+            text:
+              toggle === 'on'
+                ? '铁人模式已开启：天命禁用，只保留自动存档。'
+                : '铁人模式已关闭。',
+          }
         }
 
         case 'panel': {
@@ -936,26 +1113,37 @@ export const register: Register = (on, options) => {
 
         case 'save': {
           if (current === undefined) return { text: '还没有进行中的游戏。' }
+          if (current.world.ironman && parts[1] !== undefined) {
+            return { text: '铁人模式只保留自动存档，不能命名存档。' }
+          }
           const world = clone(current.world)
-          world.auto.resumeOnStart = true
+          world.resumeOnStart = true
           await setWorld($, world)
           const path = await saveGame($, world, parts[1])
           return { text: `已保存到 ${path}` }
         }
 
         case 'load': {
+          if (current !== undefined && current.world.ironman) {
+            return { text: '铁人模式不能读取其他存档。' }
+          }
           const loaded = await loadGame($, parts[1])
           if (loaded === undefined) return { text: '没有找到存档。' }
-          loaded.auto.resumeOnStart = true
+          loaded.resumeOnStart = true
           await setWorld($, loaded)
-          await setUi($, { ...initialUi(), isActive: true })
+          await setUi($, {
+            ...initialUi(),
+            isActive: true,
+            tab: 'council',
+            council: {
+              isOpen: true,
+              report: `已载入 ${fmtDateLong(loaded.date)} 的存档。御前会议等你批准。`,
+              secretaryReport: loaded.secretary.lastReport,
+              isRunning: false,
+            },
+          })
           await setActive($, true)
           await refreshStatus($)
-          if (loaded.auto.isOn && !loaded.auto.isPaused) {
-            startAuto($, loaded.auto.intervalSeconds)
-          } else {
-            stopAuto()
-          }
           await openPane($)
           return { text: `已载入 ${fmtDateLong(loaded.date)} 的存档，你扮演 ${loaded.countries[loaded.playerId]?.name ?? loaded.playerId}。` }
         }
@@ -963,18 +1151,14 @@ export const register: Register = (on, options) => {
         case 'end': {
           if (current !== undefined) {
             const world = clone(current.world)
-            world.auto.isOn = false
-            world.auto.isPaused = true
-            world.auto.resumeOnStart = false
+            world.resumeOnStart = false
             await setWorld($, world)
             await saveGame($, world).catch(() => undefined)
           }
-          stopAuto()
-          resumeAfterTurn = false
           await patchUi($, { isActive: false, isPaneOpen: false })
           await setActive($, false)
           $.ui.status(undefined)
-          $.ui.toast('本局已结束，claude-hud 已恢复')
+          $.ui.toast('本局已结束，存档保留')
           return { text: '本局已结束。存档保留，/v3 load 可继续，/v3 new 可开新局。' }
         }
 
@@ -1017,10 +1201,52 @@ export const register: Register = (on, options) => {
       if (e.agentId !== undefined) await auditOverreach($, '推进时间')
       const args = e as unknown as Args
       const months = clamp(Math.floor(Number(args.months ?? 1)), 1, 24)
-      const summary = await advanceGame($, months, true)
-      return toolOk(summary)
+      if (isDelegatedRun) return toolFail('托管进行中，请等它结束。')
+      if (months <= 1) return toolOk(await advanceGame($, 1, true))
+      return toolOk(await startDelegated($, months))
     } catch (error) {
       return toolFail(`推进失败：${String(error)}`)
+    }
+  })
+
+  on('tool.call', { tool: 'mcp__terminal-legend__v3_cheat' }, async ($, e) => {
+    try {
+      const current = await activeWorld($)
+      if (current === undefined) return toolFail('还没有进行中的游戏。')
+      if (e.agentId !== undefined) await auditOverreach($, '使用天命')
+      const args = e as unknown as Args
+      const params: CheatParams = { action: String(args.action ?? '') }
+      for (const key of [
+        'building',
+        'count',
+        'country',
+        'amount',
+        'year',
+        'month',
+        'kind',
+        'name',
+        'title',
+        'persona',
+        'stat',
+        'stack',
+        'value',
+        'months',
+        'label',
+        'id',
+      ]) {
+        const value = args[key]
+        if (typeof value === 'string' || typeof value === 'number') params[key] = value
+      }
+      const world = clone(current.world)
+      const result = applyCheat(world, params)
+      if (!result.ok) return toolFail(result.text)
+      await setWorld($, world)
+      await saveGame($, world).catch(() => undefined)
+      await refreshStatus($)
+      await patchUi($, { notice: result.text })
+      return toolOk(result.text)
+    } catch (error) {
+      return toolFail(`天命失败：${String(error)}`)
     }
   })
 
@@ -1167,6 +1393,9 @@ export const register: Register = (on, options) => {
       if (current === undefined) return toolFail('还没有进行中的游戏。')
       const args = e as unknown as Args
       const name = typeof args.name === 'string' ? args.name : undefined
+      if (current.world.ironman && name !== undefined) {
+        return toolFail('铁人模式只保留自动存档，不能命名存档。')
+      }
       const path = await saveGame($, current.world, name)
       return toolOk(`已保存到 ${path}`)
     } catch (error) {
@@ -1226,6 +1455,10 @@ export const register: Register = (on, options) => {
         onEvent={(eventId, optionId) => {
           void resolveEvent($, eventId, optionId)
         }}
+        council={current.ui.council}
+        onCouncil={(action, value) => {
+          void councilAction($, action, value)
+        }}
       />
     )
   })
@@ -1242,6 +1475,10 @@ export const register: Register = (on, options) => {
         maxRows={e.props.maxRows}
         onControl={control => {
           void controlGame($, control)
+        }}
+        council={current.ui.council}
+        onCouncil={(action, value) => {
+          void councilAction($, action, value)
         }}
       />
     )

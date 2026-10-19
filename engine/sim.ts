@@ -27,6 +27,7 @@ import {
   techName,
 } from './data'
 import type { Rng } from './rng'
+import { addModifier, applyModifiers, tickModifiers } from './modifiers'
 
 export type Decision = {
   countryId: string
@@ -77,23 +78,33 @@ const techMultiplier = (country: Country): number => 1 + country.tech.level * 0.
 
 function computeProduction(country: Country): Record<GoodId, number> {
   const tech = techMultiplier(country)
-  const access = 0.55 + country.econ.marketAccess * 0.9
-  const infra = 0.6 + country.econ.transportInfrastructure / 160
+  const marketAccess = applyModifiers(country, 'marketAccess', country.econ.marketAccess)
+  const access = 0.55 + marketAccess * 0.9
+  const transport = applyModifiers(
+    country,
+    'transportInfrastructure',
+    country.econ.transportInfrastructure,
+  )
+  const infra = 0.6 + transport / 160
   const b = country.econ.buildings
   const out = zeroGoods()
+  // Every good reads through the generic `production` buff and its own
+  // per-good buff, so policies can target either scale.
+  const output = (id: GoodId, value: number): number =>
+    applyModifiers(country, 'production', applyModifiers(country, `${id}Output`, value))
 
-  out.grain = b.farms * 1.05 * tech * infra * access
-  out.wood = b.farms * 0.16 + b.mines * 0.06
-  out.coal = b.mines * 0.5 * tech
-  out.iron = b.mines * 0.42 * tech
-  out.fabric = b.factories * 0.6 * tech
-  out.clothes = b.factories * 0.38 * tech
-  out.liquor = b.factories * 0.2
-  out.furniture = b.factories * 0.22 * tech
-  out.machinery = b.factories * 0.09 * tech
-  out.arms = b.factories * 0.07 * tech + b.barracks * 0.05
-  out.luxury = b.factories * 0.035 * tech
-  out.services = (country.pops.total / 1000) * 0.5 * access
+  out.grain = output('grain', b.farms * 1.05 * tech * infra * access)
+  out.wood = output('wood', b.farms * 0.16 + b.mines * 0.06)
+  out.coal = output('coal', b.mines * 0.5 * tech)
+  out.iron = output('iron', b.mines * 0.42 * tech)
+  out.fabric = output('fabric', b.factories * 0.6 * tech)
+  out.clothes = output('clothes', b.factories * 0.38 * tech)
+  out.liquor = output('liquor', b.factories * 0.2)
+  out.furniture = output('furniture', b.factories * 0.22 * tech)
+  out.machinery = output('machinery', b.factories * 0.09 * tech)
+  out.arms = output('arms', b.factories * 0.07 * tech + b.barracks * 0.05)
+  out.luxury = output('luxury', b.factories * 0.035 * tech)
+  out.services = output('services', (country.pops.total / 1000) * 0.5 * access)
   return out
 }
 
@@ -152,11 +163,18 @@ export function computeEconomy(country: Country): EconomySnapshot {
   const gdp = gross * 0.36 + country.pops.total * 0.008
 
   const tradeVolume = gross * 0.35
-  const taxEfficiency = 0.5 + country.government.legitimacy / 200
-  const income =
+  const taxEfficiency = applyModifiers(
+    country,
+    'taxEfficiency',
+    0.5 + country.government.legitimacy / 200,
+  )
+  const income = applyModifiers(
+    country,
+    'income',
     gdp * (country.econ.taxRate / 100) * 0.25 * taxEfficiency +
-    tradeVolume * (country.econ.tariff / 100) * 0.12 +
-    country.econ.buildings.ports * 0.02
+      tradeVolume * (country.econ.tariff / 100) * 0.12 +
+      country.econ.buildings.ports * 0.02,
+  )
 
   const b = country.econ.buildings
   const sp = country.econ.spending
@@ -174,10 +192,16 @@ export function computeEconomy(country: Country): EconomySnapshot {
     // Construction is spent by the queue in simulateCountry, and folded into
     // the displayed expense there.
     country.econ.debt * 0.004 +
-    gdp * (1 - country.econ.marketAccess) * 0.02 +
+    gdp * (1 - applyModifiers(country, 'marketAccess', country.econ.marketAccess)) * 0.02 +
     (b.universities + b.barracks) * 0.01
 
-  return { production, demand, gdp, income, expense }
+  return {
+    production,
+    demand,
+    gdp,
+    income,
+    expense: applyModifiers(country, 'expense', expense),
+  }
 }
 
 export function calibrateWorld(world: WorldState): void {
@@ -200,11 +224,15 @@ export function calibrateWorld(world: WorldState): void {
 
 function computePrestige(country: Country): number {
   return clamp(
-    country.econ.gdp * 0.05 +
-      country.military.army * 0.18 +
-      country.military.navy * 0.22 +
-      country.tech.level * 4 +
-      country.econ.buildings.ports * 0.2,
+    applyModifiers(
+      country,
+      'prestige',
+      country.econ.gdp * 0.05 +
+        country.military.army * 0.18 +
+        country.military.navy * 0.22 +
+        country.tech.level * 4 +
+        country.econ.buildings.ports * 0.2,
+    ),
     0,
     240,
   )
@@ -271,7 +299,9 @@ function settleConstruction(
     if (spend > 0) {
       budget -= spend
       country.econ.treasury -= spend
-      const effective = spend * country.bureaucracy.fundEfficiency
+      const effective =
+        spend *
+        applyModifiers(country, 'constructionSpeed', country.bureaucracy.fundEfficiency)
       project.progress = Math.min(
         1,
         project.progress + effective / Math.max(0.0001, project.monthlyCost),
@@ -346,11 +376,14 @@ function simulateCountry(
   settleConstruction(world, country, rng, log)
 
   // Pops: growth, urbanisation, standard of living.
-  const growthRate =
+  const growthRate = applyModifiers(
+    country,
+    'growth',
     0.0012 +
-    (country.pops.sol - 40) / 20000 -
-    country.pops.radicals / 50000 -
-    country.military.exhaustion / 100000
+      (country.pops.sol - 40) / 20000 -
+      country.pops.radicals / 50000 -
+      country.military.exhaustion / 100000,
+  )
   country.pops.growth = growthRate
   const newTotal = Math.max(1, oldPops * (1 + growthRate))
   const scale = newTotal / oldPops
@@ -377,11 +410,15 @@ function simulateCountry(
   country.pops.workers += artisanShift
 
   country.pops.sol = clamp(
-    20 +
-      (snap.gdp / Math.max(1, country.pops.total)) * 250 +
-      country.tech.level * 1.2 -
-      country.pops.radicals * 0.2 +
-      country.econ.spending.welfare * 2,
+    applyModifiers(
+      country,
+      'sol',
+      20 +
+        (snap.gdp / Math.max(1, country.pops.total)) * 250 +
+        country.tech.level * 1.2 -
+        country.pops.radicals * 0.2 +
+        country.econ.spending.welfare * 2,
+    ),
     5,
     95,
   )
@@ -390,10 +427,18 @@ function simulateCountry(
     (country.econ.spending.education * 0.0008 +
       country.econ.buildings.universities * 0.0002) *
     (1 - country.pops.literacy)
-  country.pops.literacy = clamp(country.pops.literacy + literacyGain, 0, 1)
+  country.pops.literacy = clamp(
+    country.pops.literacy + applyModifiers(country, 'literacy', literacyGain),
+    0,
+    1,
+  )
 
   // Industry absorbs labour; literacy and unrest move the rate the other way.
-  country.econ.unemployment = deriveUnemployment(country)
+  country.econ.unemployment = clamp(
+    applyModifiers(country, 'unemployment', deriveUnemployment(country)),
+    0,
+    30,
+  )
 
   const radicalPressure =
     Math.max(0, country.econ.taxRate - 10) * 0.12 +
@@ -407,13 +452,20 @@ function simulateCountry(
     country.econ.spending.welfare * 0.15 +
     country.econ.spending.education * 0.05 +
     country.pops.loyalists * 0.01
+  // Radicals and loyalists are stocks updated by a monthly flow; modifiers
+  // scale the flow, not the stock, so a percent buff cannot compound monthly.
   country.pops.radicals = clamp(
-    country.pops.radicals + radicalPressure - relief,
+    country.pops.radicals + applyModifiers(country, 'radicals', radicalPressure - relief),
     0,
     100,
   )
   country.pops.loyalists = clamp(
-    country.pops.loyalists + country.government.legitimacy * 0.01 - radicalPressure * 0.3,
+    country.pops.loyalists +
+      applyModifiers(
+        country,
+        'loyalists',
+        country.government.legitimacy * 0.01 - radicalPressure * 0.3,
+      ),
     0,
     100,
   )
@@ -431,13 +483,17 @@ function simulateCountry(
               ? -2
               : 0
   const legitimacyTarget = clamp(
-    50 +
-      govBonus -
-      country.pops.radicals * 0.5 +
-      (country.econ.treasury > 0 ? 4 : -6) +
-      (country.econ.debt > snap.gdp ? -10 : 0) -
-      country.military.exhaustion * 0.2 +
-      country.econ.spending.welfare * 2,
+    applyModifiers(
+      country,
+      'legitimacy',
+      50 +
+        govBonus -
+        country.pops.radicals * 0.5 +
+        (country.econ.treasury > 0 ? 4 : -6) +
+        (country.econ.debt > snap.gdp ? -10 : 0) -
+        country.military.exhaustion * 0.2 +
+        country.econ.spending.welfare * 2,
+    ),
     0,
     100,
   )
@@ -446,7 +502,8 @@ function simulateCountry(
 
   // Authority recovers in proportion to legitimacy.
   country.government.authority = clamp(
-    country.government.authority + country.government.legitimacy * 0.03,
+    country.government.authority +
+      applyModifiers(country, 'authority', country.government.legitimacy * 0.03),
     0,
     100,
   )
@@ -461,7 +518,11 @@ function simulateCountry(
     (0.4 + country.pops.literacy) *
     (1 + country.econ.spending.education * 0.03) *
     (1 + country.tech.level * 0.02)
-  country.tech.points += country.tech.pointsPerMonth
+  country.tech.points += applyModifiers(
+    country,
+    'techPoints',
+    country.tech.pointsPerMonth,
+  )
   const nextCost = techCost(country.tech.level + 1)
   if (country.tech.level < 10 && country.tech.points >= nextCost) {
     country.tech.points -= nextCost
@@ -480,13 +541,18 @@ function simulateCountry(
   // Military.
   country.military.manpower = clamp(
     country.military.manpower +
-      country.pops.total * 0.0004 -
-      country.military.army * 0.0006,
+      applyModifiers(
+        country,
+        'manpower',
+        country.pops.total * 0.0004 - country.military.army * 0.0006,
+      ),
     0,
     country.pops.total * 0.06,
   )
+  // Morale is a stock fed by a monthly flow; scale the flow.
   country.military.morale = clamp(
-    country.military.morale + (country.econ.spending.army > 1 ? 0.15 : -0.15),
+    country.military.morale +
+      applyModifiers(country, 'morale', country.econ.spending.army > 1 ? 0.15 : -0.15),
     20,
     100,
   )
@@ -507,6 +573,16 @@ function simulateCountry(
       kind: 'leader',
       countryId: country.id,
       text: `[${country.flag}] ${country.name}：${oldName}逝世，${country.leader.title}${country.leader.name}继位`,
+    })
+  }
+
+  // Timed buffs and debuffs age one month.
+  for (const label of tickModifiers(country)) {
+    log.push({
+      date: { ...world.date },
+      kind: 'politics',
+      countryId: country.id,
+      text: `[${country.flag}] ${country.name}：「${label}」到期`,
     })
   }
 
@@ -549,11 +625,14 @@ function strength(world: WorldState, ids: string[]): number {
   for (const id of ids) {
     const country = world.countries[id]
     if (country === undefined) continue
-    total +=
+    total += applyModifiers(
+      country,
+      'armyStrength',
       country.military.army *
-      country.military.quality *
-      (country.military.morale / 60) *
-      (1 + country.tech.level * 0.03)
+        country.military.quality *
+        (country.military.morale / 60) *
+        (1 + country.tech.level * 0.03),
+    )
   }
   return total
 }
@@ -707,6 +786,19 @@ export function applyEventOption(
       const back = target.diplo.relations[country.id] ?? 0
       target.diplo.relations[country.id] = clamp(back + effects.relationAmount * 0.6, -100, 100)
     }
+  }
+  if (effects.modifiers !== undefined) {
+    effects.modifiers.forEach((one, index) => {
+      addModifier(country, {
+        id: `event:${event.id}:${index}`,
+        label: one.label ?? event.title,
+        stat: one.stat,
+        stack: one.stack ?? 'flat',
+        value: one.value,
+        monthsLeft: one.months,
+        source: `event:${event.id}`,
+      })
+    })
   }
   if (effects.succeed === true) {
     const oldName = `${country.leader.title}${country.leader.name}`
@@ -902,31 +994,79 @@ export function applyDecision(
         教育改革: () => {
           country.pops.literacy = clamp(country.pops.literacy + 0.04, 0, 1)
           country.econ.spending.education += 0.5
+          addModifier(country, {
+            id: 'law:教育改革',
+            label: '教育改革',
+            stat: 'literacy',
+            stack: 'percent',
+            value: 10,
+            source: 'law:教育改革',
+          })
           return `${tag} 推行教育改革，识字率上升`
         },
         福利改革: () => {
           country.pops.radicals = clamp(country.pops.radicals - 6, 0, 100)
           country.econ.spending.welfare += 0.5
+          addModifier(country, {
+            id: 'law:福利改革',
+            label: '福利改革',
+            stat: 'radicals',
+            stack: 'flat',
+            value: -2,
+            source: 'law:福利改革',
+          })
           return `${tag} 推行福利改革，民怨稍减`
         },
         自由贸易: () => {
           country.econ.tariff = clamp(country.econ.tariff - 8, 0, 60)
           country.econ.marketAccess = clamp(country.econ.marketAccess + 0.08, 0, 1)
+          addModifier(country, {
+            id: 'law:自由贸易:income',
+            label: '自由贸易',
+            stat: 'income',
+            stack: 'percent',
+            value: 8,
+            source: 'law:自由贸易',
+          })
           return `${tag} 推行自由贸易，市场接入提高`
         },
         保护关税: () => {
           country.econ.tariff = clamp(country.econ.tariff + 8, 0, 60)
           country.econ.marketAccess = clamp(country.econ.marketAccess - 0.04, 0, 1)
+          addModifier(country, {
+            id: 'law:保护关税:factory',
+            label: '保护关税',
+            stat: 'factoryOutput',
+            stack: 'percent',
+            value: 12,
+            source: 'law:保护关税',
+          })
           return `${tag} 推行保护关税，国库与工厂受益`
         },
         征兵制: () => {
           country.military.manpower = clamp(country.military.manpower + 10, 0, country.pops.total * 0.06)
           country.pops.radicals = clamp(country.pops.radicals + 3, 0, 100)
+          addModifier(country, {
+            id: 'law:征兵制',
+            label: '征兵制',
+            stat: 'armyStrength',
+            stack: 'percent',
+            value: 10,
+            source: 'law:征兵制',
+          })
           return `${tag} 推行征兵制，人力池扩大`
         },
         宗教宽容: () => {
           country.pops.radicals = clamp(country.pops.radicals - 4, 0, 100)
           country.government.legitimacy = clamp(country.government.legitimacy + 2, 0, 100)
+          addModifier(country, {
+            id: 'law:宗教宽容',
+            label: '宗教宽容',
+            stat: 'legitimacy',
+            stack: 'flat',
+            value: 2,
+            source: 'law:宗教宽容',
+          })
           return `${tag} 推行宗教宽容，社会稳定`
         },
       }
@@ -1138,6 +1278,29 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
     }
   }
   return undefined
+}
+
+/**
+ * Why a managed run should stop after the month that just passed, or '' to
+ * keep going (plan §4.5). The secretary-overreach check lives in the hooks
+ * layer, where the audit flag is.
+ */
+export function councilInterrupt(before: WorldState, after: WorldState): string {
+  const pendingOf = (world: WorldState): number =>
+    world.events.filter(event => event.countryId === world.playerId && !event.isResolved).length
+  if (pendingOf(after) > pendingOf(before)) return '有新的待决事件'
+
+  const atWar = (world: WorldState, id: string): boolean =>
+    world.wars.some(
+      war =>
+        war.id === id &&
+        (war.attackers.includes(world.playerId) || war.defenders.includes(world.playerId)),
+    )
+  const newWar = after.wars.some(war => !before.wars.some(one => one.id === war.id) && atWar(after, war.id))
+  if (newWar) return '新的战争'
+  const warEnded = before.wars.some(war => atWar(before, war.id) && !after.wars.some(one => one.id === war.id))
+  if (warEnded) return '战争结束'
+  return ''
 }
 
 export function newWorld(seed: number, playerId: string): WorldState {

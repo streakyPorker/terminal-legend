@@ -196,11 +196,15 @@ export async function decideForAi(
   const shouldAsk = world.tick === 0 || world.tick % interval === 0
   if (candidates.length > 0 && shouldAsk) {
     const result = await $.model.complete({
-      model: world.auto.aiModel || 'haiku',
+      model: world.ai.model || 'haiku',
       system: SYSTEM,
       prompt: buildAiPrompt(world),
-      maxTokens: 1200,
+      // Ten leaders, each with an action, params and a short narrative;
+      // 2400 leaves room for Chinese output without truncating the JSON.
+      maxTokens: 2400,
       effort: 'low',
+      // A `$` call in flight does not count against the hook's own budget, so
+      // the model may take its time; the cap still bounds a stuck gateway.
       timeoutMs: 30000,
     })
     if (result.isAnswered) {

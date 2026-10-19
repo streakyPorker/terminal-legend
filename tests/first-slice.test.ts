@@ -1,28 +1,39 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { deriveBureaucracy, deriveUnemployment, initialUi } from '../engine/data'
+import { applyCheat } from '../engine/cheat'
+import { statusLine } from '../view/format'
+import {
+  addModifier,
+  applyModifiers,
+  describeModifier,
+  tickModifiers,
+} from '../engine/modifiers'
 import { monthlyBriefing } from '../engine/secretary'
 import {
   advance,
   applyDecision,
+  applyEventOption,
+  clone,
   completeBuilding,
   computeEconomy,
+  councilInterrupt,
   inspectEconomy,
   newWorld,
 } from '../engine/sim'
-import { migrateWorld } from '../engine/save'
+import { parseWorld } from '../engine/save'
 import { makeRngForWorld } from '../engine/data'
 import type { Country, WorldState } from '../types'
 
 // ---------------------------------------------------------------- M1
 
 describe('M1 types, data and migration', () => {
-  test('a new world is version 2 with split infrastructure and bureaucracy', async () => {
+  test('a new world is current-version with split infrastructure and bureaucracy', async () => {
     const world = newWorld(1, 'QING')
     const qing = world.countries.QING
     expect(qing).toBeDefined()
     if (qing === undefined) return
 
-    expect(world.version).toBe(2)
+    expect(world.version).toBe(3)
     expect(world.ironman).toBe(false)
     expect(world.secretary.delegation).toEqual({
       internal: false,
@@ -79,52 +90,19 @@ describe('M1 types, data and migration', () => {
     expect(fra.bureaucracy.score).not.toBe(before)
   })
 
-  test('a v1 save migrates to a playable v2 world', async () => {
+  test('only the current save shape loads', async () => {
     const fresh = newWorld(4, 'AUS')
-    const v1 = JSON.parse(JSON.stringify(fresh)) as Record<string, unknown> & {
-      countries: Record<string, Country & { econ: Record<string, unknown> }>
-    }
-    v1.version = 1
-    delete v1.secretary
-    delete v1.ironman
-    for (const country of Object.values(v1.countries)) {
-      const econ = country.econ
-      econ.infrastructure = econ.transportInfrastructure
-      delete econ.transportInfrastructure
-      delete econ.administrativeCapacity
-      delete econ.constructionQueue
-      delete (country as Record<string, unknown>).bureaucracy
-      delete (country.econ.buildings as Record<string, unknown>).offices
-    }
+    expect(parseWorld(JSON.parse(JSON.stringify(fresh)))).toBeDefined()
 
-    const migrated = migrateWorld(v1) as WorldState
-    expect(migrated).toBeDefined()
-    expect(migrated.version).toBe(2)
-    expect(migrated.ironman).toBe(false)
-    expect(migrated.secretary.delegation.months).toBe(1)
-
-    const aus = migrated.countries.AUS
-    expect(aus).toBeDefined()
-    if (aus === undefined) return
-    expect('infrastructure' in aus.econ).toBe(false)
-    expect(aus.econ.transportInfrastructure).toBe(45)
-    expect(aus.econ.administrativeCapacity).toBe(
-      20 + aus.pops.literacy * 40 + aus.econ.spending.bureaucracy * 2,
-    )
-    expect(aus.econ.buildings.offices).toBe(0)
-    expect(aus.econ.constructionQueue).toEqual([])
-    expect(aus.bureaucracy.ceiling).toBeGreaterThanOrEqual(20)
-    expect(Number.isFinite(aus.econ.unemployment)).toBe(true)
-
-    advance(migrated, 2, [], makeRngForWorld(migrated))
-    expect(migrated.date).toEqual({ year: 1836, month: 3 })
-    expect(Number.isFinite(migrated.countries.AUS?.econ.gdp ?? NaN)).toBe(true)
+    const old = JSON.parse(JSON.stringify(fresh)) as Record<string, unknown>
+    old.version = 1
+    expect(parseWorld(old)).toBeUndefined()
   })
 
   test('a corrupt save is rejected', async () => {
-    expect(migrateWorld({})).toBeUndefined()
-    expect(migrateWorld('nope')).toBeUndefined()
-    expect(migrateWorld({ version: 9, tick: 0, date: {}, countries: {} })).toBeUndefined()
+    expect(parseWorld({})).toBeUndefined()
+    expect(parseWorld('nope')).toBeUndefined()
+    expect(parseWorld({ version: 9, tick: 0, date: {}, countries: {} })).toBeUndefined()
   })
 })
 
@@ -346,7 +324,6 @@ describe('M3 secretary subagent', () => {
 
   test(
     'a secretary war declaration is audited, not refused',
-    { options: { autoStart: false } },
     async ($, on) => {
       const toasts: string[] = []
       const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
@@ -379,10 +356,12 @@ describe('M3 secretary command surface', () => {
   // secretary uses are covered instead.
   test(
     'delegation toggles and an agent build uses the same tool path',
-    { options: { autoStart: false } },
     async ($, on) => {
       const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
-      setupSurface(anyOn)
+      setupSurface(anyOn, {
+        'agent.spawn': () => ({ model: 'haiku' }),
+        'clock.after': () => ({ value: { cancel: () => undefined } }),
+      })
       const run = await startCampaign($ as any)
 
       const delegated = await run({ command: 'v3', args: 'delegate internal on' })
@@ -401,6 +380,268 @@ describe('M3 secretary command surface', () => {
       expect(status.text).toContain('建造队列')
       expect(status.text).toContain('农场×1')
       expect(status.text).toContain('内政开')
+
+      const started = await run({ command: 'v3', args: 'secretary' })
+      expect(started.text).toContain('已受命')
     },
   )
+})
+
+// ---------------------------------------------------------------- M4/M5
+
+describe('M4/M5 council and managed runs', () => {
+  test('a managed run starts in the background and advances', async ($, on) => {
+    const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
+    setupSurface(anyOn)
+    const run = await startCampaign($ as any)
+    const started = await run({ command: 'v3', args: 'run 2' })
+    expect(started.text).toContain('托管已开始')
+    await new Promise(resolve => setTimeout(resolve, 250))
+    const status = await run({ command: 'v3', args: 'status' })
+    expect(status.text).toContain('1836年3月')
+  })
+
+
+  test('interrupts fire on events, new wars and wars ending', async () => {
+    const before = newWorld(14, 'QING')
+
+    const withEvent = clone(before)
+    withEvent.events.push({
+      id: 'ev-test',
+      date: { ...withEvent.date },
+      kind: 'harvest',
+      title: '测试事件',
+      text: '测试',
+      countryId: 'QING',
+      options: [],
+      isResolved: false,
+    })
+    expect(councilInterrupt(before, withEvent)).toBe('有新的待决事件')
+
+    const withWar = clone(before)
+    withWar.wars.push({
+      id: 'war-test',
+      name: '测试战争',
+      attackers: ['GBR'],
+      defenders: ['QING'],
+      started: { ...withWar.date },
+      months: 0,
+      warScore: 0,
+      battles: 0,
+      reason: '测试',
+      lastEvent: '开战',
+    })
+    expect(councilInterrupt(before, withWar)).toBe('新的战争')
+    expect(councilInterrupt(withWar, before)).toBe('战争结束')
+  })
+
+  test('a managed run advances and stops when a war arrives', async () => {
+    const world = newWorld(15, 'QING')
+    // A short deterministic check of the underlying month loop: one month
+    // then a war involving the player appears.
+    advance(world, 1, [], makeRngForWorld(world))
+    expect(world.tick).toBe(1)
+    const beforeWar = clone(world)
+    world.wars.push({
+      id: 'war-managed',
+      name: '托管测试战争',
+      attackers: ['GBR'],
+      defenders: ['QING'],
+      started: { ...world.date },
+      months: 0,
+      warScore: 0,
+      battles: 0,
+      reason: '测试',
+      lastEvent: '开战',
+    })
+    expect(councilInterrupt(beforeWar, world)).toBe('新的战争')
+  })
+})
+
+// ---------------------------------------------------------------- M6
+
+describe('M6 destiny and ironman', () => {
+  test('destiny edits money, buildings, dates and leaders', async () => {
+    const world = newWorld(16, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+
+    const before = qing.econ.treasury
+    expect(applyCheat(world, { action: 'treasury', amount: 50 }).ok).toBe(true)
+    expect(qing.econ.treasury).toBe(before + 50)
+
+    const farms = qing.econ.buildings.farms
+    expect(applyCheat(world, { action: 'building', building: 'farms', count: 3 }).ok).toBe(true)
+    expect(qing.econ.buildings.farms).toBe(farms + 3)
+
+    expect(applyCheat(world, { action: 'date', year: 1840, month: 6 }).ok).toBe(true)
+    expect(world.date).toEqual({ year: 1840, month: 6 })
+
+    expect(applyCheat(world, { action: 'leader', name: '测试皇帝', title: '皇帝' }).ok).toBe(true)
+    expect(qing.leader.name).toBe('测试皇帝')
+    expect(world.log.some(entry => entry.text.includes('[天命]'))).toBe(true)
+  })
+
+  test('ironman refuses every destiny action', async () => {
+    const world = newWorld(17, 'FRA')
+    world.ironman = true
+    const fra = world.countries.FRA
+    expect(fra).toBeDefined()
+    if (fra === undefined) return
+    const before = fra.econ.treasury
+    const result = applyCheat(world, { action: 'treasury', amount: 50 })
+    expect(result.ok).toBe(false)
+    expect(result.text).toContain('铁人')
+    expect(fra.econ.treasury).toBe(before)
+    expect(statusLine(world)).toContain('铁人')
+  })
+})
+
+describe('M6 ironman command surface', () => {
+  test(
+    'ironman blocks destiny, named saves and loading',
+    async ($, on) => {
+      const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
+      setupSurface(anyOn, {
+        'agent.spawn': () => ({ model: 'haiku' }),
+        'clock.after': () => ({ value: { cancel: () => undefined } }),
+      })
+      const run = await startCampaign($ as any)
+
+      const enabled = await run({ command: 'v3', args: 'ironman on' })
+      expect(enabled.text).toContain('铁人模式已开启')
+
+      const cheat = await run({ command: 'v3', args: 'cheat treasury 100' })
+      expect(cheat.text).toContain('铁人')
+
+      const saved = await run({ command: 'v3', args: 'save backup' })
+      expect(saved.text).toContain('铁人')
+
+      const loaded = await run({ command: 'v3', args: 'load backup' })
+      expect(loaded.text).toContain('铁人')
+
+      await run({ command: 'v3', args: 'next' })
+      const late = await run({ command: 'v3', args: 'ironman off' })
+      expect(late.text).toContain('第一个月')
+    },
+  )
+})
+
+// ---------------------------------------------------------------- modifiers
+
+describe('buff/debuff stacking', () => {
+  test('flat, percent and multiply stack in a fixed order', async () => {
+    const world = newWorld(18, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.modifiers = [
+      { id: 'a', label: '平地', stat: 'production', stack: 'flat', value: 2, source: 'test' },
+      { id: 'b', label: '百分比甲', stat: 'production', stack: 'percent', value: 10, source: 'test' },
+      { id: 'c', label: '百分比乙', stat: 'production', stack: 'percent', value: 20, source: 'test' },
+      { id: 'd', label: '独立乘数', stat: 'production', stack: 'multiply', value: 50, source: 'test' },
+    ]
+    // (10 + 2) × (1 + 0.10 + 0.20) × 1.50 = 23.4
+    expect(Math.abs(applyModifiers(qing, 'production', 10) - 23.4)).toBeLessThan(1e-9)
+  })
+
+  test('timed modifiers expire after their months', async () => {
+    const world = newWorld(19, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    addModifier(qing, {
+      id: 'timed',
+      label: '短暂繁荣',
+      stat: 'income',
+      stack: 'percent',
+      value: 20,
+      monthsLeft: 2,
+      source: 'test',
+    })
+    expect(describeModifier(qing.modifiers[0] as never)).toContain('2 月')
+    expect(tickModifiers(qing)).toEqual([])
+    expect(qing.modifiers[0]?.monthsLeft).toBe(1)
+    expect(tickModifiers(qing)).toEqual(['短暂繁荣'])
+    expect(qing.modifiers.length).toBe(0)
+  })
+
+  test('production buffs change computed output', async () => {
+    const world = newWorld(20, 'PRU')
+    const prussia = world.countries.PRU
+    expect(prussia).toBeDefined()
+    if (prussia === undefined) return
+    const before = inspectEconomy(prussia).production.fabric
+    addModifier(prussia, {
+      id: 'factory-boom',
+      label: '纺织繁荣',
+      stat: 'fabricOutput',
+      stack: 'percent',
+      value: 50,
+      source: 'test',
+    })
+    expect(inspectEconomy(prussia).production.fabric).toBeGreaterThan(before * 1.45)
+  })
+
+  test('laws and events install their modifiers', async () => {
+    const world = newWorld(21, 'AUS')
+    const aus = world.countries.AUS
+    expect(aus).toBeDefined()
+    if (aus === undefined) return
+    aus.government.authority = 100
+    applyDecision(
+      world,
+      { countryId: 'AUS', action: 'law', params: { name: '教育改革' } },
+      makeRngForWorld(world),
+    )
+    expect(aus.modifiers.some(one => one.id === 'law:教育改革')).toBe(true)
+
+    const event = {
+      id: 'ev-mod',
+      date: { ...world.date },
+      kind: 'test',
+      title: '测试恩泽',
+      text: '测试',
+      countryId: 'AUS',
+      options: [
+        {
+          id: 'take',
+          label: '领受',
+          result: '得到祝福',
+          effects: {
+            modifiers: [
+              { stat: 'income', stack: 'percent', value: 15, months: 6, label: '恩泽' },
+            ],
+          },
+        },
+      ],
+      isResolved: false,
+    } as never
+    applyEventOption(world, event as never, 'take')
+    expect(aus.modifiers.some(one => one.label === '恩泽' && one.monthsLeft === 6)).toBe(true)
+  })
+})
+
+describe('modifier stock/flow semantics', () => {
+  test('a percent growth buff scales the monthly flow, not the stock', async () => {
+    const plain = newWorld(22, 'QING')
+    const boosted = clone(plain)
+    const qing = boosted.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    addModifier(qing, {
+      id: 'growth-buff',
+      label: '鼓励生育',
+      stat: 'growth',
+      stack: 'percent',
+      value: 100,
+      source: 'test',
+    })
+    advance(plain, 1, [], makeRngForWorld(plain))
+    advance(boosted, 1, [], makeRngForWorld(boosted))
+    const plainGrowth = plain.countries.QING?.pops.growth ?? 0
+    const boostedGrowth = boosted.countries.QING?.pops.growth ?? 0
+    expect(Math.abs(boostedGrowth - plainGrowth * 2)).toBeLessThan(1e-9)
+  })
 })

@@ -1,17 +1,5 @@
 import type { EngineInterface } from 'claude-code'
-import type {
-  Bureaucracy,
-  Country,
-  Economy,
-  SecretaryState,
-  WorldState,
-} from '../types'
-import {
-  administrativeCapacityFor,
-  defaultSecretaryState,
-  deriveBureaucracy,
-  deriveUnemployment,
-} from './data'
+import type { WorldState } from '../types'
 
 const ACTIVE_TTL_MS = 12 * 60 * 60 * 1000
 
@@ -43,61 +31,19 @@ export async function saveGame(
   return path
 }
 
-type LegacyEconomy = Economy & { infrastructure?: number }
-type LegacyCountry = Omit<Country, 'econ' | 'bureaucracy'> & {
-  econ: LegacyEconomy
-  bureaucracy?: Bureaucracy
-}
-type LegacyWorld = Omit<WorldState, 'countries' | 'secretary' | 'ironman'> & {
-  version: number
-  countries: Record<string, LegacyCountry>
-  secretary?: SecretaryState
-  ironman?: boolean
-}
-
 /**
- * Brings a v1 (or already-v2) save up to the current world shape. Returns
- * undefined for anything that is not a game world, so a stray file read as
- * JSON cannot brick the session.
+ * Accepts only the current world shape. Older saves are deliberately not
+ * supported (ADR 0005: no compatibility layer during early development).
  */
-export function migrateWorld(raw: unknown): WorldState | undefined {
+export function parseWorld(raw: unknown): WorldState | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined
-  const world = raw as LegacyWorld
-  if (world.version !== 1 && world.version !== 2) return undefined
+  const world = raw as WorldState
+  if (world.version !== 3) return undefined
   if (typeof world.tick !== 'number' || typeof world.playerId !== 'string') return undefined
   if (typeof world.date !== 'object' || world.date === null) return undefined
   if (typeof world.countries !== 'object' || world.countries === null) return undefined
-
-  for (const country of Object.values(world.countries)) {
-    if (typeof country !== 'object' || country === null) return undefined
-    const econ = country.econ
-    if (typeof econ !== 'object' || econ === null) return undefined
-
-    if (typeof econ.transportInfrastructure !== 'number') {
-      econ.transportInfrastructure =
-        typeof econ.infrastructure === 'number' ? econ.infrastructure : 25
-    }
-    delete econ.infrastructure
-    if (typeof econ.administrativeCapacity !== 'number') {
-      econ.administrativeCapacity = administrativeCapacityFor(
-        country.pops.literacy,
-        econ.spending.bureaucracy,
-      )
-    }
-    if (typeof econ.buildings.offices !== 'number') econ.buildings.offices = 0
-    if (!Array.isArray(econ.constructionQueue)) econ.constructionQueue = []
-    if (typeof country.bureaucracy !== 'object' || country.bureaucracy === null) {
-      country.bureaucracy = deriveBureaucracy(country as unknown as Country, false)
-    }
-    if (typeof econ.unemployment !== 'number') {
-      econ.unemployment = deriveUnemployment(country as unknown as Country)
-    }
-  }
-
-  world.version = 2
-  world.secretary ??= defaultSecretaryState()
-  world.ironman ??= false
-  return world as unknown as WorldState
+  if (typeof world.resumeOnStart !== 'boolean') return undefined
+  return world
 }
 
 export async function loadGame(
@@ -109,7 +55,7 @@ export async function loadGame(
   if (!exists) return undefined
   try {
     const text = await $.fs.read(path)
-    return migrateWorld(JSON.parse(text))
+    return parseWorld(JSON.parse(text))
   } catch {
     return undefined
   }

@@ -1,7 +1,8 @@
 import type { Elements } from 'claude-code'
-import type { Country, GameEvent, TabId, WorldState } from '../types'
+import type { Country, CouncilState, GameEvent, TabId, WorldState } from '../types'
 import { GOODS, GOOD_IDS, BUILDING_IDS, BUILDINGS, SPENDING, TECHS, techCost, techName } from '../engine/data'
 import { inspectEconomy } from '../engine/sim'
+import { MODIFIER_STAT_NAMES, describeModifier } from '../engine/modifiers'
 import {
   bar,
   clampText,
@@ -30,7 +31,20 @@ export type UiKit = Pick<
   'Box' | 'Text' | 'Button' | 'Link' | 'Code' | 'Markdown'
 >
 
-export type ControlAction = 'pause' | 'resume' | 'next' | 'auto' | 'save'
+export type ControlAction = 'next' | 'save' | 'council'
+
+export type CouncilAction =
+  | 'approve'
+  | 'run'
+  | 'recompose'
+  | 'delegate-internal'
+  | 'delegate-diplomacy'
+  | 'months'
+
+export type CouncilHandlers = {
+  council: CouncilState
+  onCouncil: (action: CouncilAction, value?: number) => void
+}
 
 export type PanelProps = {
   ui: UiKit
@@ -41,7 +55,7 @@ export type PanelProps = {
   onTab: (tab: TabId) => void
   onControl: (control: ControlAction) => void
   onEvent: (eventId: string, optionId: string) => void
-}
+} & CouncilHandlers
 
 export type BandProps = {
   ui: UiKit
@@ -49,7 +63,7 @@ export type BandProps = {
   width: number
   maxRows: number
   onControl: (control: ControlAction) => void
-}
+} & CouncilHandlers
 
 export type ReportProps = {
   ui: UiKit
@@ -61,6 +75,7 @@ export type ReportProps = {
 }
 
 const TABS: [TabId, string][] = [
+  ['council', '御前'],
   ['overview', '概览'],
   ['economy', '经济'],
   ['pops', '人口'],
@@ -570,6 +585,137 @@ function LogPanel(props: { ui: UiKit; world: WorldState }): any {
   )
 }
 
+// ---------------------------------------------------------------- council
+
+function CouncilPanel(props: {
+  ui: UiKit
+  world: WorldState
+  width: number
+  council: CouncilState
+  onEvent: (eventId: string, optionId: string) => void
+  onCouncil: (action: CouncilAction, value?: number) => void
+}): any {
+  const { Box, Text, Button } = props.ui
+  const player = playerOf(props.world)
+  if (player === undefined) return <Text dimColor>无进行中的游戏。</Text>
+  const delegation = props.world.secretary.delegation
+  const bureaucracy = player.bureaucracy
+  const reportLines = props.council.report.split('\n').filter(line => line !== '')
+  const months = [1, 3, 6, 12]
+
+  return (
+    <Box flexDirection="column">
+      <Box flexDirection="row" columnGap={1}>
+        <Heading ui={props.ui} text="御前会议" />
+        <Text color={props.council.isOpen ? 'yellow' : 'green'} weight="bold">
+          {props.council.isOpen ? '· 待议' : '· 已批'}
+        </Text>
+        {props.world.secretary.isRunning || props.council.isRunning ? (
+          <Text dimColor>秘书拟旨中…</Text>
+        ) : null}
+      </Box>
+
+      <Box flexDirection="column" marginTop={1}>
+        <Heading ui={props.ui} text="本月月报" />
+        {reportLines.length === 0 ? (
+          <Text dimColor>尚无月报。批准推进一月后生成。</Text>
+        ) : (
+          reportLines.map((line, index) => (
+            <Text key={`council-report:${index}`} wrap="truncate">{line}</Text>
+          ))
+        )}
+      </Box>
+
+      <Box marginTop={1}>
+        <EventsPanel ui={props.ui} world={props.world} onEvent={props.onEvent} />
+      </Box>
+
+      <Box flexDirection="column" marginTop={1}>
+        <Heading ui={props.ui} text="秘书报告" hint={props.world.secretary.lastRunTick === 0 ? '（尚未呈报）' : undefined} />
+        {props.council.secretaryReport === '' ? (
+          <Text dimColor>秘书尚未呈报。点「重新拟旨」或在对话里让秘书拟旨。</Text>
+        ) : (
+          props.council.secretaryReport.split('\n').map((line, index) => (
+            <Text key={`secretary:${index}`} wrap="truncate">{line}</Text>
+          ))
+        )}
+      </Box>
+
+      <Box flexDirection="column" marginTop={1}>
+        <Heading ui={props.ui} text="官僚效能" hint={`行动预算 ${bureaucracy.actionBudget} 项/月`} />
+        <Box flexDirection="row" columnGap={1}>
+          <Text dimColor>{padEnd('效能', 8)}</Text>
+          <Text color="cyan">{padEnd(bar(bureaucracy.score, bureaucracy.ceiling, 14), 15)}</Text>
+          <Text>{Math.round(bureaucracy.score)} / {Math.round(bureaucracy.ceiling)}</Text>
+        </Box>
+        <Text dimColor>
+          资金效率 {fmtPercent(bureaucracy.fundEfficiency)} · 延迟 {fmtPercent(bureaucracy.delayChance)} · 失真 {fmtPercent(bureaucracy.infoDistortion)}
+        </Text>
+      </Box>
+
+      <Box flexDirection="column" marginTop={1}>
+        <Heading ui={props.ui} text="国策修正" hint={player.modifiers.length === 0 ? '（无）' : `${player.modifiers.length} 项`} />
+        {player.modifiers.length === 0 ? (
+          <Text dimColor>没有生效中的增益或减益。</Text>
+        ) : (
+          player.modifiers.slice(-8).map(modifier => (
+            <Text key={`modifier:${modifier.id}`} wrap="truncate">
+              {describeModifier(modifier)} <Text dimColor>· {MODIFIER_STAT_NAMES[modifier.stat]} · {modifier.source}</Text>
+            </Text>
+          ))
+        )}
+      </Box>
+
+      <Box flexDirection="column" marginTop={1}>
+        <Heading ui={props.ui} text="委托" hint={`托管 ${delegation.months} 月`} />
+        <Box flexDirection="row" columnGap={1} flexWrap="wrap">
+          <Button
+            key="council:internal"
+            label={`内政委托：${delegation.internal ? '开' : '关'}`}
+            onPress={() => props.onCouncil('delegate-internal')}
+          />
+          <Button
+            key="council:diplomacy"
+            label={`外交委托：${delegation.diplomacy ? '开' : '关'}`}
+            onPress={() => props.onCouncil('delegate-diplomacy')}
+          />
+        </Box>
+        <Box flexDirection="row" columnGap={1} marginTop={1}>
+          <Text dimColor>托管月数</Text>
+          {months.map(one => (
+            <Button
+              key={`council:months:${one}`}
+              label={one === delegation.months ? `▸${one} 月` : `${one} 月`}
+              onPress={() => props.onCouncil('months', one)}
+            />
+          ))}
+        </Box>
+      </Box>
+
+      <Box flexDirection="row" columnGap={1} marginTop={1} flexWrap="wrap">
+        <Button key="council:approve" label="批准并推进一月" onPress={() => props.onCouncil('approve')} />
+        <Button key="council:run" label={`托管 ${delegation.months} 月`} onPress={() => props.onCouncil('run')} />
+        <Button key="council:recompose" label="重新拟旨" onPress={() => props.onCouncil('recompose')} />
+      </Box>
+
+      <Box flexDirection="column" marginTop={1}>
+        <Heading ui={props.ui} text="建造队列" hint={player.econ.constructionQueue.length === 0 ? '（空闲）' : undefined} />
+        {player.econ.constructionQueue.length === 0 ? (
+          <Text dimColor>没有在建项目。</Text>
+        ) : (
+          player.econ.constructionQueue.map(project => (
+            <Box flexDirection="row" columnGap={1}>
+              <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
+              <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
+              <Text dimColor>剩余 {project.monthsLeft} 月 · 每月 {project.monthlyCost.toFixed(1)} · 资金效率 {fmtPercent(bureaucracy.fundEfficiency)}</Text>
+            </Box>
+          ))
+        )}
+      </Box>
+    </Box>
+  )
+}
+
 // ---------------------------------------------------------------- panel
 
 export function Panel(props: PanelProps): any {
@@ -585,10 +731,20 @@ export function Panel(props: PanelProps): any {
     )
   }
 
-  const isAutoRunning = props.world.auto.isOn && !props.world.auto.isPaused
-
   let body: any
   switch (props.tab) {
+    case 'council':
+      body = (
+        <CouncilPanel
+          ui={props.ui}
+          world={props.world}
+          width={props.width}
+          council={props.council}
+          onEvent={props.onEvent}
+          onCouncil={props.onCouncil}
+        />
+      )
+      break
     case 'economy':
       body = <EconomyPanel ui={props.ui} world={props.world} width={props.width} />
       break
@@ -619,7 +775,7 @@ export function Panel(props: PanelProps): any {
       <Box flexDirection="row" justifyContent="space-between">
         <Text weight="bold" color={player.color}>{countryTag(player)}</Text>
         <Text dimColor>
-          {fmtDateLong(props.world.date)} · 第 {props.world.tick} 回合 · {props.world.auto.isOn ? (props.world.auto.isPaused ? '自动(暂停)' : '自动') : '手动'}
+          {fmtDateLong(props.world.date)} · 第 {props.world.tick} 回合 · {props.council.isOpen ? '御前·待议' : '御前·已批'}
         </Text>
       </Box>
       <Text dimColor wrap="truncate">{shortLeader(player)} · {player.leader.persona}</Text>
@@ -638,18 +794,14 @@ export function Panel(props: PanelProps): any {
       <Box marginTop={1} flexDirection="column">{body}</Box>
 
       <Box flexDirection="row" columnGap={1} marginTop={1} flexWrap="wrap">
-        <Button
-          key="ctl:tick"
-          label={isAutoRunning ? '暂停' : '继续'}
-          onPress={() => props.onControl(isAutoRunning ? 'pause' : 'resume')}
-        />
-        <Button key="ctl:next" label="推进一月" onPress={() => props.onControl('next')} />
-        <Button key="ctl:auto" label={props.world.auto.isOn ? '关闭自动' : '开启自动'} onPress={() => props.onControl('auto')} />
+        <Button key="ctl:approve" label="批准并推进一月" onPress={() => props.onCouncil('approve')} />
+        <Button key="ctl:run" label={`托管 ${props.world.secretary.delegation.months} 月`} onPress={() => props.onCouncil('run')} />
+        <Button key="ctl:recompose" label="重新拟旨" onPress={() => props.onCouncil('recompose')} />
         <Button key="ctl:save" label="保存" onPress={() => props.onControl('save')} />
       </Box>
 
       {props.notice !== '' ? <Text color="yellow" wrap="truncate">{props.notice}</Text> : null}
-      <Text dimColor wrap="truncate">快捷键：/v3 next 推进｜/v3 auto 自动｜/v3 events 事件｜/v3 help</Text>
+      <Text dimColor wrap="truncate">快捷键：/v3 next 批准推进｜/v3 run N 托管｜/v3 events 事件｜/v3 help</Text>
     </Box>
   )
 }
@@ -664,7 +816,7 @@ export function Band(props: BandProps): any {
   const econ = player.econ
   const surplus = econ.income - econ.expense
   const pending = pendingOf(props.world)
-  const isAutoRunning = props.world.auto.isOn && !props.world.auto.isPaused
+  const delegation = props.world.secretary.delegation
   const majors = Object.values(props.world.countries)
     .filter(country => country.isMajor && !country.isPlayer)
     .map(country => ({ country, value: Math.round(player.diplo.relations[country.id] ?? 0) }))
@@ -673,14 +825,24 @@ export function Band(props: BandProps): any {
   const latest = props.world.log[props.world.log.length - 1]
 
   const rows: any[] = []
+  if (props.council.isOpen) {
+    rows.push(
+      <Box flexDirection="row" columnGap={1} flexWrap="wrap">
+        <Text color="yellow" weight="bold">御前会议 · 待议</Text>
+        <Button key="band:approve" label="批准并推进" onPress={() => props.onCouncil('approve')} />
+        <Button key="band:run" label={`托管 ${delegation.months} 月`} onPress={() => props.onCouncil('run')} />
+        <Button key="band:council" label="打开议事" onPress={() => props.onControl('council')} />
+      </Box>,
+    )
+  }
   rows.push(
     <Box flexDirection="row" columnGap={2} flexWrap="wrap">
       <Text color={player.color} weight="bold">{countryTag(player)}</Text>
       <Text dimColor>{shortLeader(player)}</Text>
       <Text dimColor>{fmtDateLong(props.world.date)}</Text>
       <Text>第 {props.world.tick} 回合</Text>
-      <Text color={props.world.auto.isOn ? 'cyan' : 'yellow'}>
-        {props.world.auto.isOn ? (props.world.auto.isPaused ? '自动·暂停' : '自动推进') : '手动推进'}
+      <Text color={props.council.isOpen ? 'yellow' : 'cyan'}>
+        {props.council.isOpen ? '御前·待议' : '御前·已批'}
       </Text>
     </Box>,
   )
@@ -740,9 +902,8 @@ export function Band(props: BandProps): any {
   }
   rows.push(
     <Box flexDirection="row" columnGap={1}>
-      <Button key="band:tick" label={isAutoRunning ? '暂停' : '继续'} onPress={() => props.onControl(isAutoRunning ? 'pause' : 'resume')} />
-      <Button key="band:next" label="推进" onPress={() => props.onControl('next')} />
-      <Button key="band:auto" label="自动" onPress={() => props.onControl('auto')} />
+      <Button key="band:next" label="推进一月" onPress={() => props.onControl('next')} />
+      <Button key="band:council" label="御前" onPress={() => props.onControl('council')} />
       <Button key="band:save" label="保存" onPress={() => props.onControl('save')} />
       <Text dimColor>/v3 panel 打开详情</Text>
     </Box>,
@@ -842,16 +1003,20 @@ export function helpText(): string {
     '终末传奇 · 命令',
     '/v3 new [国家]        开一局新游戏（默认大清）',
     '/v3 status            查看当前状态',
-    '/v3 next [月数]       推进时间（默认 1 个月）',
-    '/v3 auto [秒]         开启自动推进（默认 30 秒/月）',
-    '/v3 pause | resume    暂停 / 继续自动推进',
+    '/v3 next              批准并推进一月',
+    '/v3 run [月数]        后台托管 N 月，遇事件/战争/越权即中断',
+    '/v3 council           打开御前议事',
+    '/v3 secretary         让秘书拟旨（报告稍后呈上）',
+    '/v3 delegate internal|diplomacy on|off  切换委托',
     '/v3 panel             打开完整面板',
     '/v3 events            查看待决事件',
     '/v3 resolve <事件> <选项>  处理事件',
     '/v3 play <国家>       切换扮演国家',
+    '/v3 cheat <天命> ...  天命：treasury/techPoints/building/relations/warScore/date/event/leader',
+    '/v3 ironman on|off    铁人模式（仅开局第一个月，禁天命与多存档）',
     '/v3 save [名字]       保存',
     '/v3 load [名字]       读取',
-    '/v3 end               结束本局（恢复 claude-hud）',
+    '/v3 end               结束本局',
     '/v3 help              本帮助',
     '',
     '也可以直接用自然语言：告诉 Claude 你要建工厂、加税、结盟或宣战。',

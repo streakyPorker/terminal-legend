@@ -13,6 +13,7 @@ import type {
   WorldState,
 } from '../types'
 import { makeRng, type Rng } from './rng'
+import { applyModifiers } from './modifiers'
 
 export const START_YEAR = 1836
 export const START_MONTH = 1
@@ -781,18 +782,27 @@ export function administrativeCapacityFor(
  */
 export function deriveBureaucracy(country: Country, smooth: boolean): Bureaucracy {
   const type = country.government.type
+  const administrativeCapacity = applyModifiers(
+    country,
+    'administrativeCapacity',
+    country.econ.administrativeCapacity,
+  )
   const raw =
     0.30 * (country.econ.spending.bureaucracy * 10) +
     0.28 * (country.pops.literacy * 100) +
-    0.18 * country.econ.administrativeCapacity +
+    0.18 * administrativeCapacity +
     0.14 * (GOVERNMENT_BUREAUCRACY_BONUS[type] ?? 0) +
     0.10 * (100 - country.pops.radicals)
   const ceiling = clampValue(
-    20 + country.econ.buildings.offices * 3 + (GOVERNMENT_CEILING_BONUS[type] ?? 0),
+    applyModifiers(
+      country,
+      'bureaucracyCeiling',
+      20 + country.econ.buildings.offices * 3 + (GOVERNMENT_CEILING_BONUS[type] ?? 0),
+    ),
     20,
     100,
   )
-  const target = clampValue(raw, 0, ceiling)
+  const target = clampValue(applyModifiers(country, 'bureaucracy', raw), 0, ceiling)
   const previous = country.bureaucracy?.score ?? target
   const score = smooth ? previous + (target - previous) * 0.15 : target
   return {
@@ -925,6 +935,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         infamy: 0,
         prestige: seedRow.prestige,
       },
+      modifiers: [],
     }
     country.bureaucracy = deriveBureaucracy(country, false)
     countries[seedRow.id] = country
@@ -939,7 +950,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
   }
 
   return {
-    version: 2,
+    version: 3,
     seed,
     date: { year: START_YEAR, month: START_MONTH },
     tick: 0,
@@ -954,15 +965,9 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         text: '1836 年 1 月：维也纳体系的余晖仍在，蒸汽与火药正在改写世界。',
       },
     ],
-    auto: {
-      isOn: false,
-      isPaused: false,
-      resumeOnStart: true,
-      intervalSeconds: 60,
-      aiModel: 'haiku',
-      lastTickAt: 0,
-    },
+    resumeOnStart: true,
     ai: {
+      model: 'haiku',
       suspended: {},
       intervalTicks: 3,
       lastDecisionTick: 0,

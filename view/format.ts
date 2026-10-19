@@ -136,7 +136,6 @@ export function statusLine(world: WorldState): string {
   const wars = world.wars.filter(
     war => war.attackers.includes(player.id) || war.defenders.includes(player.id),
   )
-  const mode = world.auto.isOn ? (world.auto.isPaused ? '暂停' : '自动') : '手动'
   const warText = wars.length > 0 ? `战争×${wars.length}` : '和平'
   const pending = world.events.filter(
     event => event.countryId === player.id && !event.isResolved,
@@ -151,7 +150,7 @@ export function statusLine(world: WorldState): string {
     `科技${player.tech.level}`,
     warText,
     pending > 0 ? `事件${pending}` : '',
-    mode,
+    world.ironman ? '铁人' : '',
   ]
     .filter(part => part !== '')
     .join(' │ ')

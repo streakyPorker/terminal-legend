@@ -20,7 +20,7 @@ export const SECRETARY_PROMPT = [
   '7. 简报会给你本月的行动预算（可执行的内政行动数）；不要超额。',
   '8. 不知道的数字先调用 v3_status 查询，绝不编造。',
   '',
-  '报告格式（中文，简短，合计不超过 200 字）：',
+  '报告格式（中文，简洁，合计不超过 400 字）：',
   '已执行：逐条列出你实际调用工具完成的事；没有就写「无」。',
   '建议：下一步值得考虑、但超出授权或需要玩家决定的事。',
   '风险：财政、民怨、外交或战争的隐患。',
@@ -54,6 +54,20 @@ export function monthlyBriefing(world: WorldState): string {
   )
   lines.push(
     `基础设施：交通 ${Math.round(player.econ.transportInfrastructure)}，行政能力 ${Math.round(player.econ.administrativeCapacity)}，市场接入 ${pct(player.econ.marketAccess)}`,
+  )
+  lines.push(
+    `国策修正：${
+      player.modifiers.length === 0
+        ? '无'
+        : player.modifiers
+            .map(
+              modifier =>
+                `${modifier.label}(${modifier.stat} ${modifier.value >= 0 ? '+' : ''}${modifier.value}${modifier.stack === 'flat' ? '' : '%'}${
+                  modifier.monthsLeft === undefined ? '，长期' : `，${modifier.monthsLeft} 月`
+                })`,
+            )
+            .join('；')
+    }`,
   )
   const queue = player.econ.constructionQueue
   lines.push(
@@ -98,7 +112,7 @@ export function monthlyBriefing(world: WorldState): string {
   }
 
   lines.push('最近编年史：')
-  for (const entry of world.log.slice(-8)) {
+  for (const entry of world.log.slice(-12)) {
     lines.push(`- ${entry.date.year}.${String(entry.date.month).padStart(2, '0')} ${entry.text}`)
   }
 

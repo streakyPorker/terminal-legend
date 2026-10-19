@@ -81,6 +81,54 @@ export type Pops = {
 
 export type Spending = Record<SpendingCategory, number>
 
+/** A numeric seam that policies, events and laws may modify. */
+export type ModifierStat =
+  | 'production'
+  | `${GoodId}Output`
+  | 'income'
+  | 'expense'
+  | 'taxEfficiency'
+  | 'literacy'
+  | 'radicals'
+  | 'loyalists'
+  | 'legitimacy'
+  | 'authority'
+  | 'sol'
+  | 'growth'
+  | 'techPoints'
+  | 'armyStrength'
+  | 'morale'
+  | 'manpower'
+  | 'prestige'
+  | 'unemployment'
+  | 'bureaucracy'
+  | 'bureaucracyCeiling'
+  | 'constructionSpeed'
+  | 'marketAccess'
+  | 'transportInfrastructure'
+  | 'administrativeCapacity'
+
+/**
+ * How a modifier stacks. Flat values add; percent values sum into one
+ * multiplier; multiply values compound. Order: flat, then percent, then
+ * multiply (ADR 0004).
+ */
+export type ModifierStack = 'flat' | 'percent' | 'multiply'
+
+export type Modifier = {
+  /** Unique per country; adding one with an existing id replaces it. */
+  id: string
+  label: string
+  stat: ModifierStat
+  stack: ModifierStack
+  /** Flat units, or percentage points for `percent` / `multiply`. */
+  value: number
+  /** Months remaining; absent means permanent until explicitly removed. */
+  monthsLeft?: number
+  /** Who granted it, e.g. `law:教育改革`, `event:ev-1`, `policy:关税`. */
+  source: string
+}
+
 export type Bureaucracy = {
   /** 0..100, smoothed actual effectiveness. */
   score: number
@@ -184,6 +232,8 @@ export type Country = {
   military: Military
   diplo: Diplomacy
   bureaucracy: Bureaucracy
+  /** Active buffs and debuffs; see engine/modifiers.ts. */
+  modifiers: Modifier[]
 }
 
 export type War = {
@@ -216,6 +266,15 @@ export type EventOption = {
     relationAmount?: number
     /** Replace the country's leader with its next in line. */
     succeed?: boolean
+    /** Buffs/debuffs granted by this option (stacking rules in ADR 0004). */
+    modifiers?: {
+      stat: ModifierStat
+      stack?: ModifierStack
+      value: number
+      /** Months; absent means permanent. */
+      months?: number
+      label?: string
+    }[]
   }
 }
 
@@ -248,17 +307,9 @@ export type LogEntry = {
   text: string
 }
 
-export type AutoState = {
-  isOn: boolean
-  isPaused: boolean
-  /** Load this save again when a session starts in the project. */
-  resumeOnStart: boolean
-  intervalSeconds: number
-  aiModel: string
-  lastTickAt: number
-}
-
 export type AiState = {
+  /** Model used for background leader decisions and the secretary. */
+  model: string
   /** countryId -> tick until which background AI leaves it to the narrator. */
   suspended: Record<string, number>
   /** Ask the model every N ticks; other ticks use the deterministic policy. */
@@ -301,7 +352,8 @@ export type WorldState = {
   wars: War[]
   events: GameEvent[]
   log: LogEntry[]
-  auto: AutoState
+  /** Auto-load this world when a session starts in the project. */
+  resumeOnStart: boolean
   ai: AiState
   secretary: SecretaryState
   ironman: boolean
@@ -333,7 +385,6 @@ export type UiState = {
 
 export type GameConfig = {
   aiModel: string
-  autoTickSeconds: number
 }
 
 declare module 'claude-code' {

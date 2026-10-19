@@ -99,7 +99,6 @@ describe('terminal-legend engine', () => {
 describe('terminal-legend command surface', () => {
   test(
     'a campaign starts, advances and reports through /v3',
-    { options: { autoStart: false } },
     async ($, on) => {
     const anyOn = on as unknown as (
       event: string,
@@ -122,7 +121,11 @@ describe('terminal-legend command surface', () => {
     anyOn('session.id', () => ({ value: 'test-session' }))
     anyOn('clock.every', () => ({ value: undefined }))
     anyOn('ui.open', () => ({ value: { isPlaced: true } }))
-    anyOn('ui.status', () => ({ value: undefined }))
+    const statuses: string[] = []
+    anyOn('ui.status', ($: any, e: any) => {
+      statuses.push(String(e.text ?? ''))
+      return { value: undefined }
+    })
     anyOn('ui.log', () => ({ value: undefined }))
     anyOn('ui.toast', () => ({ value: undefined }))
     anyOn('model.complete', () => ({
@@ -148,9 +151,11 @@ describe('terminal-legend command surface', () => {
     })
     const started = await run({ command: 'v3', args: 'new QING' })
     expect(started.text).toContain('新游戏开始')
+    expect(statuses.some(line => line.includes('待议'))).toBe(true)
 
-    const advanced = await run({ command: 'v3', args: 'next 3' })
-    expect(advanced.text).toContain('推进 3 个月')
+    const advanced = await run({ command: 'v3', args: 'next' })
+    expect(advanced.text).toContain('推进 1 个月')
+    expect(statuses[statuses.length - 1] ?? '').toContain('待议')
 
     const status = await run({ command: 'v3', args: 'status' })
     expect(status.text).toContain('大清')
@@ -186,10 +191,13 @@ describe('terminal-legend drawing', () => {
           onTab={() => undefined}
           onControl={() => undefined}
           onEvent={() => undefined}
+          council={{ isOpen: true, report: '', secretaryReport: '', isRunning: false }}
+          onCouncil={() => undefined}
         />
       )
     })
     const tabs: TabId[] = [
+      'council',
       'overview',
       'economy',
       'pops',
@@ -215,6 +223,68 @@ describe('terminal-legend drawing', () => {
     }
   })
 
+  test('the council tab draws the report, secretary and queue', async ($, on) => {
+    const world = newWorld(3, 'QING')
+    world.secretary.lastReport = '已执行：无。'
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.modifiers.push({
+      id: 'test-buff',
+      label: '纺织繁荣',
+      stat: 'fabricOutput',
+      stack: 'percent',
+      value: 20,
+      monthsLeft: 3,
+      source: 'test',
+    })
+    qing.econ.constructionQueue.push({
+      id: 'proj-test',
+      building: 'farms',
+      count: 1,
+      monthsLeft: 2,
+      monthlyCost: 0.75,
+      progress: 0.5,
+      startedAt: { ...world.date },
+    })
+    on('ui.render', { component: 'Pane', requestId: 'council-pane' }, async ($hang, e) => {
+      const kit = ($hang as unknown as { ui: { resolve: (x: unknown) => UiKit } }).ui.resolve(e)
+      return (
+        <Panel
+          ui={kit}
+          world={world}
+          width={e.props.bodyColumns}
+          tab="council"
+          notice=""
+          onTab={() => undefined}
+          onControl={() => undefined}
+          onEvent={() => undefined}
+          council={{
+            isOpen: true,
+            report: '推进 1 个月：1836.01 → 1836.02',
+            secretaryReport: '已执行：调整税率。建议：无。风险：财政紧张。',
+            isRunning: false,
+          }}
+          onCouncil={() => undefined}
+        />
+      )
+    })
+    for (const surface of ['terminal', 'desktop'] as const) {
+      const ui = await $.ui.mount({
+        plugin: 'terminal-legend',
+        surface,
+        component: 'Pane',
+        requestId: 'council-pane',
+        props: PANE_PROPS,
+      })
+      expect(await ui.find({ type: 'Text', text: /御前会议/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /已执行：调整税率/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /农场×1/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /纺织繁荣/ })).toBeDefined()
+      await ui.unmount()
+    }
+  })
+
   test('the band draws above the prompt', async ($, on) => {
     const world = newWorld(8, 'FRA')
     on('ui.render', { component: 'AbovePrompt', requestId: 'test-band' }, async ($hang, e) => {
@@ -226,6 +296,8 @@ describe('terminal-legend drawing', () => {
           width={e.props.bodyColumns}
           maxRows={e.props.maxRows}
           onControl={() => undefined}
+          council={{ isOpen: true, report: '', secretaryReport: '', isRunning: false }}
+          onCouncil={() => undefined}
         />
       )
     })
@@ -244,6 +316,7 @@ describe('terminal-legend drawing', () => {
       } as unknown as never,
     })
     expect(await ui.find({ type: 'Text', text: /法国/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /御前会议 · 待议/ })).toBeDefined()
     await ui.unmount()
   })
 

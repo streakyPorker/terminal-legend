@@ -11,31 +11,45 @@
 - **主模型扮演主要大国**：插件通过 `prompt.compose` 把世界快照、领袖人格和工具规则
   注入系统提示。你在对话里直接和“维多利亚女王”“尼古拉一世”谈判，Claude 用他们的
   口吻回应，并调用 `v3_leader` / `v3_diplomacy` 把结果写回世界。
+- **月度御前会议**：没有实时时钟。每月推进后停在御前会议，玩家审阅月报、处理事件、
+  批准推进一月，或托管 N 月（遇待决事件、新的战争、战争结束、秘书越权即中断）。
+- **秘书子代理**：每月可召见一个 haiku 档子代理担任秘书，在玩家授权的内政/外交范围内
+  起草并执行计划，提交「已执行 / 建议 / 风险」报告；越权（推进时间、宣战、停战、天命）
+  会被记录并提示，但不会被打断。
+- **官僚效能**：0–100 的派生分数，决定每月行动预算、资金效率、工期延迟与信息失真；
+  官署抬高上限，交通基础设施与行政能力各管一摊。
+- **修正叠算**：政策、法案、事件与天命都通过 `engine/modifiers.ts` 给同一批数值入口
+  挂 buff/debuff；按 flat → percent → multiply 固定顺序结算，支持持续时间与来源，
+  同一 `id` 覆盖而不是无限叠加（ADR 0004）。
 - **三层界面**：
-  1. `$.ui.status` —— 最底部的单行 HUD（日期、国库、GDP、合法性、激进、科技、战争）；
-  2. `AbovePrompt` —— 输入框上方的常驻仪表盘（经济走势、列强关系、待决事件、控制按钮）；
-  3. `Pane` —— `/v3 panel` 打开的完整面板，八个标签页（概览/经济/人口/外交/军事/科技/事件/日志）。
+  1. `$.ui.status` —— 最底部的单行 HUD（日期、国库、GDP、合法性、激进、科技、战争、铁人）；
+  2. `AbovePrompt` —— 输入框上方的常驻仪表盘；会议打开时第一行是「御前会议 · 待议」；
+  3. `Pane` —— `/v3 panel` 打开的完整面板，九个标签页（御前/概览/经济/人口/外交/军事/科技/事件/日志）。
   另外 `/v3 ...` 命令的输出会在对话里渲染成富文本报告。
-- **自动屏蔽 claude-hud**：游戏激活期间，状态行调度器让 claude-hud 让位；游戏未激活时
-  原样转交给 claude-hud，其他项目完全不受影响。
+- **与 claude-hud 共存**：状态行调度器始终把输出转交给 claude-hud，游戏自己的 Band 与
+  状态行叠加在上面，不再互相屏蔽。
 
 ## 快速开始
 
 在本 mod 所在的 Claude Code 会话里（或 `claude --plugin-dir <这个目录>`）：
 
 ```text
-/v3 new            以大清开局（1836 年 1 月）
+/v3 new            以大清开局（1836 年 1 月），御前会议立即开始
 /v3 new FRA        以法国开局（GBR, FRA, PRU, RUS, AUS, USA, JAP, OTT, SPA 均可）
+/v3 next           批准并推进一月
+/v3 run 6          后台托管六个月，遇中断即停
+/v3 council        打开御前议事
+/v3 secretary      让秘书拟旨（命令立即返回，报告稍后到达）
+/v3 delegate internal on     授权秘书处理内政（diplomacy 同理）
 /v3 panel          打开完整面板
-/v3 next 6         推进六个月
-/v3 auto 60        每 60 秒自动推进一个月
-/v3 pause          暂停自动推进
 /v3 status         查看世界状态
 /v3 events         查看待决事件
+/v3 cheat treasury 100       天命（铁人模式禁用）
+/v3 ironman on     铁人模式（仅开局第一个月）
 /v3 save           保存（默认 .terminal-legend/save.json）
 /v3 load           读取
 /v3 play RUS       切换扮演俄国
-/v3 end            结束本局并恢复 claude-hud
+/v3 end            结束本局
 ```
 
 也可以直接用自然语言：
@@ -43,16 +57,17 @@
 > 在广东再建两座工厂，把关税提到 15%，然后问问英国的维多利亚女王愿不愿意签一份
 > 贸易协定。
 
-Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplomacy`，
-必要时用 `v3_advance` 推进时间。
+Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplomacy`；
+推进时间需要你明确批准（或者托管）。
 
 ## 工具（模型可调用）
 
 | 工具 | 用途 |
 | --- | --- |
-| `v3_status` | 完整世界状态、各国对比、待决事件、战争 |
-| `v3_advance` | 让 AI 领袖决策并推进 N 个月 |
-| `v3_action` | 建造、税率、关税、支出、研究、征兵、法案 |
+| `v3_status` | 完整世界状态、各国对比、待决事件、战争、官僚与建造队列 |
+| `v3_advance` | 批准推进一月；months>1 视为托管并检测中断 |
+| `v3_cheat` | 天命：金钱/科技点/建筑/关系/战争分数/日期/事件/领袖（铁人禁用） |
+| `v3_action` | 建造（入队）、税率、关税、支出、研究、征兵、法案 |
 | `v3_diplomacy` | 改善/交恶/结盟/设对手/赠礼/宣战/停战 |
 | `v3_event` | 列出或处理待决事件 |
 | `v3_leader` | 记录与某国领袖的交流，调整情绪与关系，暂停该国后台 AI |
@@ -61,21 +76,20 @@ Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplo
 
 ## 世界模型（第一版）
 
-- 10 个国家、12 种商品、7 种建筑、6 类支出、10 级科技。
-- 每月结算：商品供需与价格 → GDP/财政 → 人口增长与城市化 → 生活水平/激进/合法性
-  → 科技 → 军力与人力 → 外交关系漂移 → 战争 → 随机事件。
+- 10 个国家、12 种商品、8 种建筑、6 类支出、10 级科技。
+- 每月结算：商品供需与价格 → GDP/财政 → 建造队列 → 人口增长与城市化 → 生活水平/激进/合法性
+  → 官僚效能与权威 → 科技 → 军力与人力 → 外交关系漂移（受恶名拖累） → 战争 → 随机事件。
 - 战争以双方陆军质量、士气、科技计算的战争分数推进，75 分或 60 个月结束。
 - 事件有多个选项，选项效果包括国库、激进、合法性、威望、军队、人口、科技点与双边关系。
-- 存档是项目目录下的 `.terminal-legend/save.json`（纯 JSON），`save.<name>.json` 为命名存档。
+- 存档是项目目录下的 `.terminal-legend/save.json`（纯 JSON），命名存档为 `.terminal-legend/<名字>.json`。
+- 早期开发不做存档兼容：世界结构变化时提升 `WorldState.version`，旧存档直接拒绝载入（ADR 0005）。
 
-## claude-hud 屏蔽原理
+## 与 claude-hud 共存
 
-`~/.claude/plugins/terminal-legend/statusline.mjs` 是一个状态行调度器：
-
-1. 读取 Claude Code 通过 stdin 传入的 `session_id` / `cwd`；
-2. 读取 `active.json`（由插件在游戏激活时写入，12 小时过期）；
-3. 命中当前会话 → 不输出，claude-hud 隐藏，游戏自己的状态行接管；
-4. 未命中 → 执行 `delegate.txt` 里保存的原始命令（即 claude-hud 的 statusline）。
+`~/.claude/plugins/terminal-legend/statusline.mjs` 是一个状态行调度器：它始终执行
+`delegate.txt` 里保存的原始命令（即 claude-hud 的 statusline），不再按游戏是否激活
+屏蔽对方。游戏的状态文字与 `AbovePrompt` Band 叠加在同一屏上，两者共存。
+`active.json` 仍由插件写入，仅作会话记录，不参与显示决策。
 
 安装/修复：
 
@@ -112,16 +126,20 @@ claude plugin test .
 ## 文件结构
 
 ```
-.claude-plugin/plugin.json   清单、userConfig（AI 模型、自动推进秒数）
+.claude-plugin/plugin.json   清单、userConfig（AI 模型）
 hooks/hooks.json             单个 hooks 模块
-hooks/register.tsx           命令、工具、状态、自动推进、系统提示、三层渲染
-types/index.d.ts             PluginState 契约与世界模型类型
-engine/data.ts               国家/商品/建筑/科技/领袖/事件模板
-engine/sim.ts                确定性月度模拟与玩家行动
+hooks/register.tsx           命令、工具、御前会议、秘书、系统提示、三层渲染
+types/index.d.ts             PluginState 契约与世界模型类型（world v2）
+engine/data.ts               国家/商品/建筑/科技/领袖/事件模板、官僚与失业派生
+engine/sim.ts                确定性月度模拟、建造队列、玩家行动、托管中断
 engine/ai.ts                 批量 AI 领袖决策提示与解析
-engine/save.ts               存档与状态行激活文件
+engine/secretary.ts          秘书系统提示与月度简报
+engine/modifiers.ts          buff/debuff 叠算入口与到期结算
+engine/cheat.ts              天命工具
+engine/save.ts               存档、版本校验与状态行激活文件
 view/format.ts               数字、进度条、火花线、状态行
-view/panels.tsx              概览/经济/人口/外交/军事/科技/事件/日志面板 + Band + Report
+view/panels.tsx              御前/概览/经济/人口/外交/军事/科技/事件/日志面板 + Band + Report
 statusline/install.mjs       状态行调度器安装脚本
-tests/game.test.tsx          引擎与渲染测试
+tests/game.test.tsx          引擎、命令与渲染测试
+tests/first-slice.test.ts    第一刀（M1–M6）引擎与命令测试
 ```
