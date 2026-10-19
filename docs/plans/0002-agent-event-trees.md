@@ -1,7 +1,8 @@
 # 下一步：国家国策/事件树 → 多国交互事件树
 
-- Status: proposed
+- Status: proposed（排在经济循环之后）
 - Depends on: ADR 0001（秘书子代理）、ADR 0002（自由数值）、ADR 0003（引擎/LLM 边界）、ADR 0004（修正叠算）
+- Sequencing: 先完成 `0003-economic-loop.md`（经济循环 + 资源层），再做贸易/外交，最后做事件树。科技线是后续横切层，会影响所有线路。
 
 ## 目标
 
