@@ -36,7 +36,7 @@ export async function saveGame(
 export function parseWorld(raw: unknown): WorldState | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined
   const world = raw as WorldState
-  if (world.version !== 3) return undefined
+  if (world.version !== 4) return undefined
   if (typeof world.tick !== 'number' || typeof world.playerId !== 'string') return undefined
   if (typeof world.date !== 'object' || world.date === null) return undefined
   if (typeof world.countries !== 'object' || world.countries === null) return undefined

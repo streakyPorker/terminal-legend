@@ -951,7 +951,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
   }
 
   return {
-    version: 3,
+    version: 4,
     seed,
     date: { year: START_YEAR, month: START_MONTH },
     tick: 0,
