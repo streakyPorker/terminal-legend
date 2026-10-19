@@ -371,6 +371,16 @@ const report = await answerOf(agentId)   // turn.complete 的 text，带 240s �
 
 Slice B（轻量双边贸易）与 Slice C（外交博弈 + 战争目标）另出计划，依赖本刀的官僚、会议与经济修正。
 
+### 实现结果（2026-10-19）
+
+M1–M6 全部落地；`claude plugin test .` 39 项通过，`validate` 仅剩 README marketplace 警告。与原计划的偏差：
+
+- **迁移取消**：按项目决定不做兼容，`WorldState.version` 升到 3，旧存档与 `migrateWorld` 删除（ADR 0005）。
+- **秘书与托管异步化**：命令钩子只有 10 秒自有时间预算，等待子代理的裸 Promise 计入预算；`/v3 secretary`、`/v3 run` 立即返回，后台完成后再写报告/月报（ADR 0001 实现注记）。
+- **新增修正层**：所有主要数值入口改为经由 `applyModifiers` 读取，政策/法案/事件/天命可挂 buff/debuff（ADR 0004）。
+- **天命扩展**：`v3_cheat` 额外支持 `modifier`，便于在 Slice B 之前试玩叠算。
+- **状态行**：不再屏蔽 claude-hud，两者共存。
+
 ## 12. 风险与待定
 
 | 风险 | 缓解 |

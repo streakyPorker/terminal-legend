@@ -567,6 +567,24 @@ describe('buff/debuff stacking', () => {
     expect(qing.modifiers.length).toBe(0)
   })
 
+  test('a monthly advance expires timed modifiers', async () => {
+    const world = newWorld(23, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    addModifier(qing, {
+      id: 'one-month',
+      label: '一个月的恩泽',
+      stat: 'income',
+      stack: 'percent',
+      value: 10,
+      monthsLeft: 1,
+      source: 'test',
+    })
+    advance(world, 1, [], makeRngForWorld(world))
+    expect(qing.modifiers.some(one => one.id === 'one-month')).toBe(false)
+  })
+
   test('production buffs change computed output', async () => {
     const world = newWorld(20, 'PRU')
     const prussia = world.countries.PRU
