@@ -25,6 +25,13 @@ export function fmtPercent(value: number, digits = 0): string {
   return `${(value * 100).toFixed(digits)}%`
 }
 
+/** Pops and armies are stored in ten-thousands; show 亿 once past 10000. */
+export function fmtPop(tenThousands: number): string {
+  if (tenThousands >= 10000) return `${(tenThousands / 10000).toFixed(2)} 亿`
+  if (tenThousands >= 100) return `${Math.round(tenThousands)} 万`
+  return `${tenThousands.toFixed(1)} 万`
+}
+
 export function clampText(text: string, width: number): string {
   if (width <= 1) return ''
   if (text.length <= width) return text

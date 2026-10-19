@@ -11,6 +11,7 @@ import {
   fmtDateLong,
   fmtNumber,
   fmtPercent,
+  fmtPop,
   fmtSigned,
   legitimacyColor,
   logKindMark,
@@ -648,42 +649,59 @@ export function Band(props: BandProps): any {
 
   const rows: any[] = []
   rows.push(
-    <Box flexDirection="row" columnGap={2}>
+    <Box flexDirection="row" columnGap={2} flexWrap="wrap">
       <Text color={player.color} weight="bold">{countryTag(player)}</Text>
+      <Text dimColor>{shortLeader(player)}</Text>
       <Text dimColor>{fmtDateLong(props.world.date)}</Text>
       <Text>第 {props.world.tick} 回合</Text>
       <Text color={props.world.auto.isOn ? 'cyan' : 'yellow'}>
-        {props.world.auto.isOn ? (props.world.auto.isPaused ? '自动·暂停' : '自动') : '手动'}
+        {props.world.auto.isOn ? (props.world.auto.isPaused ? '自动·暂停' : '自动推进') : '手动推进'}
       </Text>
     </Box>,
   )
   rows.push(
     <Box flexDirection="row" columnGap={2} flexWrap="wrap">
-      <Text>库 <Text color={surplus >= 0 ? 'green' : 'red'}>{fmtNumber(econ.treasury)}</Text> <Text dimColor>({fmtSigned(surplus)}/月)</Text></Text>
-      <Text>GDP {fmtNumber(econ.gdp)} <Text color="cyan">{sparkline(econ.history.gdp, 8)}</Text></Text>
-      <Text>合 <Text color={legitimacyColor(player.government.legitimacy)}>{Math.round(player.government.legitimacy)}</Text></Text>
-      <Text>激 <Text color={radicalColor(player.pops.radicals)}>{Math.round(player.pops.radicals)}</Text></Text>
-      <Text>生活 {Math.round(player.pops.sol)}</Text>
+      <Text>
+        国库 <Text color={surplus >= 0 ? 'green' : 'red'}>{fmtNumber(econ.treasury)}</Text>
+        <Text dimColor>（{fmtSigned(surplus)}/月）</Text>
+      </Text>
+      <Text>
+        国内生产总值 <Text>{fmtNumber(econ.gdp)}</Text>
+        <Text color="cyan"> 近月 {sparkline(econ.history.gdp, 8)}</Text>
+      </Text>
+      <Text>
+        合法性 <Text color={legitimacyColor(player.government.legitimacy)}>{Math.round(player.government.legitimacy)}</Text>
+      </Text>
+      <Text>
+        激进 <Text color={radicalColor(player.pops.radicals)}>{Math.round(player.pops.radicals)}</Text>
+      </Text>
+      <Text>生活水平 {Math.round(player.pops.sol)}</Text>
     </Box>,
   )
   rows.push(
     <Box flexDirection="row" columnGap={2} flexWrap="wrap">
-      <Text>人口 {fmtNumber(player.pops.total)}万</Text>
-      <Text>陆 {fmtNumber(player.military.army)}万</Text>
-      <Text>海 {fmtNumber(player.military.navy)}</Text>
-      <Text>科技 {player.tech.level} <Text dimColor>{techName(player.tech.level)}</Text></Text>
-      <Text dimColor>研究 {player.tech.researching}</Text>
+      <Text>人口 {fmtPop(player.pops.total)}</Text>
+      <Text>识字率 {fmtPercent(player.pops.literacy)}</Text>
+      <Text>陆军 {fmtPop(player.military.army)}</Text>
+      <Text>海军 {fmtNumber(player.military.navy)} 艘</Text>
+      <Text>
+        科技 {player.tech.level} 级
+        <Text dimColor>（{techName(player.tech.level)}）</Text>
+      </Text>
+      <Text dimColor>研究中：{player.tech.researching}</Text>
     </Box>,
   )
   rows.push(
     <Box flexDirection="row" columnGap={2} flexWrap="wrap">
-      <Text dimColor>列强</Text>
+      <Text dimColor>列强关系</Text>
       {majors.map(row => (
         <Text color={relationColor(row.value)}>
-          {row.country.flag}{row.country.name}{row.value >= 0 ? '+' : ''}{row.value}
+          [{row.country.flag}] {row.country.name} {row.value >= 0 ? '+' : ''}{row.value}
         </Text>
       ))}
-      {props.world.wars.length > 0 ? <Text color="red">战争×{props.world.wars.length}</Text> : <Text dimColor>和平</Text>}
+      {props.world.wars.length > 0
+        ? <Text color="red">战争 ×{props.world.wars.length}</Text>
+        : <Text dimColor>天下太平</Text>}
     </Box>,
   )
   if (pending.length > 0) {
