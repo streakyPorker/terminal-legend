@@ -97,6 +97,8 @@ describe('M1 types, data and migration', () => {
     const old = JSON.parse(JSON.stringify(fresh)) as Record<string, unknown>
     old.version = 1
     expect(parseWorld(old)).toBeUndefined()
+    old.version = 2
+    expect(parseWorld(old)).toBeUndefined()
   })
 
   test('a corrupt save is rejected', async () => {
