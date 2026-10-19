@@ -45,7 +45,8 @@ function topRelations(country: Country, world: WorldState): string {
 }
 
 function countryLine(country: Country, world: WorldState): string {
-  const surplus = country.econ.income - country.econ.expense
+  const surplus =
+    country.econ.income - country.econ.expense - country.econ.lastDebtRepayment
   const war = world.wars.some(
     one => one.attackers.includes(country.id) || one.defenders.includes(country.id),
   )
@@ -55,10 +56,13 @@ function countryLine(country: Country, world: WorldState): string {
     `议程:${country.leader.agenda}`,
     `情绪:${Math.round(country.leader.mood)}`,
     `国库:${n1(country.econ.treasury)}金`,
+    `债务:${n1(country.econ.debt)}金(债务率${n1(country.econ.debt / Math.max(1, country.econ.gdp))})`,
     `GDP:${n1(country.econ.gdp)}金/月(消费${n1(country.econ.gdpComponents.c)}/投资${n1(country.econ.gdpComponents.i)}/政府${n1(country.econ.gdpComponents.g)})`,
     `税:${country.econ.taxRate}%关税:${country.econ.tariff}%`,
     `支出:陆${n1(country.econ.spending.army)}/海${n1(country.econ.spending.navy)}/官${n1(country.econ.spending.bureaucracy)}/教${n1(country.econ.spending.education)}/福${n1(country.econ.spending.welfare)}/建${n1(country.econ.spending.construction)}`,
-    `在建:${country.econ.constructionQueue.length}`,
+    `在建:${country.econ.constructionQueue.length}(月付${n1(country.econ.lastStateConstructionSpend)}/预算${n1(country.econ.spending.construction * 0.8)})`,
+    `建筑:农场${country.econ.buildings.farms}/矿${country.econ.buildings.mines}/工厂${country.econ.buildings.factories}/铁路${country.econ.buildings.railroads}/官署${country.econ.buildings.offices}`,
+    `权威:${Math.round(country.government.authority)}人力:${n1(country.military.manpower)}`,
     `私人资本:${n1(country.econ.privateCapital)}金`,
     `投资信心:${Math.round(country.econ.investmentConfidence)}`,
     `失业:${n1(country.econ.unemployment)}%`,
@@ -321,6 +325,13 @@ export async function decideForAi(
       const country = world.countries[decision.countryId]
       return `[${country?.flag ?? '?'}] ${country?.name ?? decision.countryId}：${decision.narrative}`
     })
+  // Record countries that took no action, so a quiet month is explicit
+  // rather than looking like a dropped batch entry.
+  const decided = new Set(decisions.map(decision => decision.countryId))
+  for (const country of candidates) {
+    if (decided.has(country.id)) continue
+    notes.push(`[${country.flag}] ${country.name}：按兵不动`)
+  }
 
   return { decisions, notes, error }
 }
@@ -331,7 +342,7 @@ export function describeWorldForNarrator(world: WorldState): string {
   const lines: string[] = []
   lines.push(`日期 ${fmtDate(world.date)}｜玩家 ${player.name}`)
   lines.push(
-    `国库 ${n1(player.econ.treasury)} 金（${player.econ.income - player.econ.expense >= 0 ? '+' : ''}${n1(player.econ.income - player.econ.expense)} 金/月）｜GDP ${n1(player.econ.gdp)} 金/月（消费 ${n1(player.econ.gdpComponents.c)} / 投资 ${n1(player.econ.gdpComponents.i)} / 政府 ${n1(player.econ.gdpComponents.g)}）｜合法性 ${Math.round(player.government.legitimacy)}｜激进 ${Math.round(player.pops.radicals)}｜生活水平 ${Math.round(player.pops.sol)}`,
+    `国库 ${n1(player.econ.treasury)} 金（${player.econ.income - player.econ.expense - player.econ.lastDebtRepayment >= 0 ? '+' : ''}${n1(player.econ.income - player.econ.expense - player.econ.lastDebtRepayment)} 金/月）｜GDP ${n1(player.econ.gdp)} 金/月（消费 ${n1(player.econ.gdpComponents.c)} / 投资 ${n1(player.econ.gdpComponents.i)} / 政府 ${n1(player.econ.gdpComponents.g)}）｜合法性 ${Math.round(player.government.legitimacy)}｜激进 ${Math.round(player.pops.radicals)}｜生活水平 ${Math.round(player.pops.sol)}`,
   )
   lines.push(
     `人口 ${n1(player.pops.total)} 万｜识字率 ${Math.round(player.pops.literacy * 100)}%｜陆军 ${n1(player.military.army)} 万｜海军 ${n1(player.military.navy)}｜科技 ${player.tech.level}（${techName(player.tech.level)}）｜研究 ${player.tech.researching}`,

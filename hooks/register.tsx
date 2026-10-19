@@ -27,6 +27,7 @@ import {
   fmtMoney,
   fmtNumber,
   fmtPop,
+  fmtSigned,
   statusLine,
 } from '../view/format'
 import {
@@ -261,7 +262,15 @@ async function advanceGame(
       if (world.log.length > 400) world.log.splice(0, world.log.length - 400)
     }
 
-    const summary = summarize(report, months)
+    let summary = summarize(report, months)
+    const beforePlayer = current.world.countries[world.playerId]
+    const afterPlayer = world.countries[world.playerId]
+    if (beforePlayer !== undefined && afterPlayer !== undefined) {
+      const delta = (now: number, before: number): string =>
+        `${fmtNumber(now)}（${fmtSigned(now - before)}）`
+      summary += `\n本月：GDP ${delta(afterPlayer.econ.gdp, beforePlayer.econ.gdp)}｜国库 ${delta(afterPlayer.econ.treasury, beforePlayer.econ.treasury)}｜失业 ${afterPlayer.econ.unemployment.toFixed(1)}%｜债务 ${fmtNumber(afterPlayer.econ.debt)}｜激进 ${Math.round(afterPlayer.pops.radicals)}`
+      summary += `\n私人资本 ${fmtNumber(afterPlayer.econ.privateCapital)} · 投资信心 ${afterPlayer.econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(afterPlayer.econ.investmentConfidence)} · 资源 农${afterPlayer.econ.resources.farmland}/林${afterPlayer.econ.resources.timber}/煤${afterPlayer.econ.resources.coal}/铁${afterPlayer.econ.resources.iron}`
+    }
     await setWorld($, world)
     await patchUi($, {
       isBusy: false,
@@ -703,14 +712,15 @@ const TOOL_SPECS: {
   {
     name: 'v3_action',
     description:
-      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count）、tax（税率，需 rate）、tariff（关税，需 rate）、spending（支出，需 category/amount）、research（研究方向，需 tech）、conscript（征兵，需 amount）、law（法案，需 name）。',
+      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count）、cancel（取消国有项目，需 projectId）、tax（税率，需 rate）、tariff（关税，需 rate）、spending（支出，需 category/amount）、research（研究方向，需 tech）、conscript（征兵，需 amount）、law（法案，需 name）。',
     inputSchema: {
       type: 'object',
       properties: {
         action: {
           type: 'string',
-          enum: ['build', 'tax', 'tariff', 'spending', 'research', 'conscript', 'law'],
+          enum: ['build', 'cancel', 'tax', 'tariff', 'spending', 'research', 'conscript', 'law'],
         },
+        projectId: { type: 'string', description: 'cancel 时必填，建造队列中的项目 id。' },
         building: {
           type: 'string',
           enum: [
@@ -1353,7 +1363,16 @@ export const register: Register = (on, options) => {
       const args = e as unknown as Args
       const world = clone(current.world)
       const params: Record<string, string | number | boolean | undefined> = {}
-      for (const key of ['building', 'count', 'rate', 'category', 'amount', 'tech', 'name']) {
+      for (const key of [
+        'building',
+        'count',
+        'rate',
+        'category',
+        'amount',
+        'tech',
+        'name',
+        'projectId',
+      ]) {
         const value = args[key]
         if (
           typeof value === 'string' ||

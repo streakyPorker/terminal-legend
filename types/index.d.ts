@@ -159,6 +159,8 @@ export type Modifier = {
   value: number
   /** Months remaining; absent means permanent until explicitly removed. */
   monthsLeft?: number
+  /** Authority drained each month to maintain the effect (policies only). */
+  upkeep?: number
   /** Who granted it, e.g. `law:教育改革`, `event:ev-1`, `policy:关税`. */
   source: string
 }
@@ -261,6 +263,8 @@ export type Economy = {
   lastConstructionSpend: number
   lastStateConstructionSpend: number
   lastPrivateConstructionSpend: number
+  /** Principal repaid from the treasury last month. */
+  lastDebtRepayment: number
   history: {
     gdp: number[]
     treasury: number[]

@@ -472,8 +472,9 @@ describe('Round 2 regressions', () => {
       effects: [{ stat: 'gdp', stack: 'percent', value: 50 }],
     })
     expect(first.ok).toBe(true)
-    // 50% × 12 months × 0.2 = 10 authority, not the old default 5.
-    expect(qing.government.authority).toBe(90)
+    // A permanent +50% GDP is priced as 48 months: 50 × 4 × 0.2 = 40,
+    // capped at the maximum authority cost.
+    expect(qing.government.authority).toBe(60)
     const second = applyPolicy(world, 'QING', {
       name: '增长乙',
       effects: [{ stat: 'gdp', stack: 'percent', value: 50 }],
@@ -529,5 +530,256 @@ describe('Round 2 regressions', () => {
       expect(Math.abs(current - previous)).toBeLessThan(1.51)
       previous = current
     }
+  })
+})
+
+describe('Round 3 regressions', () => {
+  test('flat flow policies are priced by stat scale', async () => {
+    const world = newWorld(131, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.government.authority = 100
+    const radicals = applyPolicy(world, 'QING', {
+      name: '清除民怨',
+      effects: [{ stat: 'radicals', stack: 'flat', value: -2 }],
+    })
+    expect(radicals.ok).toBe(true)
+    // 2 points × 10 impact × 48 months × 0.2 = 19.2 -> 16 after rounding.
+    expect(qing.government.authority).toBe(84)
+    const literacy = applyPolicy(world, 'QING', {
+      name: '全民识字',
+      effects: [{ stat: 'literacy', stack: 'flat', value: 0.5 }],
+    })
+    expect(literacy.ok).toBe(true)
+    // 0.5 is 50 percentage points; the flat scale makes it cost the cap 40.
+    expect(qing.government.authority).toBe(44)
+    const authority = applyPolicy(world, 'QING', {
+      name: '集中权力',
+      effects: [{ stat: 'authority', stack: 'flat', value: 5 }],
+    })
+    expect(authority.ok).toBe(true)
+    expect(qing.government.authority).toBe(4)
+  })
+
+  test('gdp modifiers scale the report but do not compound into wages', async () => {
+    const world = newWorld(132, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.government.authority = 100
+    const result = applyPolicy(world, 'QING', {
+      name: '统计繁荣',
+      effects: [{ stat: 'gdp', stack: 'percent', value: 100 }],
+    })
+    expect(result.ok).toBe(true)
+    const snap = computeEconomy(qing)
+    expect(snap.gdp).toBeGreaterThan(snap.realGdp * 1.8)
+    expect(snap.gdp).toBeLessThan(snap.realGdp * 2.2)
+    expect(Math.abs(snap.wages + snap.profits - snap.realGdp)).toBeLessThan(1e-6)
+    const before = snap.realGdp
+    advance(world, 12, [], makeRngForWorld(world))
+    const after = computeEconomy(qing)
+    // The real economy may grow, but the statistical modifier must not turn
+    // +200% into a 12x compounding spiral.
+    expect(after.realGdp).toBeLessThan(before * 3)
+  })
+
+  test('every country keeps private investment going for ten years', async () => {
+    const world = newWorld(133, 'QING')
+    const zeroRuns: Record<string, number> = {}
+    for (const country of Object.values(world.countries)) zeroRuns[country.id] = 0
+    const maxRuns: Record<string, number> = {}
+    for (const country of Object.values(world.countries)) maxRuns[country.id] = 0
+    for (let month = 0; month < 120; month += 1) {
+      advance(world, 1, [], makeRngForWorld(world))
+      for (const country of Object.values(world.countries)) {
+        if (country.econ.gdpComponents.i <= 0.01) {
+          zeroRuns[country.id] = (zeroRuns[country.id] ?? 0) + 1
+          maxRuns[country.id] = Math.max(maxRuns[country.id] ?? 0, zeroRuns[country.id] ?? 0)
+        } else {
+          zeroRuns[country.id] = 0
+        }
+      }
+    }
+    for (const country of Object.values(world.countries)) {
+      expect(maxRuns[country.id] ?? 0).toBeLessThanOrEqual(6)
+    }
+  })
+
+  test('high tax rates erode the tax base', async () => {
+    const low = newWorld(134, 'QING')
+    const high = clone(low)
+    const lowQing = low.countries.QING
+    const highQing = high.countries.QING
+    expect(lowQing).toBeDefined()
+    expect(highQing).toBeDefined()
+    if (lowQing === undefined || highQing === undefined) return
+    lowQing.econ.taxRate = 40
+    highQing.econ.taxRate = 60
+    expect(computeEconomy(highQing).income).toBeLessThan(computeEconomy(lowQing).income)
+  })
+
+  test('an unsustainable debt is restructured instead of growing forever', async () => {
+    const world = newWorld(135, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.econ.debt = qing.econ.gdp * 10
+    qing.econ.treasury = 0
+    advance(world, 1, [], makeRngForWorld(world))
+    expect(qing.econ.debt).toBeLessThan(qing.econ.gdp * 2)
+    expect(qing.pops.radicals).toBeGreaterThan(8)
+  })
+
+  test('state collapse removes policy modifiers', async () => {
+    const world = newWorld(136, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    addModifier(qing, {
+      id: 'policy:test:0',
+      label: '测试政策',
+      stat: 'income',
+      stack: 'percent',
+      value: 10,
+      source: 'policy:测试',
+    })
+    qing.pops.radicals = 100
+    advance(world, 1, [], makeRngForWorld(world))
+    expect(qing.modifiers.some(one => one.source.startsWith('policy:'))).toBe(false)
+  })
+
+  test('infrastructure decays with the buildings that produced it', async () => {
+    const world = newWorld(137, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.econ.transportInfrastructure = 100
+    qing.econ.marketAccess = 1
+    advance(world, 60, [], makeRngForWorld(world))
+    expect(qing.econ.transportInfrastructure).toBeLessThan(95)
+    expect(qing.econ.marketAccess).toBeLessThan(0.95)
+  })
+
+  test('a state project can be cancelled but a private one cannot', async () => {
+    const world = newWorld(138, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.econ.treasury = 100
+    applyDecision(
+      world,
+      { countryId: 'QING', action: 'build', params: { building: 'farms', count: 1 } },
+      makeRngForWorld(world),
+    )
+    const state = qing.econ.constructionQueue.find(one => one.owner === 'state')
+    expect(state).toBeDefined()
+    if (state === undefined) return
+    const cancelled = applyDecision(
+      world,
+      { countryId: 'QING', action: 'cancel', params: { projectId: state.id } },
+      makeRngForWorld(world),
+    )
+    expect(cancelled.ok).toBe(true)
+    qing.econ.constructionQueue.push({
+      id: 'private-cancel-test',
+      building: 'mines',
+      count: 1,
+      owner: 'private',
+      monthsLeft: 3,
+      monthlyCost: 1,
+      lastSpend: 0,
+      progress: 0,
+      startedAt: { ...world.date },
+    })
+    const denied = applyDecision(
+      world,
+      { countryId: 'QING', action: 'cancel', params: { projectId: 'private-cancel-test' } },
+      makeRngForWorld(world),
+    )
+    expect(denied.ok).toBe(false)
+  })
+
+  test('a zero construction appropriation warns but still queues', async () => {
+    const world = newWorld(139, 'PRU')
+    const prussia = world.countries.PRU
+    expect(prussia).toBeDefined()
+    if (prussia === undefined) return
+    prussia.econ.spending.construction = 0
+    const result = applyDecision(
+      world,
+      { countryId: 'PRU', action: 'build', params: { building: 'farms', count: 1 } },
+      makeRngForWorld(world),
+    )
+    expect(result.ok).toBe(true)
+    expect(result.text).toContain('不会推进')
+  })
+})
+
+describe('Round 3 policy stack guard', () => {
+  test('demand-side policy magnitudes are capped at 100%', async () => {
+    const world = newWorld(140, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.government.authority = 100
+    const rejected = applyPolicy(world, 'QING', {
+      name: '过度刺激',
+      effects: [{ stat: 'demand', stack: 'percent', value: 150 }],
+    })
+    expect(rejected.ok).toBe(false)
+    const accepted = applyPolicy(world, 'QING', {
+      name: '适度刺激',
+      effects: [{ stat: 'demand', stack: 'percent', value: 100 }],
+    })
+    expect(accepted.ok).toBe(true)
+  })
+
+  test('stacked growth policies do not multiply the economy without bound', async () => {
+    const control = newWorld(141, 'QING')
+    const boosted = clone(control)
+    const qing = boosted.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    for (const [name, stat] of [
+      ['统计繁荣', 'gdp'],
+      ['消费繁荣', 'consumption'],
+      ['需求繁荣', 'demand'],
+      ['生产繁荣', 'production'],
+    ] as const) {
+      qing.government.authority = 100
+      applyPolicy(boosted, 'QING', {
+        name,
+        effects: [{ stat, stack: 'percent', value: 100 }],
+      })
+    }
+    advance(control, 120, [], makeRngForWorld(control))
+    advance(boosted, 120, [], makeRngForWorld(boosted))
+    const a = control.countries.QING
+    const b = boosted.countries.QING
+    expect(a).toBeDefined()
+    expect(b).toBeDefined()
+    if (a === undefined || b === undefined) return
+    expect(b.econ.gdp).toBeLessThan(a.econ.gdp * 4)
+    expect(Number.isFinite(b.government.authority)).toBe(true)
+  })
+
+  test('standing policies drain authority and eventually lapse', async () => {
+    const world = newWorld(142, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.government.authority = 100
+    applyPolicy(world, 'QING', {
+      name: '大工程',
+      effects: [{ stat: 'gdp', stack: 'percent', value: 100 }],
+    })
+    expect(qing.modifiers.some(one => (one.upkeep ?? 0) > 0)).toBe(true)
+    // A low-legitimacy regime cannot sustain a 40-cost policy for long.
+    qing.government.legitimacy = 10
+    qing.government.authority = 3
+    advance(world, 6, [], makeRngForWorld(world))
+    expect(qing.modifiers.some(one => one.source === 'policy:大工程')).toBe(false)
   })
 })

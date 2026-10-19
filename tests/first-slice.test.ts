@@ -169,7 +169,8 @@ describe('M2 construction queue and economy fixes', () => {
       makeRngForWorld(world),
     )
     advance(world, 3, [], makeRngForWorld(world))
-    expect(prussia.econ.constructionQueue[0]?.progress).toBe(0)
+    const stateProject = prussia.econ.constructionQueue.find(one => one.owner === 'state')
+    expect(stateProject?.progress).toBe(0)
   })
 
   test('railroads and offices feed different infrastructure values', async () => {

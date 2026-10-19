@@ -136,9 +136,9 @@ export const THRESHOLD_RULES: ThresholdRule[] = [
   {
     id: 'revolutionary-crisis',
     label: '革命危机',
-    description: '激进达到 80',
+    description: '激进达到约 80（带滞回，78 即触发）',
     mode: 'while',
-    conditions: [{ stat: 'radicals', op: '>=', value: 80 }],
+    conditions: [{ stat: 'radicals', op: '>=', value: 78 }],
     modifiers: [
       { stat: 'income', stack: 'percent', value: -20 },
       { stat: 'constructionSpeed', stack: 'percent', value: -30 },
@@ -149,9 +149,9 @@ export const THRESHOLD_RULES: ThresholdRule[] = [
   {
     id: 'state-collapse',
     label: '国家崩解',
-    description: '激进达到 95',
+    description: '激进达到约 95（带滞回，92 即触发）',
     mode: 'while',
-    conditions: [{ stat: 'radicals', op: '>=', value: 95 }],
+    conditions: [{ stat: 'radicals', op: '>=', value: 92 }],
     modifiers: [
       { stat: 'income', stack: 'percent', value: -35 },
       { stat: 'constructionSpeed', stack: 'percent', value: -50 },

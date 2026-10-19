@@ -45,7 +45,7 @@ export function monthlyBriefing(world: WorldState): string {
     `日期 ${world.date.year} 年 ${world.date.month} 月（第 ${world.tick} 回合）｜玩家国家 ${player.name}（${player.id}）`,
   )
   lines.push(
-    `财政：国库 ${player.econ.treasury.toFixed(1)} 金（${(player.econ.income - player.econ.expense).toFixed(1)} 金/月），收入 ${player.econ.income.toFixed(1)} 金/月，支出 ${player.econ.expense.toFixed(1)} 金/月，债务 ${player.econ.debt.toFixed(1)} 金，税率 ${player.econ.taxRate}%，关税 ${player.econ.tariff}%`,
+    `财政：国库 ${player.econ.treasury.toFixed(1)} 金（${(player.econ.income - player.econ.expense - player.econ.lastDebtRepayment).toFixed(1)} 金/月），收入 ${player.econ.income.toFixed(1)} 金/月，支出 ${player.econ.expense.toFixed(1)} 金/月，债务 ${player.econ.debt.toFixed(1)} 金，税率 ${player.econ.taxRate}%，关税 ${player.econ.tariff}%`,
   )
   lines.push(
     `社会：人口 ${player.pops.total.toFixed(0)} 万，识字率 ${pct(player.pops.literacy)}，生活水平 ${Math.round(player.pops.sol)}，激进 ${Math.round(player.pops.radicals)}，合法性 ${Math.round(player.government.legitimacy)}，权威 ${Math.round(player.government.authority)}，失业 ${player.econ.unemployment.toFixed(1)}%`,

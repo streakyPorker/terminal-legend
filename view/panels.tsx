@@ -172,7 +172,7 @@ function Overview(props: { ui: UiKit; world: WorldState; width: number }): any {
   const player = playerOf(props.world)
   if (player === undefined) return <Text dimColor>无进行中的游戏。</Text>
   const econ = player.econ
-  const surplus = econ.income - econ.expense
+  const surplus = econ.income - econ.expense - econ.lastDebtRepayment
   const sideBySide = props.width >= 74
   const majors = Object.values(props.world.countries)
     .filter(country => country.isMajor && !country.isPlayer)
@@ -796,7 +796,7 @@ function CouncilPanel(props: {
         {player.modifiers.length === 0 ? (
           <Text dimColor>没有生效中的增益或减益。</Text>
         ) : (
-          player.modifiers.slice(-8).map(modifier => (
+          player.modifiers.slice(-12).map(modifier => (
             <Text key={`modifier:${modifier.id}`} wrap="truncate">
               {describeModifier(modifier)} <Text dimColor>· {MODIFIER_STAT_NAMES[modifier.stat]} · {modifier.source}</Text>
             </Text>
@@ -963,7 +963,7 @@ export function Band(props: BandProps): any {
   if (player === undefined) return <Text dimColor>终末传奇：输入 /v3 new 开始一局。</Text>
 
   const econ = player.econ
-  const surplus = econ.income - econ.expense
+  const surplus = econ.income - econ.expense - econ.lastDebtRepayment
   const pending = pendingOf(props.world)
   const delegation = props.world.secretary.delegation
   const majors = Object.values(props.world.countries)

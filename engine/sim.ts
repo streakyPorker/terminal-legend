@@ -69,7 +69,10 @@ export type AdvanceReport = {
 export type EconomySnapshot = {
   production: Record<GoodId, number>
   demand: Record<GoodId, number>
+  /** Headline GDP after the `gdp` statistical modifier. */
   gdp: number
+  /** Expenditure GDP before the `gdp` modifier; drives wages and profits. */
+  realGdp: number
   income: number
   expense: number
   components: GdpComponents
@@ -364,7 +367,15 @@ export function computeEconomy(country: Country): EconomySnapshot {
     components.i += breakdown.investment[id] * price * fill
     components.g += breakdown.government[id] * price * fill
   }
-  const gdp = applyModifiers(country, 'gdp', components.c + components.i + components.g)
+  const realGdp = components.c + components.i + components.g
+  // The `gdp` modifier is a statistical adjustment: it scales the headline
+  // and its displayed components, but wages/profits derive from realGdp so it
+  // cannot compound through next month's consumer demand.
+  const gdpFactor = realGdp > 0 ? applyModifiers(country, 'gdp', realGdp) / realGdp : 1
+  components.c *= gdpFactor
+  components.i *= gdpFactor
+  components.g *= gdpFactor
+  const gdp = realGdp * gdpFactor
 
   const gross = (() => {
     let total = 0
@@ -379,10 +390,16 @@ export function computeEconomy(country: Country): EconomySnapshot {
     'taxEfficiency',
     0.5 + country.government.legitimacy / 200,
   )
+  // Beyond 25% the tax base erodes (evasion, flight, informal work), so the
+  // revenue curve peaks instead of rewarding a pure max-tax slider.
+  const taxCompliance =
+    country.econ.taxRate <= 25
+      ? 1
+      : clamp(1 - (country.econ.taxRate - 25) * 0.015, 0.45, 1)
   const income = applyModifiers(
     country,
     'income',
-    gdp * (country.econ.taxRate / 100) * 0.45 * taxEfficiency +
+    gdp * (country.econ.taxRate / 100) * 0.45 * taxEfficiency * taxCompliance +
       tradeVolume * (country.econ.tariff / 100) * 0.12 +
       country.econ.buildings.ports * 0.02,
   )
@@ -410,13 +427,14 @@ export function computeEconomy(country: Country): EconomySnapshot {
   const rawShare =
     country.politicalEconomy.laborShareBase - (country.econ.unemployment - 5) * 0.01
   const laborShare = clamp(applyModifiers(country, 'laborShare', rawShare), 0.35, 0.7)
-  const wages = gdp * laborShare
-  const profits = gdp * (1 - laborShare)
+  const wages = realGdp * laborShare
+  const profits = realGdp * (1 - laborShare)
 
   return {
     production,
     demand,
     gdp,
+    realGdp,
     income,
     expense: applyModifiers(country, 'expense', expense),
     components,
@@ -646,6 +664,25 @@ export function investmentScore(
   return (pressureSum / weightSum) * (potentialSum / weightSum)
 }
 
+/** Renewal score for buildings with no direct good output. */
+function infrastructureScore(country: Country, building: BuildingId): number {
+  const b = country.econ.buildings
+  switch (building) {
+    case 'railroads':
+      return 0.55 + (1 - country.econ.transportInfrastructure / 100) * 0.5
+    case 'ports':
+      return 0.55 + (1 - country.econ.marketAccess) * 0.5
+    case 'universities':
+      return 0.55 + (1 - country.pops.literacy) * 0.3
+    case 'offices': {
+      const ceiling = country.bureaucracy.ceiling / 100
+      return 0.55 + (1 - clamp(ceiling, 0, 1)) * 0.3 + (b.offices < 4 ? 0.1 : 0)
+    }
+    default:
+      return 0
+  }
+}
+
 function capitalThreshold(country: Country): number {
   const debtRatio = country.econ.debt / Math.max(1, country.econ.gdp)
   // 4%/year + debt ratio × 2%/year, expressed as a monthly markup. Confidence
@@ -679,12 +716,30 @@ function investPrivateCapital(
     0,
   )
   const threshold = capitalThreshold(country)
+  const scores = (Object.keys(BUILDINGS) as BuildingId[]).map(building => ({
+    building,
+    hasOutput: Object.keys(BUILDING_OUTPUT[building]).length > 0,
+    score:
+      Object.keys(BUILDING_OUTPUT[building]).length > 0
+        ? investmentScore(country, building, snap.demand, snap.production)
+        : infrastructureScore(country, building),
+    stock: country.econ.buildings[building],
+  }))
   let best: { building: BuildingId; score: number } | undefined
-  for (const building of Object.keys(BUILDINGS) as BuildingId[]) {
-    if (Object.keys(BUILDING_OUTPUT[building]).length === 0) continue
-    const score = investmentScore(country, building, snap.demand, snap.production)
-    if (best === undefined || score > best.score) best = { building, score }
+  for (const row of scores) {
+    if (!row.hasOutput) continue
+    if (best === undefined || row.score > best.score) {
+      best = { building: row.building, score: row.score }
+    }
   }
+  // Renewal goes to the type losing the most stock to depreciation, so farms,
+  // universities and offices are not permanently ignored in favour of the
+  // single highest-scoring factory.
+  const renewalCandidates = scores.filter(row => row.stock > 0 && row.score > 0.55)
+  const renewal =
+    renewalCandidates.length > 0
+      ? renewalCandidates[world.tick % renewalCandidates.length]
+      : undefined
 
   // Keep three months of working capital for everything already under
   // construction; new starts only use the headroom above that reserve.
@@ -733,19 +788,13 @@ function investPrivateCapital(
   // a healthy existing stock (score > 0.7) still needs one-for-one renewal.
   // This keeps private construction and I from freezing for years after the
   // initial industrialisation (round-2 P1-1).
-  if (
-    !started &&
-    ownProjects.length === 0 &&
-    best !== undefined &&
-    best.score > 0.7 &&
-    country.econ.buildings[best.building] > 0
-  ) {
-    const months = BUILDING_TIME[best.building]
-    const monthlyCost = BUILDINGS[best.building].cost / months
+  if (!started && ownProjects.length === 0 && renewal !== undefined) {
+    const months = BUILDING_TIME[renewal.building]
+    const monthlyCost = BUILDINGS[renewal.building].cost / months
     if (monthlyCost <= headroom && monthlyCost <= country.econ.privateCapital) {
       country.econ.constructionQueue.push({
         id: `proj-${world.tick}-${country.id}-renew-${country.econ.constructionQueue.length}`,
-        building: best.building,
+        building: renewal.building,
         count: 1,
         owner: 'private',
         monthsLeft: months,
@@ -758,7 +807,7 @@ function investPrivateCapital(
         date: { ...world.date },
         kind: 'economy',
         countryId: country.id,
-        text: `[${country.flag}] ${country.name}的私人资本更新 1 座${BUILDINGS[best.building].name}`,
+        text: `[${country.flag}] ${country.name}的私人资本更新 1 座${BUILDINGS[renewal.building].name}`,
       })
       started = true
     }
@@ -816,6 +865,7 @@ function simulateCountry(
 
   const balance = snap.income - snap.expense
   country.econ.treasury += balance
+  country.econ.lastDebtRepayment = 0
   if (country.econ.treasury < 0) {
     country.econ.debt += -country.econ.treasury
     country.econ.treasury = 0
@@ -823,6 +873,21 @@ function simulateCountry(
     const repay = Math.min(country.econ.debt, country.econ.treasury * 0.08)
     country.econ.debt -= repay
     country.econ.treasury -= repay
+    country.econ.lastDebtRepayment = repay
+  }
+  // A debt spiral ends in restructuring instead of growing forever.
+  if (country.econ.debt > country.econ.gdp * 3 && country.econ.treasury <= 0) {
+    const before = country.econ.debt
+    country.econ.debt = country.econ.gdp * 1.5
+    country.pops.radicals = clamp(country.pops.radicals + 8, 0, 100)
+    country.government.legitimacy = clamp(country.government.legitimacy - 8, 0, 100)
+    country.diplo.prestige = clamp(country.diplo.prestige - 8, 0, 240)
+    log.push({
+      date: { ...world.date },
+      kind: 'economy',
+      countryId: country.id,
+      text: `[${country.flag}] ${country.name}债务违约并重组：国债从 ${before.toFixed(0)} 降至 ${country.econ.debt.toFixed(0)}`,
+    })
   }
 
   // Income distribution: profits fund private savings, and this month's
@@ -844,6 +909,11 @@ function simulateCountry(
       country.econ.buildings[id] * (1 - DEPRECIATION_PER_MONTH),
     )
   }
+  // Rails, ports, offices and universities wear out too; their infrastructure
+  // bonuses must not outlive the buildings that produced them.
+  country.econ.transportInfrastructure *= 1 - DEPRECIATION_PER_MONTH
+  country.econ.marketAccess *= 1 - DEPRECIATION_PER_MONTH
+  country.econ.administrativeCapacity *= 1 - DEPRECIATION_PER_MONTH
 
   // Pops: growth, urbanisation, standard of living.
   const growthRate = applyModifiers(
@@ -884,7 +954,7 @@ function simulateCountry(
       country,
       'sol',
       20 +
-        (snap.gdp / Math.max(1, country.pops.total)) * 250 +
+        (snap.realGdp / Math.max(1, country.pops.total)) * 250 +
         country.tech.level * 1.2 -
         country.pops.radicals * 0.08 +
         country.econ.spending.welfare * 2,
@@ -987,10 +1057,34 @@ function simulateCountry(
     (legitimacyTarget - country.government.legitimacy) * 0.08
 
   // Authority recovers in proportion to legitimacy; a discredited regime
-  // loses it (round-2 P1-6).
+  // loses it (round-2 P1-6). Standing policies also drain authority; if the
+  // regime cannot pay the upkeep, the policy programme starts to lapse.
+  let policyUpkeep = country.modifiers.reduce(
+    (sum, modifier) => sum + (modifier.upkeep ?? 0),
+    0,
+  )
+  if (policyUpkeep > 0 && country.government.authority < policyUpkeep) {
+    const lapsed = country.modifiers.find(modifier => (modifier.upkeep ?? 0) > 0)
+    if (lapsed !== undefined) {
+      country.modifiers = country.modifiers.filter(
+        modifier => modifier.source !== lapsed.source,
+      )
+      log.push({
+        date: { ...world.date },
+        kind: 'politics',
+        countryId: country.id,
+        text: `[${country.flag}] ${country.name}权威枯竭：「${lapsed.label}」等政策中止`,
+      })
+      policyUpkeep = country.modifiers.reduce(
+        (sum, modifier) => sum + (modifier.upkeep ?? 0),
+        0,
+      )
+    }
+  }
   const authorityFlow =
     country.government.legitimacy * 0.03 -
-    (country.government.legitimacy < 30 ? 1.5 : 0)
+    (country.government.legitimacy < 30 ? 1.5 : 0) -
+    policyUpkeep
   country.government.authority = clamp(
     country.government.authority + applyModifiers(country, 'authority', authorityFlow),
     0,
@@ -1077,6 +1171,23 @@ function simulateCountry(
 
   // State thresholds grant or lift buffs after the month's numbers settle.
   logThresholds(world, country, evaluateThresholds(country), log)
+
+  // State collapse tears up the policy programme; permanent buffs do not
+  // survive a revolution.
+  if (country.pops.radicals >= 92) {
+    const before = country.modifiers.filter(modifier => modifier.source.startsWith('policy:'))
+    if (before.length > 0) {
+      country.modifiers = country.modifiers.filter(
+        modifier => !modifier.source.startsWith('policy:'),
+      )
+      log.push({
+        date: { ...world.date },
+        kind: 'politics',
+        countryId: country.id,
+        text: `[${country.flag}] ${country.name}国家崩解：${before.length} 项政策被废除`,
+      })
+    }
+  }
 
   pushHistory(country.econ.history.gdp, snap.gdp)
   pushHistory(country.econ.history.treasury, country.econ.treasury)
@@ -1466,7 +1577,13 @@ export function applyDecision(
       })
       return {
         ok: true,
-        text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列（${months} 个月，每月 ${monthlyCost.toFixed(1)} 金）`,
+        text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列（${months} 个月，每月 ${monthlyCost.toFixed(1)} 金）${
+          constructionBudget <= 0
+            ? '；注意：当前建设拨款为 0，项目不会推进'
+            : monthlyCost > constructionBudget
+              ? '；注意：建设拨款低于月成本，进度会变慢'
+              : ''
+        }`,
       }
     }
     case 'tax': {
@@ -1514,6 +1631,23 @@ export function applyDecision(
       country.pops.radicals = clamp(country.pops.radicals + possible * 0.4, 0, 100)
       country.pops.total = Math.max(1, country.pops.total - possible * 0.4)
       return { ok: true, text: `${tag} 征召了 ${possible.toFixed(1)} 万兵力` }
+    }
+    case 'cancel': {
+      const projectId = String(params.projectId ?? params.id ?? '')
+      const index = country.econ.constructionQueue.findIndex(
+        project => project.id === projectId,
+      )
+      if (index < 0) return { ok: false, text: `${tag} 没有找到项目 ${projectId}` }
+      const project = country.econ.constructionQueue[index]
+      if (project === undefined) return { ok: false, text: `${tag} 没有找到项目 ${projectId}` }
+      if ((project.owner ?? 'state') === 'private') {
+        return { ok: false, text: `${tag} 私人项目不可取消（${BUILDINGS[project.building].name}）` }
+      }
+      country.econ.constructionQueue.splice(index, 1)
+      return {
+        ok: true,
+        text: `${tag} 取消了 ${BUILDINGS[project.building].name}×${project.count} 的国有建造项目`,
+      }
     }
     case 'law': {
       const name = String(params.name ?? params.law ?? '')
@@ -1745,6 +1879,38 @@ export function applyDecision(
  * Magnitudes are free (ADR 0002); the engine checks shapes, costs authority,
  * and turns each effect entry into a modifier (ADR 0003/0004).
  */
+/**
+ * How a flat policy value translates into "one percent of effect" for
+ * authority pricing. Percent/multiply values already are percentages; flat
+ * values need a stat-specific scale (e.g. literacy is a 0..1 fraction, so a
+ * flat +0.5 is +50 points, not +0.5).
+ */
+const POLICY_FLAT_SCALE: Partial<Record<PolicyEffect['stat'], number>> = {
+  literacy: 100,
+  marketAccess: 100,
+  laborShare: 100,
+  privateInvestment: 100,
+  consumption: 100,
+  growth: 1000,
+  taxEfficiency: 100,
+  gdp: 2,
+  income: 2,
+  expense: 2,
+  techPoints: 2,
+  production: 2,
+  demand: 2,
+  farmOutput: 2,
+  mineOutput: 2,
+  factoryOutput: 2,
+}
+
+const flatScale = (stat: PolicyEffect['stat']): number => {
+  if (stat.endsWith('Output') || stat.endsWith('Demand')) return 2
+  // The default treats one flat point of a 0..100 stock/flow stat as a
+  // substantial effect (10 "percent-equivalent" points).
+  return POLICY_FLAT_SCALE[stat] ?? 10
+}
+
 export function applyPolicy(
   world: WorldState,
   countryId: string,
@@ -1767,6 +1933,19 @@ export function applyPolicy(
     if (Math.abs(value) > 200) {
       return { ok: false, text: '单个效果数值不能超过 200（防止无界政策）' }
     }
+    const cappedStat =
+      effect.stat === 'gdp' ||
+      effect.stat === 'consumption' ||
+      effect.stat === 'demand' ||
+      effect.stat === 'production' ||
+      effect.stat.endsWith('Output') ||
+      effect.stat.endsWith('Demand')
+    if (cappedStat && (effect.stack ?? 'flat') !== 'flat' && Math.abs(value) > 100) {
+      return {
+        ok: false,
+        text: `「${MODIFIER_STAT_NAMES[effect.stat]}」类修正单条不得超过 100%`,
+      }
+    }
     const stack = effect.stack ?? 'flat'
     if (stack !== 'flat' && stack !== 'percent' && stack !== 'multiply') {
       return { ok: false, text: '效果单位必须是 flat / percent / multiply。' }
@@ -1774,7 +1953,7 @@ export function applyPolicy(
     const months =
       effect.months === undefined
         ? undefined
-        : Math.max(1, Math.round(Number(effect.months)))
+        : Math.min(240, Math.max(1, Math.round(Number(effect.months))))
     if (months !== undefined && !Number.isFinite(months)) {
       return { ok: false, text: '持续月数必须是数字。' }
     }
@@ -1791,12 +1970,17 @@ export function applyPolicy(
   // a permanent +50% GDP policy from costing the same 5 points as a +2% one
   // (round-2 playtest P0-3).
   const weight = parsed.reduce((sum, effect) => {
-    const months = effect.months ?? 12
-    const magnitude = Math.min(Math.abs(effect.value), 100)
-    return sum + magnitude * (effect.stack === 'flat' ? 0.5 : 1) * (months / 12)
+    // A permanent effect is priced as 48 months; flat values are converted to
+    // percentage-equivalent units by stat scale.
+    const months = effect.months ?? 48
+    const magnitude =
+      effect.stack === 'flat'
+        ? Math.abs(effect.value) * flatScale(effect.stat)
+        : Math.abs(effect.value)
+    return sum + magnitude * (months / 12)
   }, 0)
-  const required = clamp(Math.round(weight * 0.2), 0, 40)
-  const requested = clamp(Math.round(num(proposal.authorityCost, 5)), 0, 40)
+  const required = clamp(Math.round(weight * 0.2), 1, 40)
+  const requested = clamp(Math.round(num(proposal.authorityCost, 5)), 1, 40)
   const cost = Math.max(required, requested)
   if (country.government.authority < cost) {
     return {
@@ -1821,6 +2005,7 @@ export function applyPolicy(
       stack: effect.stack ?? 'flat',
       value: effect.value,
       monthsLeft: effect.months,
+      upkeep: cost / 48 / parsed.length,
       source: `policy:${name}`,
     })
   })
@@ -1846,6 +2031,33 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
   const atWar = world.wars.some(
     war => war.attackers.includes(country.id) || war.defenders.includes(country.id),
   )
+  // Debt service is a hard constraint; the deterministic fallback raises
+  // taxes before a debt spiral becomes permanent.
+  if (
+    country.econ.debt > country.econ.gdp &&
+    country.econ.taxRate < 45 &&
+    rng.chance(0.5)
+  ) {
+    return {
+      countryId: country.id,
+      action: 'tax',
+      params: { rate: Math.min(45, country.econ.taxRate + 2) },
+      narrative: `${country.name}为偿债提高税率`,
+    }
+  }
+  if (
+    country.econ.income < country.econ.expense &&
+    country.econ.treasury < 5 &&
+    country.econ.spending.army > 1 &&
+    rng.chance(0.3)
+  ) {
+    return {
+      countryId: country.id,
+      action: 'spending',
+      params: { category: 'army', amount: country.econ.spending.army - 1 },
+      narrative: `${country.name}压缩军费以平衡预算`,
+    }
+  }
   // Confidence drifts with the fiscal mood when the model is unavailable.
   if (rng.chance(0.15)) {
     const mood = country.econ.income - country.econ.expense > 0 ? 1 : -1

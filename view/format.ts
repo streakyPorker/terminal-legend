@@ -143,7 +143,8 @@ export function logKindMark(kind: LogEntry['kind']): string {
 export function statusLine(world: WorldState): string {
   const player = world.countries[world.playerId]
   if (player === undefined) return '终末传奇 · 无进行中的游戏'
-  const surplus = player.econ.income - player.econ.expense
+  const surplus =
+    player.econ.income - player.econ.expense - player.econ.lastDebtRepayment
   const wars = world.wars.filter(
     war => war.attackers.includes(player.id) || war.defenders.includes(player.id),
   )

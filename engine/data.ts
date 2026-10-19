@@ -171,9 +171,9 @@ export const BUILDINGS: Record<BuildingId, { name: string; cost: number; note: s
   mines: { name: '矿场', cost: 2.5, note: '煤炭与钢铁，工业的起点' },
   factories: { name: '工厂', cost: 4, note: '工业品产能，推动城市化' },
   railroads: { name: '铁路', cost: 7, note: '交通基础设施与市场接入' },
-  ports: { name: '港口', cost: 3, note: '贸易与海军补给' },
-  universities: { name: '大学', cost: 5, note: '科技点数与识字率' },
-  barracks: { name: '兵营', cost: 2.5, note: '陆军上限与人力' },
+  ports: { name: '港口', cost: 3, note: '市场接入与关税收入' },
+  universities: { name: '大学', cost: 5, note: '科技点数、识字率与行政能力' },
+  barracks: { name: '兵营', cost: 2.5, note: '军械产出' },
   offices: { name: '官署', cost: 3, note: '行政能力与官僚效能上限' },
 }
 
@@ -201,7 +201,7 @@ export const SPENDING: Record<SpendingCategory, { name: string; note: string }> 
   bureaucracy: { name: '官僚', note: '行政效率与合法性' },
   education: { name: '教育', note: '识字率与科技速度' },
   welfare: { name: '福利', note: '降低激进、提高生活水平' },
-  construction: { name: '建设', note: '每月自动建造的预算' },
+  construction: { name: '建设', note: '手动建造项目的月度拨款上限；不下单则不会花出' },
 }
 
 export const TECHS = [
@@ -1148,6 +1148,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         lastConstructionSpend: 0,
         lastStateConstructionSpend: 0,
         lastPrivateConstructionSpend: 0,
+        lastDebtRepayment: 0,
         history: {
           gdp: [seedRow.gdp],
           treasury: [seedRow.treasury],
