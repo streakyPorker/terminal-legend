@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { makeRngForWorld, resourceMultiplier } from '../engine/data'
+import { decideForAi } from '../engine/ai'
+import { deriveLabor, makeRngForWorld, resourceMultiplier } from '../engine/data'
 import {
   advance,
   applyDecision,
@@ -126,6 +127,7 @@ describe('E2 private investment', () => {
       owner: 'private',
       monthsLeft: 3,
       monthlyCost: 1.67,
+      lastSpend: 0,
       progress: 0,
       startedAt: { ...withProject.date },
     })
@@ -283,5 +285,129 @@ describe('E1 demand shock loop', () => {
       Math.abs(boostedQing.econ.gdp - controlQing.econ.gdp) /
         Math.max(1, controlQing.econ.gdp),
     ).toBeLessThan(0.35)
+  })
+})
+
+describe('Round 1 regressions', () => {
+  test('queued but unfunded projects no longer inflate GDP', async () => {
+    const plain = newWorld(115, 'QING')
+    const queued = clone(plain)
+    for (const country of [plain.countries.QING, queued.countries.QING]) {
+      if (country === undefined) continue
+      country.econ.spending.construction = 0
+    }
+    const qing = queued.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    for (let index = 0; index < 8; index += 1) {
+      qing.econ.constructionQueue.push({
+        id: `phantom-${index}`,
+        building: 'railroads',
+        count: 20,
+        owner: 'state',
+        monthsLeft: 8,
+        monthlyCost: 17.5,
+        lastSpend: 0,
+        progress: 0,
+        startedAt: { ...queued.date },
+      })
+    }
+    advance(plain, 1, [], makeRngForWorld(plain))
+    advance(queued, 1, [], makeRngForWorld(queued))
+    const a = plain.countries.QING
+    const b = queued.countries.QING
+    expect(a).toBeDefined()
+    expect(b).toBeDefined()
+    if (a === undefined || b === undefined) return
+    expect(Math.abs(a.econ.gdp - b.econ.gdp)).toBeLessThan(0.01)
+    expect(b.econ.gdpComponents.i).toBe(0)
+    expect(b.econ.buildings.railroads).toBe(0)
+  })
+
+  test('the state build queue has a hard cap', async () => {
+    const world = newWorld(116, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.econ.treasury = 1000
+    for (let index = 0; index < 12; index += 1) {
+      applyDecision(
+        world,
+        { countryId: 'QING', action: 'build', params: { building: 'farms', count: 1 } },
+        makeRngForWorld(world),
+      )
+    }
+    expect(qing.econ.constructionQueue.filter(one => one.owner === 'state').length).toBe(8)
+  })
+
+  test('displayed expense matches the treasury change when the queue is empty', async () => {
+    const world = newWorld(117, 'FRA')
+    const fra = world.countries.FRA
+    expect(fra).toBeDefined()
+    if (fra === undefined) return
+    fra.econ.treasury = 100
+    fra.econ.debt = 0
+    fra.econ.spending.construction = 10
+    const before = fra.econ.treasury
+    advance(world, 1, [], makeRngForWorld(world))
+    const delta = fra.econ.treasury - before
+    expect(Math.abs(fra.econ.expense - (fra.econ.income - delta))).toBeLessThan(0.05)
+  })
+
+  test('a partial or malformed AI batch is filled per country', async () => {
+    const world = newWorld(118, 'QING')
+    const fake = {
+      model: {
+        complete: async () => ({
+          isAnswered: true,
+          text: JSON.stringify([
+            { country: 'GBR', action: 'invest', params: { amount: 1 } },
+            { country: 'FRA', action: 'invest', params: { amount: -1 } },
+            { country: 'PRU', action: 'build', params: { building: 'castle', count: 1 } },
+          ]),
+        }),
+      },
+    }
+    const report = await decideForAi(fake as never, world, makeRngForWorld(world))
+    expect(report.decisions.length).toBeGreaterThanOrEqual(4)
+    expect(report.decisions.some(one => one.countryId === 'PRU' && one.action === 'build' && one.params.building === 'castle')).toBe(false)
+    expect(report.error ?? '').toContain('兜底')
+  })
+
+  test('privateInvestment now expands private investment instead of causing a slump', async () => {
+    const control = newWorld(119, 'QING')
+    const boosted = clone(control)
+    const qing = boosted.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    addModifier(qing, {
+      id: 'pro-investment',
+      label: '投资税优惠',
+      stat: 'privateInvestment',
+      stack: 'percent',
+      value: 50,
+      monthsLeft: 24,
+      source: 'test',
+    })
+    advance(control, 24, [], makeRngForWorld(control))
+    advance(boosted, 24, [], makeRngForWorld(boosted))
+    const a = control.countries.QING
+    const b = boosted.countries.QING
+    expect(a).toBeDefined()
+    expect(b).toBeDefined()
+    if (a === undefined || b === undefined) return
+    expect(b.econ.gdp).toBeGreaterThan(a.econ.gdp * 1.02)
+    expect(b.econ.privateCapital).toBeGreaterThan(a.econ.privateCapital)
+  })
+
+  test('raw labour utilisation is kept separately from the 50% floor', async () => {
+    const world = newWorld(120, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    const labor = deriveLabor(qing)
+    expect(labor.raw).toBeLessThan(0.5)
+    expect(labor.utilization).toBe(0.5)
+    expect(qing.econ.laborRawUtilization).toBe(labor.raw)
   })
 })

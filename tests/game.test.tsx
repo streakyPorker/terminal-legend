@@ -247,6 +247,7 @@ describe('terminal-legend drawing', () => {
       owner: 'state',
       monthsLeft: 2,
       monthlyCost: 0.75,
+      lastSpend: 0.75,
       progress: 0.5,
       startedAt: { ...world.date },
     })

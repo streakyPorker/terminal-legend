@@ -121,6 +121,10 @@ function computeProduction(country: Country): Record<GoodId, number> {
   const infra = 0.6 + transport / 160
   const b = country.econ.buildings
   const resources = resourceFactors(country)
+  // Coal and iron are industrial inputs: a country poor in both runs its
+  // factories less efficiently. This is what lets endowments reach GDP, not
+  // just raw material output (round-1 playtest finding P1-4).
+  const industrial = clamp((resources.coal + resources.iron) / 2, 0.7, 1.3)
   const out = zeroGoods()
   // Scale diminishing returns: capacity grows as count^0.98 (plan 0003 §0.1).
   const cap = (count: number): number => effectiveCount(count)
@@ -140,27 +144,33 @@ function computeProduction(country: Country): Record<GoodId, number> {
   out.wood = output('wood', farm(cap(b.farms) * 0.16) + mine(cap(b.mines) * 0.06))
   out.coal = output('coal', mine(cap(b.mines) * 0.5 * tech))
   out.iron = output('iron', mine(cap(b.mines) * 0.42 * tech))
-  out.fabric = output('fabric', factory(cap(b.factories) * 0.6 * tech))
+  out.fabric = output('fabric', factory(cap(b.factories) * 0.6 * tech * industrial))
   // Artisans supply the bottom of the consumer market before factories do;
   // without them an agrarian country reads as permanently short of clothes.
   out.clothes = output(
     'clothes',
-    factory(cap(b.factories) * 0.38 * tech) + country.pops.artisans * 0.035,
+    factory(cap(b.factories) * 0.38 * tech * industrial) + country.pops.artisans * 0.035,
   )
   out.liquor = output(
     'liquor',
-    factory(cap(b.factories) * 0.2) + country.pops.artisans * 0.01,
+    factory(cap(b.factories) * 0.2 * industrial) + country.pops.artisans * 0.01,
   )
   out.furniture = output(
     'furniture',
-    factory(cap(b.factories) * 0.22 * tech) + country.pops.artisans * 0.006,
+    factory(cap(b.factories) * 0.22 * tech * industrial) + country.pops.artisans * 0.006,
   )
-  out.machinery = output('machinery', factory(cap(b.factories) * 0.09 * tech))
-  out.arms = output('arms', factory(cap(b.factories) * 0.07 * tech) + cap(b.barracks) * 0.05)
-  out.luxury = output('luxury', factory(cap(b.factories) * 0.035 * tech))
+  out.machinery = output('machinery', factory(cap(b.factories) * 0.09 * tech * industrial))
+  out.arms = output(
+    'arms',
+    factory(cap(b.factories) * 0.07 * tech * industrial) + cap(b.barracks) * 0.05,
+  )
+  out.luxury = output('luxury', factory(cap(b.factories) * 0.035 * tech * industrial))
   out.services = output(
     'services',
-    (country.pops.total / 1000) * 0.5 * access + country.pops.artisans * 0.01,
+    (country.pops.total / 1000) * 0.5 * access +
+      country.pops.artisans * 0.01 +
+      cap(b.offices) * 0.8 +
+      cap(b.universities) * 0.2,
   )
   return out
 }
@@ -224,11 +234,14 @@ function computeDemand(country: Country): DemandBreakdown {
   const supernumerary =
     Math.max(0, incomePerCapita - subsistenceCost) * CONSUMPTION_PROPENSITY
   for (const id of CONSUMER_GOODS) {
-    const quantity =
-      popFactor *
-      (SUBSISTENCE[id] +
-        (INCOME_ELASTICITY[id] * supernumerary) / Math.max(0.05, prices[id]))
-    consumer[id] = demand(id, applyModifiers(country, 'consumption', quantity))
+    const subsistence = popFactor * SUBSISTENCE[id]
+    const discretionary =
+      (popFactor * INCOME_ELASTICITY[id] * supernumerary) / Math.max(0.05, prices[id])
+    // `consumption` scales discretionary spending, never the survival floor.
+    consumer[id] = demand(
+      id,
+      subsistence + applyModifiers(country, 'consumption', discretionary),
+    )
   }
 
   // Idle profits held back last month that were released as luxury spending.
@@ -248,11 +261,20 @@ function computeDemand(country: Country): DemandBreakdown {
   out.machinery += demand('machinery', b.factories * 0.18)
   out.arms += demand('arms', country.military.army * 0.02 + country.military.navy * 0.01)
 
-  // ---- investment demand from queued projects (plan 0003 §2.2) ----
+  // ---- investment demand from last month's actual construction spend ----
+  // A project that received no money produces no investment demand (and no
+  // GDP): this closes the "phantom investment" loophole where a giant queue
+  // raised GDP without a single funded month.
   for (const project of country.econ.constructionQueue) {
     const coefficients = INVESTMENT_DEMAND[project.building]
+    const funded = clamp(
+      (project.lastSpend ?? 0) / Math.max(0.01, project.monthlyCost),
+      0,
+      1,
+    )
+    if (funded <= 0) continue
     for (const [id, coefficient] of Object.entries(coefficients) as [GoodId, number][]) {
-      const quantity = coefficient * project.count
+      const quantity = coefficient * project.count * funded
       investment[id] += quantity
       out[id] += quantity
     }
@@ -413,6 +435,7 @@ export function calibrateWorld(world: WorldState): void {
     country.econ.laborDemand = snap.labor.demand
     country.econ.laborForce = snap.labor.force
     country.econ.laborUtilization = snap.labor.utilization
+    country.econ.laborRawUtilization = snap.labor.raw
     country.econ.history = {
       gdp: [snap.gdp],
       treasury: [country.econ.treasury],
@@ -488,12 +511,17 @@ function settleConstruction(
   country: Country,
   rng: Rng,
   log: LogEntry[],
-): void {
+): number {
   const queue = country.econ.constructionQueue
-  if (queue.length === 0) return
+  if (queue.length === 0) {
+    country.econ.lastConstructionSpend = 0
+    return 0
+  }
   let stateBudget = country.econ.spending.construction * 0.8
   let privateBudget = Math.max(0, country.econ.privateCapital)
   const remaining: ConstructionProject[] = []
+  let stateSpent = 0
+  let privateSpent = 0
   // Private builders are a little more efficient than the state's, but the
   // bureaucracy still limits how fast their money turns into progress.
   const privateEfficiency = clamp(0.75 + country.bureaucracy.score / 400, 0.75, 1)
@@ -507,11 +535,14 @@ function settleConstruction(
       owner === 'private'
         ? Math.min(privateBudget, project.monthlyCost)
         : Math.min(stateBudget, project.monthlyCost, Math.max(0, country.econ.treasury))
+    project.lastSpend = spend
     if (spend > 0) {
       if (owner === 'private') {
         privateBudget -= spend
+        privateSpent += spend
       } else {
         stateBudget -= spend
+        stateSpent += spend
         country.econ.treasury -= spend
       }
       const efficiency =
@@ -552,9 +583,10 @@ function settleConstruction(
 
   country.econ.constructionQueue = remaining
   country.econ.privateCapital = privateBudget
-  // Unused appropriations evaporate into the administration.
-  const waste = Math.min(Math.max(0, stateBudget), Math.max(0, country.econ.treasury))
-  country.econ.treasury -= waste
+  country.econ.lastConstructionSpend = stateSpent + privateSpent
+  // Unused appropriations are not spent at all: the appropriation is a monthly
+  // cap, not a charge. This keeps the displayed budget equal to the treasury.
+  return stateSpent
 }
 
 /**
@@ -571,12 +603,21 @@ export function investmentScore(
   production: Record<GoodId, number>,
 ): number {
   const outputs = BUILDING_OUTPUT[building]
+  const industrial = clamp(
+    (resourceMultiplier(country.econ.resources, 'coal') +
+      resourceMultiplier(country.econ.resources, 'iron')) /
+      2,
+    0.7,
+    1.3,
+  )
   let value = 0
   let baseValue = 0
   let pressureValue = 0
   for (const [id, quantity] of Object.entries(outputs) as [GoodId, number][]) {
     const price = country.econ.prices[id]
-    const valueHere = quantity * price
+    const resource = resourceMultiplier(country.econ.resources, id)
+    const potential = building === 'factories' ? resource * industrial : resource
+    const valueHere = quantity * price * potential
     value += valueHere
     baseValue += quantity * GOODS[id].basePrice
     const ratio = clamp(demand[id] / Math.max(0.01, production[id]), 0.3, 2)
@@ -606,6 +647,10 @@ function investPrivateCapital(
   const ownProjects = country.econ.constructionQueue.filter(
     project => (project.owner ?? 'state') === 'private',
   )
+  const activePrivateCost = ownProjects.reduce(
+    (sum, project) => sum + project.monthlyCost,
+    0,
+  )
   const threshold = capitalThreshold(country)
   let best: { building: BuildingId; score: number } | undefined
   for (const building of Object.keys(BUILDINGS) as BuildingId[]) {
@@ -614,16 +659,25 @@ function investPrivateCapital(
     if (best === undefined || score > best.score) best = { building, score }
   }
 
-  if (
-    best !== undefined &&
-    best.score > threshold &&
-    ownProjects.length < 4 &&
-    country.econ.privateCapital >= 1
-  ) {
+  // Keep three months of working capital for everything already under
+  // construction; new starts only use the headroom above that reserve.
+  const headroom = Math.max(0, country.econ.privateCapital / 3 - activePrivateCost)
+  const canStart = ((): { months: number; affordable: number } | undefined => {
+    if (best === undefined) return undefined
     const months = BUILDING_TIME[best.building]
     const fullMonthly = BUILDINGS[best.building].cost / months
-    const affordable = Math.floor((country.econ.privateCapital * 0.5) / fullMonthly)
-    const count = clamp(affordable, 1, 20)
+    if (fullMonthly <= 0) return undefined
+    return { months, affordable: Math.floor((headroom * months) / BUILDINGS[best.building].cost) }
+  })()
+  if (
+    best !== undefined &&
+    canStart !== undefined &&
+    best.score > threshold &&
+    ownProjects.length < 6 &&
+    canStart.affordable >= 1
+  ) {
+    const { months } = canStart
+    const count = clamp(canStart.affordable, 1, 20)
     const monthlyCost = (BUILDINGS[best.building].cost * count) / months
     if (monthlyCost <= country.econ.privateCapital) {
       country.econ.constructionQueue.push({
@@ -633,6 +687,7 @@ function investPrivateCapital(
         owner: 'private',
         monthsLeft: months,
         monthlyCost,
+        lastSpend: 0,
         progress: 0,
         startedAt: { ...world.date },
       })
@@ -648,10 +703,10 @@ function investPrivateCapital(
   // Working capital reserved for active private projects; anything above it
   // is idle. The retained share stays in the pool, the rest is released as
   // luxury purchases next month (plan 0003 §4).
-  const activePrivateCost = country.econ.constructionQueue
+  const totalPrivateCost = country.econ.constructionQueue
     .filter(project => (project.owner ?? 'state') === 'private')
     .reduce((sum, project) => sum + project.monthlyCost, 0)
-  const reserve = Math.max(10, activePrivateCost * 3)
+  const reserve = Math.max(10, totalPrivateCost * 3)
   const idle = Math.max(0, country.econ.privateCapital - reserve)
   const released = idle * (1 - country.politicalEconomy.idleRetained)
   if (released > 0) {
@@ -682,11 +737,10 @@ function simulateCountry(
   }
   scarcity = clamp(scarcity, 0, 8)
 
-  const constructionBudget = country.econ.spending.construction * 0.8
   country.econ.gdp = snap.gdp
   country.econ.gdpComponents = snap.components
   country.econ.income = snap.income
-  country.econ.expense = snap.expense + constructionBudget
+  country.econ.expense = snap.expense
   country.econ.goods = snap.production
   country.econ.laborShare = snap.laborShare
   country.econ.wages = snap.wages
@@ -694,6 +748,7 @@ function simulateCountry(
   country.econ.laborDemand = snap.labor.demand
   country.econ.laborForce = snap.labor.force
   country.econ.laborUtilization = snap.labor.utilization
+  country.econ.laborRawUtilization = snap.labor.raw
 
   const balance = snap.income - snap.expense
   country.econ.treasury += balance
@@ -712,8 +767,10 @@ function simulateCountry(
   country.econ.privateCapital += savings
   investPrivateCapital(world, country, snap, savings, log)
 
-  // The construction queue pays from the appropriation, including its waste.
-  settleConstruction(world, country, rng, log)
+  // The construction queue pays from the appropriation; only the money that
+  // actually reached a project counts as government spending.
+  const stateConstructionSpent = settleConstruction(world, country, rng, log)
+  country.econ.expense = snap.expense + stateConstructionSpent
 
   // Pops: growth, urbanisation, standard of living.
   const growthRate = applyModifiers(
@@ -776,7 +833,7 @@ function simulateCountry(
   // Industry absorbs labour; literacy and unrest move the rate the other way.
   // Low labour utilisation (a vast idle peasantry) adds a modest penalty;
   // full utilisation removes it (plan 0003 §0.1).
-  const laborPenalty = (1 - snap.labor.utilization) * 8
+  const laborPenalty = (1 - snap.labor.utilization) * 2
   const unemploymentTarget = clamp(
     applyModifiers(country, 'unemployment', deriveUnemployment(country) + laborPenalty),
     0,
@@ -946,7 +1003,12 @@ function simulateCountry(
   pushHistory(country.econ.history.legitimacy, country.government.legitimacy)
   pushHistory(country.econ.history.radicals, country.pops.radicals)
 
-  if (country.econ.treasury <= 0 && snap.income - country.econ.expense < 0 && rng.chance(0.2)) {
+  if (
+    country.econ.treasury <= 0 &&
+    snap.income - country.econ.expense < 0 &&
+    country.econ.debt > country.econ.gdp * 0.5 &&
+    rng.chance(0.03)
+  ) {
     log.push({
       date: { ...world.date },
       kind: 'economy',
@@ -1288,6 +1350,15 @@ export function applyDecision(
       const count = clamp(Math.floor(Number(params.count ?? 1)), 1, 20)
       const months = BUILDING_TIME[building]
       const monthlyCost = (BUILDINGS[building].cost * count) / months
+      const stateProjects = country.econ.constructionQueue.filter(
+        project => (project.owner ?? 'state') === 'state',
+      )
+      if (stateProjects.length >= 8) {
+        return {
+          ok: false,
+          text: `${tag} 国有建造队列已满（最多 8 个项目），先等现有项目完成`,
+        }
+      }
       if (country.econ.treasury < monthlyCost) {
         return {
           ok: false,
@@ -1301,6 +1372,7 @@ export function applyDecision(
         owner: 'state',
         monthsLeft: months,
         monthlyCost,
+        lastSpend: 0,
         progress: 0,
         startedAt: { ...world.date },
       })

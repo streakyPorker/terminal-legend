@@ -1000,7 +1000,9 @@ export type LaborStats = {
   demand: number
   /** Ten-thousands of available workers. */
   force: number
-  /** 0.5..1, plan 0003 §0.1. */
+  /** Raw demand/force ratio; can be far below 0.5 in agrarian economies. */
+  raw: number
+  /** 0.5..1, plan 0003 §0.1's stability floor. */
   utilization: number
 }
 
@@ -1021,8 +1023,9 @@ export function deriveLabor(country: Country): LaborStats {
     b.universities * 0.2 +
     b.barracks * 0.3
   const force = country.pops.peasants * 0.6 + country.pops.workers + country.pops.artisans
-  const utilization = clampValue(demand / Math.max(1, force), 0.5, 1)
-  return { demand, force, utilization }
+  const raw = demand / Math.max(1, force)
+  const utilization = clampValue(raw, 0.5, 1)
+  return { demand, force, raw, utilization }
 }
 
 /**
@@ -1141,6 +1144,8 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         laborDemand: 0,
         laborForce: 0,
         laborUtilization: 1,
+        laborRawUtilization: 0,
+        lastConstructionSpend: 0,
         history: {
           gdp: [seedRow.gdp],
           treasury: [seedRow.treasury],

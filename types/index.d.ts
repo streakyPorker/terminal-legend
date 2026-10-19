@@ -206,6 +206,8 @@ export type ConstructionProject = {
   monthsLeft: number
   /** Book cost per month, before bureaucratic leakage. */
   monthlyCost: number
+  /** Gold actually paid into the project last month (0..monthlyCost). */
+  lastSpend: number
   /** 0..1, funded share of the current month. */
   progress: number
   startedAt: GameDate
@@ -251,7 +253,12 @@ export type Economy = {
   /** Labour-market readings for the month. */
   laborDemand: number
   laborForce: number
+  /** 0.5..1, the plan's stability floor; used by the unemployment penalty. */
   laborUtilization: number
+  /** Uncapped demand/force ratio, for display. */
+  laborRawUtilization: number
+  /** Construction actually funded last month (state + private), gold. */
+  lastConstructionSpend: number
   history: {
     gdp: number[]
     treasury: number[]

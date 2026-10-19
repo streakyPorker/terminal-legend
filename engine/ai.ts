@@ -1,6 +1,6 @@
 import type { EngineInterface } from 'claude-code'
 import type { Country, GameDate, WorldState } from '../types'
-import { GOODS, GOOD_IDS, techName } from './data'
+import { BUILDING_IDS, GOODS, GOOD_IDS, SPENDING, techName } from './data'
 
 import type { Rng } from './rng'
 import { randomDecision, type Decision } from './sim'
@@ -17,7 +17,7 @@ const SYSTEM = `你是 19 世纪大战略游戏的世界决策引擎。你为每
 - 每个元素形如 {"country":"GBR","action":"build","params":{"building":"factories","count":1},"narrative":"一句符合该领袖性格的行动描述"}
 - 每个国家最多 1 条；只为他国（非玩家国）决策。
 - action 只能是：build, tax, tariff, spending, research, conscript, law, diplomacy, invest。
-- build 的 building 只能是：farms, mines, factories, railroads, ports, universities, barracks。
+- build 的 building 只能是：farms, mines, factories, railroads, ports, universities, barracks, offices。
 - invest 调整投资信心：params.amount 取 -3..3，结果被限制在该国基准上下 10 点内。
 - diplomacy 需要 params.target（国家代码）与 params.move（improve, insult, alliance, rival, gift, war, peace）。
 - law 的 name 只能是：教育改革, 福利改革, 自由贸易, 保护关税, 征兵制, 宗教宽容。
@@ -55,6 +55,9 @@ function countryLine(country: Country, world: WorldState): string {
     `情绪:${Math.round(country.leader.mood)}`,
     `国库:${n1(country.econ.treasury)}金`,
     `GDP:${n1(country.econ.gdp)}金/月(消费${n1(country.econ.gdpComponents.c)}/投资${n1(country.econ.gdpComponents.i)}/政府${n1(country.econ.gdpComponents.g)})`,
+    `税:${country.econ.taxRate}%关税:${country.econ.tariff}%`,
+    `支出:陆${n1(country.econ.spending.army)}/海${n1(country.econ.spending.navy)}/官${n1(country.econ.spending.bureaucracy)}/教${n1(country.econ.spending.education)}/福${n1(country.econ.spending.welfare)}/建${n1(country.econ.spending.construction)}`,
+    `在建:${country.econ.constructionQueue.length}`,
     `私人资本:${n1(country.econ.privateCapital)}金`,
     `投资信心:${Math.round(country.econ.investmentConfidence)}`,
     `失业:${n1(country.econ.unemployment)}%`,
@@ -143,6 +146,54 @@ const ACTIONS = new Set([
   'invest',
 ])
 
+const LAWS = new Set([
+  '教育改革',
+  '福利改革',
+  '自由贸易',
+  '保护关税',
+  '征兵制',
+  '宗教宽容',
+])
+
+const DIPLOMACY_MOVES = new Set([
+  'improve',
+  'insult',
+  'alliance',
+  'rival',
+  'gift',
+  'war',
+  'peace',
+])
+
+/** Rejects malformed model output before it can shadow the fallback. */
+function validParams(
+  action: string,
+  params: Record<string, string | number | boolean | undefined>,
+  world: WorldState,
+  countryId: string,
+): boolean {
+  switch (action) {
+    case 'build':
+      return (BUILDING_IDS as string[]).includes(String(params.building ?? ''))
+    case 'spending':
+      return Object.prototype.hasOwnProperty.call(SPENDING, String(params.category ?? ''))
+    case 'law':
+      return LAWS.has(String(params.name ?? ''))
+    case 'diplomacy': {
+      const target = String(params.target ?? '')
+      return (
+        world.countries[target] !== undefined &&
+        target !== countryId &&
+        DIPLOMACY_MOVES.has(String(params.move ?? ''))
+      )
+    }
+    case 'invest':
+      return Number.isFinite(Number(params.amount ?? 1))
+    default:
+      return true
+  }
+}
+
 function parseDecisions(
   text: string,
   world: WorldState,
@@ -170,13 +221,10 @@ function parseDecisions(
     if ((world.ai.suspended[countryId] ?? 0) > world.tick) continue
     if (!ACTIONS.has(action)) continue
     if (seen.has(countryId)) continue
+    const params = coerceParams(raw.params)
+    if (!validParams(action, params, world, countryId)) continue
     seen.add(countryId)
 
-    const params = coerceParams(raw.params)
-    if (action === 'diplomacy') {
-      const target = String(params.target ?? '')
-      if (world.countries[target] === undefined || target === countryId) continue
-    }
     const narrative =
       typeof raw.narrative === 'string' && raw.narrative.trim() !== ''
         ? raw.narrative.trim().slice(0, 160)
@@ -226,12 +274,20 @@ export async function decideForAi(
     error = '本轮使用确定性政策'
   }
 
-  if (decisions.length === 0) {
-    for (const country of candidates) {
-      const fallback = randomDecision(world, country, rng)
-      if (fallback !== undefined) decisions.push(fallback)
+  // Every AI country gets one decision: if the model skipped a country or
+  // returned malformed output for it, the deterministic policy fills the gap.
+  const decidedCountries = new Set(decisions.map(decision => decision.countryId))
+  let fallbackCount = 0
+  for (const country of candidates) {
+    if (decidedCountries.has(country.id)) continue
+    const fallback = randomDecision(world, country, rng)
+    if (fallback !== undefined) {
+      decisions.push(fallback)
+      fallbackCount += 1
     }
-    error = error ?? '使用确定性政策兜底'
+  }
+  if (fallbackCount > 0) {
+    error = error ?? `${fallbackCount} 国使用确定性政策兜底`
   }
 
   if (shouldAsk) world.ai.lastDecisionTick = world.tick

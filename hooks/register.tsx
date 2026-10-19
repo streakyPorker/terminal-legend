@@ -114,7 +114,7 @@ function statusText(world: WorldState): string {
       `本国官僚：${Math.round(player.bureaucracy.score)}/${Math.round(player.bureaucracy.ceiling)}，行动预算 ${player.bureaucracy.actionBudget} 项/月，资金效率 ${Math.round(player.bureaucracy.fundEfficiency * 100)}%，延迟 ${Math.round(player.bureaucracy.delayChance * 100)}%，失真 ${Math.round(player.bureaucracy.infoDistortion * 100)}%`,
       `交通基础设施 ${Math.round(player.econ.transportInfrastructure)} · 行政能力 ${Math.round(player.econ.administrativeCapacity)} · 失业 ${player.econ.unemployment.toFixed(1)}%`,
       `GDP构成：消费 ${fmtNumber(player.econ.gdpComponents.c)} / 投资 ${fmtNumber(player.econ.gdpComponents.i)} / 政府 ${fmtNumber(player.econ.gdpComponents.g)}；工资 ${fmtNumber(player.econ.wages)}（劳动份额 ${Math.round(player.econ.laborShare * 100)}%）/ 利润 ${fmtNumber(player.econ.profits)}`,
-      `私人资本 ${fmtNumber(player.econ.privateCapital)} · 投资信心 ${player.econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(player.econ.investmentConfidence)} · 劳动利用率 ${Math.round(player.econ.laborUtilization * 100)}%（需求 ${fmtPop(player.econ.laborDemand)} / 劳动力 ${fmtPop(player.econ.laborForce)}）`,
+      `私人资本 ${fmtNumber(player.econ.privateCapital)} · 投资信心 ${player.econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(player.econ.investmentConfidence)} · 闲置利润 ${fmtNumber(player.econ.idleProfits)} · 劳动原始利用率 ${(player.econ.laborRawUtilization * 100).toFixed(1)}%（需求 ${fmtPop(player.econ.laborDemand)} / 劳动力 ${fmtPop(player.econ.laborForce)}）`,
       `资源禀赋：农田 ${player.econ.resources.farmland} · 林地 ${player.econ.resources.timber} · 煤矿 ${player.econ.resources.coal} · 铁矿 ${player.econ.resources.iron}`,
       `建造队列：${
         queue.length === 0
