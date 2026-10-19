@@ -336,6 +336,8 @@ export type SecretaryState = {
   lastPlan: string
   isRunning: boolean
   lastRunTick: number
+  /** Overreaches in the current turn; the fourth is refused (ADR 0001). */
+  consecutiveOverreach: number
 }
 
 export type CouncilState = {

@@ -835,6 +835,7 @@ export function defaultSecretaryState(): SecretaryState {
     lastPlan: '',
     isRunning: false,
     lastRunTick: 0,
+    consecutiveOverreach: 0,
   }
 }
 

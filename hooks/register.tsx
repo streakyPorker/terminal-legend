@@ -356,6 +356,7 @@ async function startSecretary($: EngineInterface): Promise<string> {
   }
   const world = clone(current.world)
   world.secretary.isRunning = true
+  world.secretary.consecutiveOverreach = 0
   await setWorld($, world)
   await patchUi($, {
     notice: '秘书正在拟旨…',
@@ -415,21 +416,30 @@ async function finishSecretary(
  * Records a secretary overreach (advance, cheat, war, peace) in the chronicle
  * and tells the player. Per ADR 0001 the call itself still runs.
  */
-async function auditOverreach($: EngineInterface, action: string): Promise<void> {
+async function auditOverreach(
+  $: EngineInterface,
+  action: string,
+): Promise<boolean> {
   overreachDuringRun = true
   const current = await activeWorld($)
-  if (current === undefined) return
+  if (current === undefined) return false
   const world = clone(current.world)
+  const count = (world.secretary.consecutiveOverreach ?? 0) + 1
+  world.secretary.consecutiveOverreach = count
   world.log.push({
     date: { ...world.date },
     kind: 'politics',
-    text: `[秘书越权] ${action}`,
+    text: `[秘书越权] ${action}（连续第 ${count} 次）`,
   })
   if (world.log.length > 400) world.log.splice(0, world.log.length - 400)
   await setWorld($, world)
   await saveGame($, world).catch(() => undefined)
-  $.ui.toast(`秘书越权：${action}`)
-  await patchUi($, { notice: `秘书越权：${action}` })
+  const blocked = count > 3
+  $.ui.toast(blocked ? `秘书连续越权，${action}已被拒绝` : `秘书越权：${action}`)
+  await patchUi($, {
+    notice: blocked ? `秘书连续越权，${action}已被拒绝` : `秘书越权：${action}`,
+  })
+  return blocked
 }
 
 async function controlGame($: EngineInterface, action: ControlAction): Promise<string> {
@@ -1191,7 +1201,9 @@ export const register: Register = (on, options) => {
 
   on('tool.call', { tool: 'mcp__terminal-legend__v3_advance' }, async ($, e) => {
     try {
-      if (e.agentId !== undefined) await auditOverreach($, '推进时间')
+      if (e.agentId !== undefined && (await auditOverreach($, '推进时间'))) {
+        return toolFail('秘书连续越权，推进时间的请求已被拒绝。')
+      }
       const args = e as unknown as Args
       const months = clamp(Math.floor(Number(args.months ?? 1)), 1, 24)
       if (isDelegatedRun) return toolFail('托管进行中，请等它结束。')
@@ -1204,9 +1216,12 @@ export const register: Register = (on, options) => {
 
   on('tool.call', { tool: 'mcp__terminal-legend__v3_cheat' }, async ($, e) => {
     try {
+      if (e.agentId !== undefined && (await auditOverreach($, '使用天命'))) {
+        return toolFail('秘书连续越权，天命的请求已被拒绝。')
+      }
+      // Read after the audit: the audit writes the incremented counter.
       const current = await activeWorld($)
       if (current === undefined) return toolFail('还没有进行中的游戏。')
-      if (e.agentId !== undefined) await auditOverreach($, '使用天命')
       const args = e as unknown as Args
       const params: CheatParams = { action: String(args.action ?? '') }
       for (const key of [
@@ -1282,13 +1297,15 @@ export const register: Register = (on, options) => {
 
   on('tool.call', { tool: 'mcp__terminal-legend__v3_diplomacy' }, async ($, e) => {
     try {
-      const current = await activeWorld($)
-      if (current === undefined) return toolFail('还没有进行中的游戏。')
       const args = e as unknown as Args
       const move = String(args.move ?? '')
       if (e.agentId !== undefined && (move === 'war' || move === 'peace')) {
-        await auditOverreach($, move === 'war' ? '宣战' : '停战')
+        const blocked = await auditOverreach($, move === 'war' ? '宣战' : '停战')
+        if (blocked) return toolFail('秘书连续越权，宣战/停战的请求已被拒绝。')
       }
+      // Read after the audit: the audit writes the incremented counter.
+      const current = await activeWorld($)
+      if (current === undefined) return toolFail('还没有进行中的游戏。')
       const world = clone(current.world)
       const params: Record<string, string | number | boolean | undefined> = {
         target: String(args.target ?? '').toUpperCase(),

@@ -352,6 +352,31 @@ describe('M3 secretary subagent', () => {
 })
 
 describe('M3 secretary command surface', () => {
+  test(
+    'the fourth consecutive overreach is refused',
+    async ($, on) => {
+      const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
+      setupSurface(anyOn)
+      await startCampaign($ as any)
+      const call = () =>
+        ($.tool.call as unknown as (e: unknown) => Promise<{ result?: string; deny?: string }>)({
+          tool: 'mcp__terminal-legend__v3_cheat',
+          action: 'treasury',
+          amount: 1,
+          agentId: 'secretary-1',
+        })
+      const first = await call()
+      expect(first.result).toBeDefined()
+      const second = await call()
+      expect(second.result).toBeDefined()
+      const third = await call()
+      expect(third.result).toBeDefined()
+      const fourth = await call()
+      expect(fourth.deny ?? '').toContain('越权')
+    },
+  )
+
+
   // The test harness has no engine beneath `agent.spawn` that starts a real
   // subagent and mints an agentId, so the full spawn -> turn.complete round
   // trip cannot be mocked here. The command surface and the tool path the
