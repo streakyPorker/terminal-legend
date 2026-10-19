@@ -1,6 +1,9 @@
 import type { EngineInterface } from 'claude-code'
 import type { WorldState } from '../types'
 
+/** Current world shape; older in-memory worlds are discarded like old saves. */
+export const CURRENT_WORLD_VERSION = 5
+
 const safeName = (name: string | undefined): string => {
   const cleaned = (name ?? 'save').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32)
   return cleaned === '' ? 'save' : cleaned
@@ -36,7 +39,7 @@ export async function saveGame(
 export function parseWorld(raw: unknown): WorldState | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined
   const world = raw as WorldState
-  if (world.version !== 5) return undefined
+  if (world.version !== CURRENT_WORLD_VERSION) return undefined
   if (typeof world.tick !== 'number' || typeof world.playerId !== 'string') return undefined
   if (typeof world.date !== 'object' || world.date === null) return undefined
   if (typeof world.countries !== 'object' || world.countries === null) return undefined

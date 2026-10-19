@@ -16,7 +16,7 @@ import {
   type AdvanceReport,
   type Decision,
 } from '../engine/sim'
-import { loadGame, saveGame } from '../engine/save'
+import { CURRENT_WORLD_VERSION, loadGame, saveGame } from '../engine/save'
 import { applyCheat, type CheatParams } from '../engine/cheat'
 import { SECRETARY_PROMPT, monthlyBriefing } from '../engine/secretary'
 import {
@@ -65,7 +65,11 @@ const secretaryAnswers = new Map<string, (text: string) => void>()
 // ---------------------------------------------------------------- state
 
 async function getWorld($: EngineInterface): Promise<WorldState | undefined> {
-  return (await $.state.get(WORLD)).value
+  const world = (await $.state.get(WORLD)).value
+  // A world left in plugin state by an older build is not migrated (ADR 0005);
+  // it must not keep drawing a stale status line or crash the new engine.
+  if (world !== undefined && world.version !== CURRENT_WORLD_VERSION) return undefined
+  return world
 }
 
 async function setWorld($: EngineInterface, world: WorldState): Promise<void> {
@@ -935,8 +939,12 @@ export const register: Register = (on, options) => {
     } else {
       // A world survives in plugin state after /v3 end (so /v3 load can
       // resume it), but an inactive game must not leave its status line
-      // lingering under the prompt in the next session.
+      // lingering under the prompt in the next session. A stale world from an
+      // older version is treated the same way.
       $.ui.status(undefined)
+      if (ui.isActive) {
+        await patchUi($, { isActive: false, isPaneOpen: false })
+      }
     }
 
     return next(e)
