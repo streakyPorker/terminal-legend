@@ -6,6 +6,9 @@ import type {
   GameEvent,
   GoodId,
   Leader,
+  PoliticalEconomy,
+  ResourceId,
+  Resources,
   SecretaryState,
   Spending,
   SpendingCategory,
@@ -34,6 +37,134 @@ export const GOODS: Record<GoodId, { name: string; basePrice: number }> = {
 }
 
 export const GOOD_IDS = Object.keys(GOODS) as GoodId[]
+
+// ---------------------------------------------------------------- resources
+
+/**
+ * Resource endowments are national and static in this slice. Only this table
+ * changes when a new resource is added (plan 0003 §5).
+ */
+export const RESOURCE_IDS = ['farmland', 'timber', 'coal', 'iron'] as const
+
+export const RESOURCE_MAP: Record<
+  ResourceId,
+  { name: string; goods: Partial<Record<GoodId, number>> }
+> = {
+  farmland: { name: '农田', goods: { grain: 1 } },
+  timber: { name: '林地', goods: { wood: 1, furniture: 0.2 } },
+  coal: { name: '煤矿', goods: { coal: 1 } },
+  iron: { name: '铁矿', goods: { iron: 1 } },
+}
+
+export const RESOURCE_NAMES: Record<ResourceId, string> = {
+  farmland: '农田',
+  timber: '林地',
+  coal: '煤矿',
+  iron: '铁矿',
+}
+
+// ---------------------------------------------------------------- demand parameters
+
+/**
+ * Stone-Geary consumer demand (plan 0003 §2.1). Values are per popFactor
+ * (population in 万 / 1000) per month. Elasticity shares sum to 1, so all
+ * supernumerary income is spent.
+ */
+export const CONSUMER_GOODS: GoodId[] = [
+  'grain',
+  'clothes',
+  'furniture',
+  'liquor',
+  'services',
+  'luxury',
+]
+
+/**
+ * Calibrated: the plan's per-popFactor table was scaled by 0.6 after the
+ * 60-month baseline showed the seed economies sitting below a 693-gold
+ * subsistence line, which pinned them in a poverty trap. See
+ * docs/plans/0003-economic-loop.md §0.2 for the recorded calibration.
+ */
+export const SUBSISTENCE_SCALE = 0.6
+
+export const SUBSISTENCE: Record<GoodId, number> = {
+  grain: 7.0 * SUBSISTENCE_SCALE,
+  clothes: 1.2 * SUBSISTENCE_SCALE,
+  furniture: 0.3 * SUBSISTENCE_SCALE,
+  liquor: 0.6 * SUBSISTENCE_SCALE,
+  services: 1.0 * SUBSISTENCE_SCALE,
+  luxury: 0.02 * SUBSISTENCE_SCALE,
+  wood: 0,
+  coal: 0,
+  iron: 0,
+  fabric: 0,
+  machinery: 0,
+  arms: 0,
+}
+
+/**
+ * Share of supernumerary income actually spent on consumer goods this month.
+ * The rest is household saving/leakage, which keeps the expenditure
+ * multiplier from amplifying small investment shocks into runaway growth.
+ */
+export const CONSUMPTION_PROPENSITY = 0.75
+
+export const INCOME_ELASTICITY: Record<GoodId, number> = {
+  grain: 0.15,
+  clothes: 0.18,
+  furniture: 0.1,
+  liquor: 0.1,
+  services: 0.27,
+  luxury: 0.2,
+  wood: 0,
+  coal: 0,
+  iron: 0,
+  fabric: 0,
+  machinery: 0,
+  arms: 0,
+}
+
+/** Government purchases by spending category (plan 0003 §2.3). */
+export const GOVERNMENT_DEMAND: Record<SpendingCategory, Partial<Record<GoodId, number>>> = {
+  army: { arms: 0.7, machinery: 0.3 },
+  navy: { arms: 0.5, machinery: 0.5 },
+  bureaucracy: { services: 0.8, furniture: 0.2 },
+  education: { services: 0.7, furniture: 0.3 },
+  welfare: { grain: 0.6, clothes: 0.4 },
+  construction: { wood: 0.4, iron: 0.35, machinery: 0.25 },
+}
+
+/** Investment goods required per project-month, per building (plan 0003 §2.2). */
+export const INVESTMENT_DEMAND: Record<BuildingId, Partial<Record<GoodId, number>>> = {
+  farms: { wood: 0.12, furniture: 0.02 },
+  mines: { iron: 0.18, machinery: 0.03 },
+  factories: { iron: 0.22, machinery: 0.1, wood: 0.1 },
+  railroads: { iron: 0.5, machinery: 0.16, wood: 0.4 },
+  ports: { wood: 0.3, iron: 0.1 },
+  universities: { furniture: 0.12, wood: 0.05 },
+  barracks: { wood: 0.1, furniture: 0.05 },
+  offices: { furniture: 0.1, wood: 0.05 },
+}
+
+/** Gross output per building per month before tech, infrastructure and resources. */
+export const BUILDING_OUTPUT: Record<BuildingId, Partial<Record<GoodId, number>>> = {
+  farms: { grain: 1.05, wood: 0.16 },
+  mines: { coal: 0.5, iron: 0.42, wood: 0.06 },
+  factories: {
+    fabric: 0.6,
+    clothes: 0.38,
+    liquor: 0.2,
+    furniture: 0.22,
+    machinery: 0.09,
+    arms: 0.07,
+    luxury: 0.035,
+  },
+  railroads: {},
+  ports: {},
+  universities: {},
+  barracks: { arms: 0.05 },
+  offices: {},
+}
 
 export const BUILDINGS: Record<BuildingId, { name: string; cost: number; note: string }> = {
   farms: { name: '农场', cost: 1.5, note: '粮食与原料，吸纳农业人口' },
@@ -145,6 +276,20 @@ const spending = (
   construction: number,
 ): Spending => ({ army, navy, bureaucracy, education, welfare, construction })
 
+const politicalEconomy = (
+  laborShareBase: number,
+  savingsRate: number,
+  idleRetained: number,
+  investmentConfidence: number,
+): PoliticalEconomy => ({ laborShareBase, savingsRate, idleRetained, investmentConfidence })
+
+const resources = (
+  farmland: number,
+  timber: number,
+  coal: number,
+  iron: number,
+): Resources => ({ farmland, timber, coal, iron })
+
 type CountrySeed = {
   id: string
   name: string
@@ -179,6 +324,8 @@ type CountrySeed = {
   transportInfrastructure: number
   marketAccess: number
   unemployment: number
+  resources: Resources
+  politicalEconomy: PoliticalEconomy
   techLevel: number
   researching: string
   army: number
@@ -244,6 +391,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     transportInfrastructure: 25,
     marketAccess: 0.45,
     unemployment: 6,
+    resources: resources(85, 60, 65, 40),
+    politicalEconomy: politicalEconomy(0.62, 0.2, 0.4, -5),
     techLevel: 1,
     researching: '农业改良',
     army: 80,
@@ -298,6 +447,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     transportInfrastructure: 85,
     marketAccess: 0.9,
     unemployment: 8,
+    resources: resources(45, 25, 100, 95),
+    politicalEconomy: politicalEconomy(0.52, 0.42, 0.55, 10),
     techLevel: 6,
     researching: '钢铁工业',
     army: 25,
@@ -352,6 +503,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     transportInfrastructure: 60,
     marketAccess: 0.75,
     unemployment: 7,
+    resources: resources(70, 55, 55, 60),
+    politicalEconomy: politicalEconomy(0.55, 0.35, 0.5, 5),
     techLevel: 5,
     researching: '机械化生产',
     army: 35,
@@ -406,6 +559,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     transportInfrastructure: 55,
     marketAccess: 0.7,
     unemployment: 5,
+    resources: resources(60, 45, 80, 70),
+    politicalEconomy: politicalEconomy(0.54, 0.38, 0.55, 8),
     techLevel: 4,
     researching: '铁路时代',
     army: 25,
@@ -460,6 +615,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     transportInfrastructure: 20,
     marketAccess: 0.5,
     unemployment: 4,
+    resources: resources(80, 90, 40, 55),
+    politicalEconomy: politicalEconomy(0.63, 0.18, 0.35, -8),
     techLevel: 2,
     researching: '蒸汽机',
     army: 90,
@@ -514,6 +671,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     transportInfrastructure: 45,
     marketAccess: 0.65,
     unemployment: 6,
+    resources: resources(65, 65, 50, 45),
+    politicalEconomy: politicalEconomy(0.6, 0.22, 0.4, -3),
     techLevel: 3,
     researching: '铁路时代',
     army: 40,
@@ -568,6 +727,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     transportInfrastructure: 50,
     marketAccess: 0.7,
     unemployment: 5,
+    resources: resources(90, 85, 75, 70),
+    politicalEconomy: politicalEconomy(0.54, 0.4, 0.55, 12),
     techLevel: 3,
     researching: '蒸汽机',
     army: 12,
@@ -622,6 +783,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     transportInfrastructure: 22,
     marketAccess: 0.4,
     unemployment: 3,
+    resources: resources(45, 55, 20, 15),
+    politicalEconomy: politicalEconomy(0.6, 0.24, 0.45, 0),
     techLevel: 1,
     researching: '农业改良',
     army: 15,
@@ -676,6 +839,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     transportInfrastructure: 18,
     marketAccess: 0.45,
     unemployment: 8,
+    resources: resources(55, 45, 35, 30),
+    politicalEconomy: politicalEconomy(0.62, 0.18, 0.35, -6),
     techLevel: 1,
     researching: '农业改良',
     army: 30,
@@ -730,6 +895,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     transportInfrastructure: 35,
     marketAccess: 0.55,
     unemployment: 10,
+    resources: resources(55, 40, 35, 45),
+    politicalEconomy: politicalEconomy(0.61, 0.2, 0.4, -4),
     techLevel: 3,
     researching: '蒸汽机',
     army: 18,
@@ -828,6 +995,62 @@ export function deriveUnemployment(country: Country): number {
   )
 }
 
+export type LaborStats = {
+  /** Ten-thousands of workers the building stock wants. */
+  demand: number
+  /** Ten-thousands of available workers. */
+  force: number
+  /** 0.5..1, plan 0003 §0.1. */
+  utilization: number
+}
+
+/**
+ * Labour demand from the building stock and the available labour force.
+ * Utilisation is clamped at 0.5 so an agrarian economy with a vast peasantry
+ * does not read as 95% idle; the floor is the plan's stability bound.
+ */
+export function deriveLabor(country: Country): LaborStats {
+  const b = country.econ.buildings
+  const demand =
+    b.farms * 0.3 +
+    b.mines * 0.6 +
+    b.factories * 1.0 +
+    b.railroads * 0.2 +
+    b.ports * 0.4 +
+    b.offices * 0.1 +
+    b.universities * 0.2 +
+    b.barracks * 0.3
+  const force = country.pops.peasants * 0.6 + country.pops.workers + country.pops.artisans
+  const utilization = clampValue(demand / Math.max(1, force), 0.5, 1)
+  return { demand, force, utilization }
+}
+
+/**
+ * Static resource multiplier for one good: endowments map through
+ * `RESOURCE_MAP`, each point of endowment moves the good ±0.3 and the final
+ * multiplier is clamped to 0.7..1.3 (plan 0003 §5).
+ */
+export function resourceMultiplier(
+  endowment: Resources,
+  good: GoodId,
+): number {
+  let factor = 0
+  for (const id of RESOURCE_IDS) {
+    const weight = RESOURCE_MAP[id].goods[good]
+    if (weight === undefined) continue
+    factor += weight * ((endowment[id] - 50) / 50) * 0.3
+  }
+  return clampValue(1 + factor, 0.7, 1.3)
+}
+
+/**
+ * Effective building count after scale diminishing returns. Capacity grows as
+ * count^0.98, so a large stock yields slightly less per building.
+ */
+export function effectiveCount(count: number): number {
+  return count <= 0 ? 0 : count ** 0.98
+}
+
 export function defaultSecretaryState(): SecretaryState {
   return {
     delegation: { internal: false, diplomacy: false, months: 1 },
@@ -885,6 +1108,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         delayChance: 0.35,
         infoDistortion: 0.3,
       },
+      politicalEconomy: { ...seedRow.politicalEconomy },
       econ: {
         gdp: seedRow.gdp,
         treasury: seedRow.treasury,
@@ -905,6 +1129,18 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         constructionQueue: [],
         marketAccess: seedRow.marketAccess,
         unemployment: seedRow.unemployment,
+        resources: { ...seedRow.resources },
+        privateCapital: 0,
+        investmentConfidence: seedRow.politicalEconomy.investmentConfidence,
+        gdpComponents: { c: 0, i: 0, g: 0, nx: 0 },
+        laborShare: seedRow.politicalEconomy.laborShareBase,
+        wages: 0,
+        profits: 0,
+        idleProfits: 0,
+        idlePurchases: 0,
+        laborDemand: 0,
+        laborForce: 0,
+        laborUtilization: 1,
         history: {
           gdp: [seedRow.gdp],
           treasury: [seedRow.treasury],
@@ -951,7 +1187,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
   }
 
   return {
-    version: 4,
+    version: 5,
     seed,
     date: { year: START_YEAR, month: START_MONTH },
     tick: 0,
@@ -970,7 +1206,8 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
     ai: {
       model: 'haiku',
       suspended: {},
-      intervalTicks: 3,
+      // Plan 0003 §6: one batch decision per month for every AI country.
+      intervalTicks: 1,
       lastDecisionTick: 0,
     },
     secretary: defaultSecretaryState(),

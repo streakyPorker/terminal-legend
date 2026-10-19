@@ -16,11 +16,13 @@ const SYSTEM = `你是 19 世纪大战略游戏的世界决策引擎。你为每
 - 只输出一个 JSON 数组，不要输出解释、Markdown 或代码围栏。
 - 每个元素形如 {"country":"GBR","action":"build","params":{"building":"factories","count":1},"narrative":"一句符合该领袖性格的行动描述"}
 - 每个国家最多 1 条；只为他国（非玩家国）决策。
-- action 只能是：build, tax, tariff, spending, research, conscript, law, diplomacy。
+- action 只能是：build, tax, tariff, spending, research, conscript, law, diplomacy, invest。
 - build 的 building 只能是：farms, mines, factories, railroads, ports, universities, barracks。
+- invest 调整投资信心：params.amount 取 -3..3，结果被限制在该国基准上下 10 点内。
 - diplomacy 需要 params.target（国家代码）与 params.move（improve, insult, alliance, rival, gift, war, peace）。
 - law 的 name 只能是：教育改革, 福利改革, 自由贸易, 保护关税, 征兵制, 宗教宽容。
-- 行动要服从领袖的人格、当前财政与国内稳定；不要凭空创造数值。`
+- 每月为每个 AI 国家给出一次决策；行动要服从领袖的人格、当前财政与国内稳定；不要凭空创造数值。
+- GDP 是月度支出法流量（消费+投资+政府），价格与资源乘数会影响产能。`
 
 const fmtDate = (date: GameDate): string => `${date.year}年${date.month}月`
 
@@ -52,7 +54,12 @@ function countryLine(country: Country, world: WorldState): string {
     `议程:${country.leader.agenda}`,
     `情绪:${Math.round(country.leader.mood)}`,
     `国库:${n1(country.econ.treasury)}金`,
-    `GDP:${n1(country.econ.gdp)}金/年`,
+    `GDP:${n1(country.econ.gdp)}金/月(消费${n1(country.econ.gdpComponents.c)}/投资${n1(country.econ.gdpComponents.i)}/政府${n1(country.econ.gdpComponents.g)})`,
+    `私人资本:${n1(country.econ.privateCapital)}金`,
+    `投资信心:${Math.round(country.econ.investmentConfidence)}`,
+    `失业:${n1(country.econ.unemployment)}%`,
+    `劳动份额:${Math.round(country.econ.laborShare * 100)}%`,
+    `资源:农${country.econ.resources.farmland}/林${country.econ.resources.timber}/煤${country.econ.resources.coal}/铁${country.econ.resources.iron}`,
     `合法性:${Math.round(country.government.legitimacy)}`,
     `激进:${Math.round(country.pops.radicals)}`,
     `生活:${Math.round(country.pops.sol)}`,
@@ -133,6 +140,7 @@ const ACTIONS = new Set([
   'conscript',
   'law',
   'diplomacy',
+  'invest',
 ])
 
 function parseDecisions(
@@ -200,8 +208,8 @@ export async function decideForAi(
       system: SYSTEM,
       prompt: buildAiPrompt(world),
       // Ten leaders, each with an action, params and a short narrative;
-      // 2400 leaves room for Chinese output without truncating the JSON.
-      maxTokens: 2400,
+      // 3000 leaves room for Chinese output without truncating the JSON.
+      maxTokens: 3000,
       effort: 'low',
       // A `$` call in flight does not count against the hook's own budget, so
       // the model may take its time; the cap still bounds a stuck gateway.
@@ -245,7 +253,7 @@ export function describeWorldForNarrator(world: WorldState): string {
   const lines: string[] = []
   lines.push(`日期 ${fmtDate(world.date)}｜玩家 ${player.name}`)
   lines.push(
-    `国库 ${n1(player.econ.treasury)} 金（${player.econ.income - player.econ.expense >= 0 ? '+' : ''}${n1(player.econ.income - player.econ.expense)} 金/月）｜GDP ${n1(player.econ.gdp)} 金/年｜合法性 ${Math.round(player.government.legitimacy)}｜激进 ${Math.round(player.pops.radicals)}｜生活水平 ${Math.round(player.pops.sol)}`,
+    `国库 ${n1(player.econ.treasury)} 金（${player.econ.income - player.econ.expense >= 0 ? '+' : ''}${n1(player.econ.income - player.econ.expense)} 金/月）｜GDP ${n1(player.econ.gdp)} 金/月（消费 ${n1(player.econ.gdpComponents.c)} / 投资 ${n1(player.econ.gdpComponents.i)} / 政府 ${n1(player.econ.gdpComponents.g)}）｜合法性 ${Math.round(player.government.legitimacy)}｜激进 ${Math.round(player.pops.radicals)}｜生活水平 ${Math.round(player.pops.sol)}`,
   )
   lines.push(
     `人口 ${n1(player.pops.total)} 万｜识字率 ${Math.round(player.pops.literacy * 100)}%｜陆军 ${n1(player.military.army)} 万｜海军 ${n1(player.military.navy)}｜科技 ${player.tech.level}（${techName(player.tech.level)}）｜研究 ${player.tech.researching}`,

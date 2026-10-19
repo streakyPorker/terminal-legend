@@ -81,6 +81,31 @@ export type Pops = {
 
 export type Spending = Record<SpendingCategory, number>
 
+export type ResourceId = 'farmland' | 'timber' | 'coal' | 'iron'
+
+/** National resource endowments, 0..100. Static in this slice (no depletion). */
+export type Resources = Record<ResourceId, number>
+
+/** Per-country structural parameters of the political economy. */
+export type PoliticalEconomy = {
+  /** Baseline labour share of GDP before unemployment adjusts it. */
+  laborShareBase: number
+  /** Share of profits saved for investment. */
+  savingsRate: number
+  /** Share of idle profits kept in the private capital pool. */
+  idleRetained: number
+  /** Baseline investment confidence in percentage points. */
+  investmentConfidence: number
+}
+
+/** Expenditure-method GDP, monthly, in gold. */
+export type GdpComponents = {
+  c: number
+  i: number
+  g: number
+  nx: number
+}
+
 /** A numeric seam that policies, events and laws may modify. */
 export type ModifierStat =
   | 'production'
@@ -113,6 +138,9 @@ export type ModifierStat =
   | 'marketAccess'
   | 'transportInfrastructure'
   | 'administrativeCapacity'
+  | 'privateInvestment'
+  | 'laborShare'
+  | 'consumption'
 
 /**
  * How a modifier stacks. Flat values add; percent values sum into one
@@ -173,6 +201,8 @@ export type ConstructionProject = {
   id: string
   building: BuildingId
   count: number
+  /** State projects draw on the treasury; private ones on private capital. */
+  owner: 'state' | 'private'
   monthsLeft: number
   /** Book cost per month, before bureaucratic leakage. */
   monthlyCost: number
@@ -202,6 +232,26 @@ export type Economy = {
   marketAccess: number
   /** 0..100 */
   unemployment: number
+  /** Resource endowments mirrored from the country for fast reads. */
+  resources: Resources
+  /** Private savings pool available to private construction. */
+  privateCapital: number
+  /** Current investment confidence, base ± envelope (percentage points). */
+  investmentConfidence: number
+  /** Expenditure-method GDP components, monthly gold. */
+  gdpComponents: GdpComponents
+  /** Labour share used this month (0..1). */
+  laborShare: number
+  /** Wage bill and profit bill this month (gold). */
+  wages: number
+  profits: number
+  /** Idle profit flow this month (gold) and gold set for luxury next month. */
+  idleProfits: number
+  idlePurchases: number
+  /** Labour-market readings for the month. */
+  laborDemand: number
+  laborForce: number
+  laborUtilization: number
   history: {
     gdp: number[]
     treasury: number[]
@@ -253,6 +303,8 @@ export type Country = {
   government: Government
   pops: Pops
   econ: Economy
+  /** Structural parameters of the country's political economy. */
+  politicalEconomy: PoliticalEconomy
   tech: Technology
   military: Military
   diplo: Diplomacy

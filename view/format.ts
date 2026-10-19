@@ -29,7 +29,7 @@ export function fmtMoney(value: number): string {
 }
 
 export function fmtGdp(value: number): string {
-  return `${fmtNumber(value)}${CURRENCY}/年`
+  return `${fmtNumber(value)}${CURRENCY}/月`
 }
 
 export function fmtPercent(value: number, digits = 0): string {

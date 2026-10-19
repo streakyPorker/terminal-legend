@@ -1,6 +1,17 @@
 import type { Elements } from 'claude-code'
 import type { Country, CouncilState, GameEvent, TabId, WorldState } from '../types'
-import { GOODS, GOOD_IDS, BUILDING_IDS, BUILDINGS, SPENDING, TECHS, techCost, techName } from '../engine/data'
+import {
+  BUILDINGS,
+  BUILDING_IDS,
+  GOODS,
+  GOOD_IDS,
+  RESOURCE_IDS,
+  RESOURCE_NAMES,
+  SPENDING,
+  TECHS,
+  techCost,
+  techName,
+} from '../engine/data'
 import { inspectEconomy } from '../engine/sim'
 import { MODIFIER_STAT_NAMES, describeModifier } from '../engine/modifiers'
 import {
@@ -178,6 +189,8 @@ function Overview(props: { ui: UiKit; world: WorldState; width: number }): any {
           <Heading ui={props.ui} text="经济" />
           <StatLine ui={props.ui} label="国库" value={`${fmtMoney(econ.treasury)} (${fmtSigned(surplus)}金/月)`} color={surplus >= 0 ? 'green' : 'red'} />
           <StatLine ui={props.ui} label="GDP" value={`${fmtGdp(econ.gdp)} ${sparkline(econ.history.gdp, 12)} ${trend(econ.history.gdp)}`} />
+          <StatLine ui={props.ui} label="GDP构成" value={`消费 ${fmtNumber(econ.gdpComponents.c)} · 投资 ${fmtNumber(econ.gdpComponents.i)} · 政府 ${fmtNumber(econ.gdpComponents.g)}`} />
+          <StatLine ui={props.ui} label="私人资本" value={`${fmtNumber(econ.privateCapital)} 金 · 投资信心 ${econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(econ.investmentConfidence)}`} />
           <StatLine ui={props.ui} label="债务" value={fmtMoney(econ.debt)} color={econ.debt > econ.gdp ? 'red' : undefined} />
           <StatLine ui={props.ui} label="税率" value={`${econ.taxRate}%  关税 ${econ.tariff}%`} />
           <StatLine ui={props.ui} label="物价" value={GOOD_IDS.slice(0, 5).map(id => `${GOODS[id].name}${econ.prices[id].toFixed(1)}`).join(' ')} />
@@ -289,7 +302,7 @@ function RankingsPanel(props: { ui: UiKit; world: WorldState }): any {
       <Text dimColor>高亮行为你扮演的国家。单位：金（国库/GDP）、万（人口/陆军）、%（比率）。</Text>
 
       {table('经济', '按 GDP 排序', by(country => country.econ.gdp), [
-        { label: 'GDP(金/年)', width: 12, value: country => fmtNumber(country.econ.gdp) },
+        { label: 'GDP(金/月)', width: 12, value: country => fmtNumber(country.econ.gdp) },
         { label: '国库(金)', width: 10, value: country => fmtNumber(country.econ.treasury) },
         { label: '收入(金/月)', width: 12, value: country => fmtNumber(country.econ.income) },
         { label: '债务(金)', width: 10, value: country => fmtNumber(country.econ.debt) },
@@ -336,12 +349,29 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
   if (player === undefined) return <Text dimColor>无进行中的游戏。</Text>
   const snapshot = inspectEconomy(player)
   const econ = player.econ
-  const widths = [8, 8, 9, 9, 12]
+  const components = econ.gdpComponents
+  const widths = [7, 7, 8, 8, 7, 11]
 
   return (
     <Box flexDirection="column">
-      <Heading ui={props.ui} text="商品市场" hint="价格 · 产出 · 需求 · 供需" />
-      <TableRow ui={props.ui} cells={['商品', '价格', '产出', '需求', '状态']} widths={widths} />
+      <Heading ui={props.ui} text="支出法 GDP" hint={`${fmtNumber(econ.gdp)} 金/月（基期价）`} />
+      <Text dimColor>
+        消费 {fmtNumber(components.c)} · 投资 {fmtNumber(components.i)} · 政府 {fmtNumber(components.g)} · 净出口 {fmtNumber(components.nx)}
+      </Text>
+      <Text dimColor>
+        工资 {fmtNumber(econ.wages)}（劳动份额 {fmtPercent(econ.laborShare)}） · 利润 {fmtNumber(econ.profits)} · 私人资本 {fmtNumber(econ.privateCapital)} · 投资信心 {econ.investmentConfidence >= 0 ? '+' : ''}{Math.round(econ.investmentConfidence)}
+      </Text>
+      <Text dimColor>
+        劳动需求 {fmtPop(econ.laborDemand)} · 劳动力 {fmtPop(econ.laborForce)} · 利用率 {fmtPercent(econ.laborUtilization)} · 失业 {econ.unemployment.toFixed(1)}%
+      </Text>
+      <Text dimColor>
+        资源禀赋：{RESOURCE_IDS.map(id => `${RESOURCE_NAMES[id]} ${econ.resources[id]}`).join(' · ')}
+      </Text>
+
+      <Box marginTop={1}>
+        <Heading ui={props.ui} text="商品市场" hint="价格 · 产出 · 需求 · 资源 · 供需" />
+      </Box>
+      <TableRow ui={props.ui} cells={['商品', '价格', '产出', '需求', '资源', '状态']} widths={widths} />
       {GOOD_IDS.map(id => {
         const production = snapshot.production[id]
         const demand = snapshot.demand[id]
@@ -356,10 +386,11 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
               econ.prices[id].toFixed(1),
               fmtNumber(production),
               fmtNumber(demand),
+              snapshot.resources[id].toFixed(2),
               `${state} ${bar(Math.min(ratio, 1.5), 1.5, 6)}`,
             ]}
             widths={widths}
-            colors={[undefined, undefined, undefined, undefined, color]}
+            colors={[undefined, undefined, undefined, undefined, undefined, color]}
           />
         )
       })}
@@ -377,12 +408,15 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
-        <Heading ui={props.ui} text="建造队列" hint={econ.constructionQueue.length === 0 ? '（空闲）' : `${econ.constructionQueue.length} 个项目`} />
+        <Heading ui={props.ui} text="建造队列" hint={econ.constructionQueue.length === 0 ? '（空闲）' : `${econ.constructionQueue.length} 个项目 · 私人项目不可取消`} />
         {econ.constructionQueue.length === 0 ? (
           <Text dimColor>用「建造」下令，项目按工期与建设预算逐月推进。</Text>
         ) : (
           econ.constructionQueue.map(project => (
             <Box flexDirection="row" columnGap={1}>
+              <Text color={project.owner === 'private' ? 'magenta' : undefined}>
+                {padEnd(project.owner === 'private' ? '私人' : '国有', 4)}
+              </Text>
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
               <Text dimColor>剩余 {project.monthsLeft} 月 · 每月 {project.monthlyCost.toFixed(1)}金</Text>
@@ -797,12 +831,15 @@ function CouncilPanel(props: {
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
-        <Heading ui={props.ui} text="建造队列" hint={player.econ.constructionQueue.length === 0 ? '（空闲）' : undefined} />
+        <Heading ui={props.ui} text="建造队列" hint={player.econ.constructionQueue.length === 0 ? '（空闲）' : '私人项目不可取消'} />
         {player.econ.constructionQueue.length === 0 ? (
           <Text dimColor>没有在建项目。</Text>
         ) : (
           player.econ.constructionQueue.map(project => (
             <Box flexDirection="row" columnGap={1}>
+              <Text color={project.owner === 'private' ? 'magenta' : undefined}>
+                {padEnd(project.owner === 'private' ? '私人' : '国有', 4)}
+              </Text>
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
               <Text dimColor>剩余 {project.monthsLeft} 月 · 每月 {project.monthlyCost.toFixed(1)}金 · 资金效率 {fmtPercent(bureaucracy.fundEfficiency)}</Text>

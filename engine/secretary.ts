@@ -57,6 +57,15 @@ export function monthlyBriefing(world: WorldState): string {
     `基础设施：交通 ${Math.round(player.econ.transportInfrastructure)}，行政能力 ${Math.round(player.econ.administrativeCapacity)}，市场接入 ${pct(player.econ.marketAccess)}`,
   )
   lines.push(
+    `经济循环：GDP ${player.econ.gdp.toFixed(1)} 金/月（消费 ${player.econ.gdpComponents.c.toFixed(1)} / 投资 ${player.econ.gdpComponents.i.toFixed(1)} / 政府 ${player.econ.gdpComponents.g.toFixed(1)}），工资 ${player.econ.wages.toFixed(1)}，利润 ${player.econ.profits.toFixed(1)}，劳动份额 ${pct(player.econ.laborShare)}`,
+  )
+  lines.push(
+    `私人经济：私人资本 ${player.econ.privateCapital.toFixed(1)} 金，投资信心 ${player.econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(player.econ.investmentConfidence)}（基准 ${player.politicalEconomy.investmentConfidence >= 0 ? '+' : ''}${player.politicalEconomy.investmentConfidence}），劳动需求 ${player.econ.laborDemand.toFixed(1)} 万 / 劳动力 ${player.econ.laborForce.toFixed(1)} 万（利用率 ${pct(player.econ.laborUtilization)}）`,
+  )
+  lines.push(
+    `资源禀赋：农田 ${player.econ.resources.farmland}，林地 ${player.econ.resources.timber}，煤矿 ${player.econ.resources.coal}，铁矿 ${player.econ.resources.iron}`,
+  )
+  lines.push(
     `国策修正：${
       player.modifiers.length === 0
         ? '无'
@@ -73,7 +82,7 @@ export function monthlyBriefing(world: WorldState): string {
         : queue
             .map(
               project =>
-                `${BUILDINGS[project.building].name}×${project.count}（剩余 ${project.monthsLeft} 月，进度 ${pct(project.progress)}）`,
+                `${project.owner === 'private' ? '[私人]' : '[国有]'}${BUILDINGS[project.building].name}×${project.count}（剩余 ${project.monthsLeft} 月，进度 ${pct(project.progress)}）`,
             )
             .join('；')
     }`,

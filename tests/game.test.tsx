@@ -244,6 +244,7 @@ describe('terminal-legend drawing', () => {
       id: 'proj-test',
       building: 'farms',
       count: 1,
+      owner: 'state',
       monthsLeft: 2,
       monthlyCost: 0.75,
       progress: 0.5,

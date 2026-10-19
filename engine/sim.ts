@@ -5,6 +5,7 @@ import type {
   EventOption,
   GameDate,
   GameEvent,
+  GdpComponents,
   GoodId,
   LogEntry,
   LogKind,
@@ -13,16 +14,27 @@ import type {
   War,
   WorldState,
 } from '../types'
+import type { LaborStats } from './data'
 import {
   BUILDINGS,
+  BUILDING_OUTPUT,
   BUILDING_TIME,
+  CONSUMPTION_PROPENSITY,
+  CONSUMER_GOODS,
   GOODS,
   GOOD_IDS,
+  GOVERNMENT_DEMAND,
+  INCOME_ELASTICITY,
+  INVESTMENT_DEMAND,
+  SUBSISTENCE,
   buildOf,
   createWorld,
   deriveBureaucracy,
+  deriveLabor,
   deriveUnemployment,
+  effectiveCount,
   makeRngForWorld,
+  resourceMultiplier,
   spawnEvent,
   successorFor,
   techCost,
@@ -58,6 +70,11 @@ export type EconomySnapshot = {
   gdp: number
   income: number
   expense: number
+  components: GdpComponents
+  laborShare: number
+  wages: number
+  profits: number
+  labor: LaborStats
 }
 
 export const clamp = (value: number, min: number, max: number): number =>
@@ -85,6 +102,13 @@ const zeroGoods = (): Record<GoodId, number> => {
 
 const techMultiplier = (country: Country): number => 1 + country.tech.level * 0.07
 
+/** Resource multipliers for every good, for display and price formation. */
+export function resourceFactors(country: Country): Record<GoodId, number> {
+  const out = zeroGoods()
+  for (const id of GOOD_IDS) out[id] = resourceMultiplier(country.econ.resources, id)
+  return out
+}
+
 function computeProduction(country: Country): Record<GoodId, number> {
   const tech = techMultiplier(country)
   const marketAccess = applyModifiers(country, 'marketAccess', country.econ.marketAccess)
@@ -96,70 +120,190 @@ function computeProduction(country: Country): Record<GoodId, number> {
   )
   const infra = 0.6 + transport / 160
   const b = country.econ.buildings
+  const resources = resourceFactors(country)
   const out = zeroGoods()
+  // Scale diminishing returns: capacity grows as count^0.98 (plan 0003 §0.1).
+  const cap = (count: number): number => effectiveCount(count)
   // Every good reads through the generic `production` buff and its own
   // per-good buff, so policies can target either scale.
   const output = (id: GoodId, value: number): number =>
-    applyModifiers(country, 'production', applyModifiers(country, `${id}Output`, value))
+    applyModifiers(
+      country,
+      'production',
+      applyModifiers(country, `${id}Output`, value * resources[id]),
+    )
   const farm = (value: number): number => applyModifiers(country, 'farmOutput', value)
   const mine = (value: number): number => applyModifiers(country, 'mineOutput', value)
   const factory = (value: number): number => applyModifiers(country, 'factoryOutput', value)
 
-  out.grain = output('grain', farm(b.farms * 1.05 * tech * infra * access))
-  out.wood = output('wood', farm(b.farms * 0.16) + mine(b.mines * 0.06))
-  out.coal = output('coal', mine(b.mines * 0.5 * tech))
-  out.iron = output('iron', mine(b.mines * 0.42 * tech))
-  out.fabric = output('fabric', factory(b.factories * 0.6 * tech))
-  out.clothes = output('clothes', factory(b.factories * 0.38 * tech))
-  out.liquor = output('liquor', factory(b.factories * 0.2))
-  out.furniture = output('furniture', factory(b.factories * 0.22 * tech))
-  out.machinery = output('machinery', factory(b.factories * 0.09 * tech))
-  out.arms = output('arms', factory(b.factories * 0.07 * tech) + b.barracks * 0.05)
-  out.luxury = output('luxury', factory(b.factories * 0.035 * tech))
-  out.services = output('services', (country.pops.total / 1000) * 0.5 * access)
+  out.grain = output('grain', farm(cap(b.farms) * 1.05 * tech * infra * access))
+  out.wood = output('wood', farm(cap(b.farms) * 0.16) + mine(cap(b.mines) * 0.06))
+  out.coal = output('coal', mine(cap(b.mines) * 0.5 * tech))
+  out.iron = output('iron', mine(cap(b.mines) * 0.42 * tech))
+  out.fabric = output('fabric', factory(cap(b.factories) * 0.6 * tech))
+  // Artisans supply the bottom of the consumer market before factories do;
+  // without them an agrarian country reads as permanently short of clothes.
+  out.clothes = output(
+    'clothes',
+    factory(cap(b.factories) * 0.38 * tech) + country.pops.artisans * 0.035,
+  )
+  out.liquor = output(
+    'liquor',
+    factory(cap(b.factories) * 0.2) + country.pops.artisans * 0.01,
+  )
+  out.furniture = output(
+    'furniture',
+    factory(cap(b.factories) * 0.22 * tech) + country.pops.artisans * 0.006,
+  )
+  out.machinery = output('machinery', factory(cap(b.factories) * 0.09 * tech))
+  out.arms = output('arms', factory(cap(b.factories) * 0.07 * tech) + cap(b.barracks) * 0.05)
+  out.luxury = output('luxury', factory(cap(b.factories) * 0.035 * tech))
+  out.services = output(
+    'services',
+    (country.pops.total / 1000) * 0.5 * access + country.pops.artisans * 0.01,
+  )
   return out
 }
 
-function computeDemand(country: Country): Record<GoodId, number> {
+type DemandBreakdown = {
+  demand: Record<GoodId, number>
+  /** Final-use quantities by block; GDP values them only up to supply. */
+  consumer: Record<GoodId, number>
+  investment: Record<GoodId, number>
+  government: Record<GoodId, number>
+}
+
+/**
+ * Share of profits saved for investment. The country profile sets the base,
+ * investment confidence and the `privateInvestment` modifier move it
+ * (plan 0003 §3/§4).
+ */
+export function effectiveSavingsRate(country: Country): number {
+  const confidence = 1 + country.econ.investmentConfidence / 100
+  return clamp(
+    applyModifiers(
+      country,
+      'privateInvestment',
+      country.politicalEconomy.savingsRate * confidence,
+    ),
+    0,
+    0.9,
+  )
+}
+
+function computeDemand(country: Country): DemandBreakdown {
   const popFactor = Math.max(0.1, country.pops.total / 1000)
-  const solFactor = 0.7 + country.pops.sol / 100
+  const prices = country.econ.prices
   const b = country.econ.buildings
-  const out = zeroGoods()
+  const sp = country.econ.spending
   const demand = (id: GoodId, value: number): number =>
     applyModifiers(country, 'demand', applyModifiers(country, `${id}Demand`, value))
+  const out = zeroGoods()
+  const consumer = zeroGoods()
 
-  out.grain = demand('grain', popFactor * 9 * solFactor)
-  out.clothes = demand('clothes', popFactor * 2.2 * solFactor)
-  out.furniture = demand('furniture', popFactor * 0.7 * solFactor)
-  out.liquor = demand('liquor', popFactor * 1.1 * solFactor)
-  out.services = demand('services', popFactor * 2.0 * solFactor)
-  out.luxury = demand(
-    'luxury',
-    popFactor *
-      0.18 *
-      solFactor *
-      (0.5 + (country.pops.capitalists / Math.max(1, country.pops.total)) * 8),
-  )
-  out.coal = demand('coal', popFactor * 1.2 + b.factories * 0.35)
-  out.iron = demand('iron', popFactor * 0.8 + b.factories * 0.4 + b.railroads * 0.5)
-  out.fabric = demand('fabric', b.factories * 0.45 + popFactor * 0.5)
-  out.wood = demand('wood', b.factories * 0.2 + b.railroads * 0.4 + popFactor * 0.3)
-  out.machinery = demand('machinery', b.factories * 0.18)
-  out.arms = demand('arms', country.military.army * 0.02 + country.military.navy * 0.01)
-  return out
+  // ---- consumer demand: Stone-Geary (plan 0003 §2.1) ----
+  // The household budget is wages plus the unsaved share of profits, less
+  // taxes, plus welfare transfers. Last month's bills are the best available
+  // reading; the first month falls back to seed GDP.
+  const wages =
+    country.econ.wages > 0
+      ? country.econ.wages
+      : country.econ.gdp * country.politicalEconomy.laborShareBase
+  const profits =
+    country.econ.profits > 0
+      ? country.econ.profits
+      : country.econ.gdp * (1 - country.politicalEconomy.laborShareBase)
+  const savingsRate = effectiveSavingsRate(country)
+  const welfareTransfer = sp.welfare * popFactor * 0.03
+  const taxEfficiency = 0.5 + country.government.legitimacy / 200
+  const taxTake = (wages + profits) * (country.econ.taxRate / 100) * 0.4 * taxEfficiency
+  const disposable = Math.max(0, wages + profits * (1 - savingsRate) - taxTake) + welfareTransfer
+  const incomePerCapita = disposable / popFactor
+  let subsistenceCost = 0
+  for (const id of CONSUMER_GOODS) subsistenceCost += SUBSISTENCE[id] * prices[id]
+  const supernumerary =
+    Math.max(0, incomePerCapita - subsistenceCost) * CONSUMPTION_PROPENSITY
+  for (const id of CONSUMER_GOODS) {
+    const quantity =
+      popFactor *
+      (SUBSISTENCE[id] +
+        (INCOME_ELASTICITY[id] * supernumerary) / Math.max(0.05, prices[id]))
+    consumer[id] = demand(id, applyModifiers(country, 'consumption', quantity))
+  }
+
+  // Idle profits held back last month that were released as luxury spending.
+  if (country.econ.idlePurchases > 0) {
+    consumer.luxury += country.econ.idlePurchases / Math.max(0.1, prices.luxury)
+  }
+
+  for (const id of GOOD_IDS) out[id] = consumer[id]
+  const investment = zeroGoods()
+  const government = zeroGoods()
+
+  // ---- intermediate demand: industrial inputs, not part of GDP ----
+  out.coal += demand('coal', popFactor * 1.2 + b.factories * 0.35)
+  out.iron += demand('iron', popFactor * 0.8 + b.factories * 0.4 + b.railroads * 0.5)
+  out.fabric += demand('fabric', b.factories * 0.45 + popFactor * 0.5)
+  out.wood += demand('wood', b.factories * 0.2 + b.railroads * 0.4 + popFactor * 0.3)
+  out.machinery += demand('machinery', b.factories * 0.18)
+  out.arms += demand('arms', country.military.army * 0.02 + country.military.navy * 0.01)
+
+  // ---- investment demand from queued projects (plan 0003 §2.2) ----
+  for (const project of country.econ.constructionQueue) {
+    const coefficients = INVESTMENT_DEMAND[project.building]
+    for (const [id, coefficient] of Object.entries(coefficients) as [GoodId, number][]) {
+      const quantity = coefficient * project.count
+      investment[id] += quantity
+      out[id] += quantity
+    }
+  }
+
+  // ---- government demand from appropriations (plan 0003 §2.3) ----
+  const militaryBase =
+    country.military.army * 0.05 * (1 + country.military.quality) +
+    country.military.navy * 0.04
+  const governmentGold: Record<keyof typeof sp, number> = {
+    army: sp.army * 0.5 + militaryBase * 0.7,
+    navy: sp.navy * 0.5 + militaryBase * 0.3,
+    bureaucracy: sp.bureaucracy * popFactor * 0.02,
+    education: sp.education * popFactor * 0.03,
+    welfare: sp.welfare * popFactor * 0.03,
+    construction: sp.construction * 0.8,
+  }
+  for (const [category, gold] of Object.entries(governmentGold) as [
+    keyof typeof sp,
+    number,
+  ][]) {
+    const shares = GOVERNMENT_DEMAND[category]
+    for (const [id, share] of Object.entries(shares) as [GoodId, number][]) {
+      const quantity = (gold * share) / Math.max(0.1, prices[id])
+      government[id] += quantity
+      out[id] += quantity
+    }
+  }
+
+  // Every goods demand still reads through the generic per-good demand buffs
+  // for the intermediate blocks above; consumer demand is already wrapped.
+  return { demand: out, consumer, investment, government }
 }
 
 /** Production and demand for display, with no side effects. */
 export function inspectEconomy(country: Country): {
   production: Record<GoodId, number>
   demand: Record<GoodId, number>
+  resources: Record<GoodId, number>
 } {
-  return { production: computeProduction(country), demand: computeDemand(country) }
+  return {
+    production: computeProduction(country),
+    demand: computeDemand(country).demand,
+    resources: resourceFactors(country),
+  }
 }
 
 export function computeEconomy(country: Country): EconomySnapshot {
   const production = computeProduction(country)
-  const demand = computeDemand(country)
+  const breakdown = computeDemand(country)
+  const demand = breakdown.demand
 
   for (const id of GOOD_IDS) {
     const produced = Math.max(0.01, production[id])
@@ -174,10 +318,28 @@ export function computeEconomy(country: Country): EconomySnapshot {
     )
   }
 
-  let gross = 0
-  for (const id of GOOD_IDS) gross += production[id] * country.econ.prices[id]
-  const gdp = applyModifiers(country, 'gdp', gross * 0.36 + country.pops.total * 0.008)
+  // With NX fixed at 0, only what domestic supply can actually deliver is
+  // transacted. Each final-use block is filled in proportion to its demand,
+  // so a shortage lowers GDP instead of inflating it through unmet orders.
+  // GDP is valued at base prices (real GDP): valuing at current prices makes
+  // nominal GDP fall whenever new capacity pushes consumer prices down.
+  const components: GdpComponents = { c: 0, i: 0, g: 0, nx: 0 }
+  for (const id of GOOD_IDS) {
+    const fill = clamp(production[id] / Math.max(0.01, demand[id]), 0, 1)
+    const price = GOODS[id].basePrice
+    components.c += breakdown.consumer[id] * price * fill
+    components.i += breakdown.investment[id] * price * fill
+    components.g += breakdown.government[id] * price * fill
+  }
+  const gdp = applyModifiers(country, 'gdp', components.c + components.i + components.g)
 
+  const gross = (() => {
+    let total = 0
+    for (const id of GOOD_IDS) total += production[id] * country.econ.prices[id]
+    return total
+  })()
+  // Tariffs still ride on the abstract trade volume until the trade slice
+  // replaces it with real import flows (plan 0004).
   const tradeVolume = gross * 0.35
   const taxEfficiency = applyModifiers(
     country,
@@ -187,7 +349,7 @@ export function computeEconomy(country: Country): EconomySnapshot {
   const income = applyModifiers(
     country,
     'income',
-    gdp * (country.econ.taxRate / 100) * 0.25 * taxEfficiency +
+    gdp * (country.econ.taxRate / 100) * 0.45 * taxEfficiency +
       tradeVolume * (country.econ.tariff / 100) * 0.12 +
       country.econ.buildings.ports * 0.02,
   )
@@ -211,22 +373,46 @@ export function computeEconomy(country: Country): EconomySnapshot {
     gdp * (1 - applyModifiers(country, 'marketAccess', country.econ.marketAccess)) * 0.02 +
     (b.universities + b.barracks) * 0.01
 
+  const labor = deriveLabor(country)
+  const rawShare =
+    country.politicalEconomy.laborShareBase - (country.econ.unemployment - 5) * 0.01
+  const laborShare = clamp(applyModifiers(country, 'laborShare', rawShare), 0.35, 0.7)
+  const wages = gdp * laborShare
+  const profits = gdp * (1 - laborShare)
+
   return {
     production,
     demand,
     gdp,
     income,
     expense: applyModifiers(country, 'expense', expense),
+    components,
+    laborShare,
+    wages,
+    profits,
+    labor,
   }
 }
 
 export function calibrateWorld(world: WorldState): void {
   for (const country of Object.values(world.countries)) {
-    const snap = computeEconomy(country)
+    // Two passes: the first seeds wages/profits from GDP, the second lets
+    // Stone-Geary demand read that income.
+    let snap = computeEconomy(country)
+    country.econ.wages = snap.wages
+    country.econ.profits = snap.profits
+    snap = computeEconomy(country)
     country.econ.gdp = snap.gdp
     country.econ.income = snap.income
     country.econ.expense = snap.expense
     country.econ.goods = snap.production
+    country.econ.gdpComponents = snap.components
+    country.econ.laborShare = snap.laborShare
+    country.econ.wages = snap.wages
+    country.econ.profits = snap.profits
+    country.econ.laborDemand = snap.labor.demand
+    country.econ.laborForce = snap.labor.force
+    country.econ.laborUtilization = snap.labor.utilization
     country.econ.history = {
       gdp: [snap.gdp],
       treasury: [country.econ.treasury],
@@ -305,20 +491,34 @@ function settleConstruction(
 ): void {
   const queue = country.econ.constructionQueue
   if (queue.length === 0) return
-  let budget = country.econ.spending.construction * 0.8
+  let stateBudget = country.econ.spending.construction * 0.8
+  let privateBudget = Math.max(0, country.econ.privateCapital)
   const remaining: ConstructionProject[] = []
+  // Private builders are a little more efficient than the state's, but the
+  // bureaucracy still limits how fast their money turns into progress.
+  const privateEfficiency = clamp(0.75 + country.bureaucracy.score / 400, 0.75, 1)
 
   for (const project of queue) {
+    const owner = project.owner ?? 'state'
     // Fund a full month's bill where the budget allows; bureaucratic leakage
     // then decides how much of it becomes progress. (Capping the spend at the
     // remaining progress would approach 1 asymptotically and never finish.)
-    const spend = Math.min(budget, project.monthlyCost, Math.max(0, country.econ.treasury))
+    const spend =
+      owner === 'private'
+        ? Math.min(privateBudget, project.monthlyCost)
+        : Math.min(stateBudget, project.monthlyCost, Math.max(0, country.econ.treasury))
     if (spend > 0) {
-      budget -= spend
-      country.econ.treasury -= spend
-      const effective =
-        spend *
-        applyModifiers(country, 'constructionSpeed', country.bureaucracy.fundEfficiency)
+      if (owner === 'private') {
+        privateBudget -= spend
+      } else {
+        stateBudget -= spend
+        country.econ.treasury -= spend
+      }
+      const efficiency =
+        owner === 'private'
+          ? applyModifiers(country, 'constructionSpeed', privateEfficiency)
+          : applyModifiers(country, 'constructionSpeed', country.bureaucracy.fundEfficiency)
+      const effective = spend * efficiency
       project.progress = Math.min(
         1,
         project.progress + effective / Math.max(0.0001, project.monthlyCost),
@@ -339,7 +539,10 @@ function settleConstruction(
           date: { ...world.date },
           kind: 'economy',
           countryId: country.id,
-          text: `[${country.flag}] ${country.name}建成 ${project.count} 座${BUILDINGS[project.building].name}`,
+          text:
+            owner === 'private'
+              ? `[${country.flag}] ${country.name}的私人资本建成 ${project.count} 座${BUILDINGS[project.building].name}`
+              : `[${country.flag}] ${country.name}建成 ${project.count} 座${BUILDINGS[project.building].name}`,
         })
         continue
       }
@@ -348,9 +551,114 @@ function settleConstruction(
   }
 
   country.econ.constructionQueue = remaining
+  country.econ.privateCapital = privateBudget
   // Unused appropriations evaporate into the administration.
-  const waste = Math.min(Math.max(0, budget), Math.max(0, country.econ.treasury))
+  const waste = Math.min(Math.max(0, stateBudget), Math.max(0, country.econ.treasury))
   country.econ.treasury -= waste
+}
+
+/**
+ * Expected-return proxy for one building at current prices and demand. It
+ * compares the current price basket with base prices and weights it by the
+ * demand/supply pressure of the goods the building makes. The capital
+ * threshold (4%/year + debt ratio × 2%) is expressed as a markup on 1
+ * (plan 0003 §0.1/§4).
+ */
+export function investmentScore(
+  country: Country,
+  building: BuildingId,
+  demand: Record<GoodId, number>,
+  production: Record<GoodId, number>,
+): number {
+  const outputs = BUILDING_OUTPUT[building]
+  let value = 0
+  let baseValue = 0
+  let pressureValue = 0
+  for (const [id, quantity] of Object.entries(outputs) as [GoodId, number][]) {
+    const price = country.econ.prices[id]
+    const valueHere = quantity * price
+    value += valueHere
+    baseValue += quantity * GOODS[id].basePrice
+    const ratio = clamp(demand[id] / Math.max(0.01, production[id]), 0.3, 2)
+    pressureValue += valueHere * ratio
+  }
+  if (value <= 0 || baseValue <= 0) return 0
+  return (value / baseValue) * (pressureValue / value)
+}
+
+function capitalThreshold(country: Country): number {
+  const debtRatio = country.econ.debt / Math.max(1, country.econ.gdp)
+  return 1 + (0.04 + debtRatio * 0.02)
+}
+
+/**
+ * Allocates this month's private savings to at most one new private project.
+ * Private projects are visible in the queue but cannot be cancelled
+ * (plan 0003 §4). Returns the savings that stayed idle.
+ */
+function investPrivateCapital(
+  world: WorldState,
+  country: Country,
+  snap: EconomySnapshot,
+  savingsThisMonth: number,
+  log: LogEntry[],
+): void {
+  const ownProjects = country.econ.constructionQueue.filter(
+    project => (project.owner ?? 'state') === 'private',
+  )
+  const threshold = capitalThreshold(country)
+  let best: { building: BuildingId; score: number } | undefined
+  for (const building of Object.keys(BUILDINGS) as BuildingId[]) {
+    if (Object.keys(BUILDING_OUTPUT[building]).length === 0) continue
+    const score = investmentScore(country, building, snap.demand, snap.production)
+    if (best === undefined || score > best.score) best = { building, score }
+  }
+
+  if (
+    best !== undefined &&
+    best.score > threshold &&
+    ownProjects.length < 4 &&
+    country.econ.privateCapital >= 1
+  ) {
+    const months = BUILDING_TIME[best.building]
+    const fullMonthly = BUILDINGS[best.building].cost / months
+    const affordable = Math.floor((country.econ.privateCapital * 0.5) / fullMonthly)
+    const count = clamp(affordable, 1, 20)
+    const monthlyCost = (BUILDINGS[best.building].cost * count) / months
+    if (monthlyCost <= country.econ.privateCapital) {
+      country.econ.constructionQueue.push({
+        id: `proj-${world.tick}-${country.id}-priv-${country.econ.constructionQueue.length}`,
+        building: best.building,
+        count,
+        owner: 'private',
+        monthsLeft: months,
+        monthlyCost,
+        progress: 0,
+        startedAt: { ...world.date },
+      })
+      log.push({
+        date: { ...world.date },
+        kind: 'economy',
+        countryId: country.id,
+        text: `[${country.flag}] ${country.name}的私人资本投建 ${count} 座${BUILDINGS[best.building].name}`,
+      })
+    }
+  }
+
+  // Working capital reserved for active private projects; anything above it
+  // is idle. The retained share stays in the pool, the rest is released as
+  // luxury purchases next month (plan 0003 §4).
+  const activePrivateCost = country.econ.constructionQueue
+    .filter(project => (project.owner ?? 'state') === 'private')
+    .reduce((sum, project) => sum + project.monthlyCost, 0)
+  const reserve = Math.max(10, activePrivateCost * 3)
+  const idle = Math.max(0, country.econ.privateCapital - reserve)
+  const released = idle * (1 - country.politicalEconomy.idleRetained)
+  if (released > 0) {
+    country.econ.privateCapital = Math.max(0, country.econ.privateCapital - released)
+    country.econ.idlePurchases += released
+  }
+  country.econ.idleProfits = idle
 }
 
 function simulateCountry(
@@ -361,6 +669,8 @@ function simulateCountry(
 ): void {
   const oldPops = Math.max(1, country.pops.total)
   const snap = computeEconomy(country)
+  // The demand computed above consumed last month's released idle capital.
+  country.econ.idlePurchases = 0
 
   // Market scarcity feeds unrest.
   let scarcity = 0
@@ -374,9 +684,16 @@ function simulateCountry(
 
   const constructionBudget = country.econ.spending.construction * 0.8
   country.econ.gdp = snap.gdp
+  country.econ.gdpComponents = snap.components
   country.econ.income = snap.income
   country.econ.expense = snap.expense + constructionBudget
   country.econ.goods = snap.production
+  country.econ.laborShare = snap.laborShare
+  country.econ.wages = snap.wages
+  country.econ.profits = snap.profits
+  country.econ.laborDemand = snap.labor.demand
+  country.econ.laborForce = snap.labor.force
+  country.econ.laborUtilization = snap.labor.utilization
 
   const balance = snap.income - snap.expense
   country.econ.treasury += balance
@@ -388,6 +705,12 @@ function simulateCountry(
     country.econ.debt -= repay
     country.econ.treasury -= repay
   }
+
+  // Income distribution: profits fund private savings, and this month's
+  // savings may start one private project (plan 0003 §3/§4).
+  const savings = snap.profits * effectiveSavingsRate(country)
+  country.econ.privateCapital += savings
+  investPrivateCapital(world, country, snap, savings, log)
 
   // The construction queue pays from the appropriation, including its waste.
   settleConstruction(world, country, rng, log)
@@ -433,7 +756,7 @@ function simulateCountry(
       20 +
         (snap.gdp / Math.max(1, country.pops.total)) * 250 +
         country.tech.level * 1.2 -
-        country.pops.radicals * 0.2 +
+        country.pops.radicals * 0.08 +
         country.econ.spending.welfare * 2,
     ),
     5,
@@ -451,24 +774,35 @@ function simulateCountry(
   )
 
   // Industry absorbs labour; literacy and unrest move the rate the other way.
+  // Low labour utilisation (a vast idle peasantry) adds a modest penalty;
+  // full utilisation removes it (plan 0003 §0.1).
+  const laborPenalty = (1 - snap.labor.utilization) * 8
+  const unemploymentTarget = clamp(
+    applyModifiers(country, 'unemployment', deriveUnemployment(country) + laborPenalty),
+    0,
+    30,
+  )
+  // Smooth the stock so one bad month does not shock a country from 6% to 30%.
   country.econ.unemployment = clamp(
-    applyModifiers(country, 'unemployment', deriveUnemployment(country)),
+    country.econ.unemployment +
+      (unemploymentTarget - country.econ.unemployment) * 0.25,
     0,
     30,
   )
 
   const radicalPressure =
-    Math.max(0, country.econ.taxRate - 10) * 0.12 +
-    Math.max(0, country.econ.tariff - 10) * 0.04 +
-    Math.max(0, 40 - country.pops.sol) * 0.06 +
-    country.military.exhaustion * 0.08 +
-    country.econ.unemployment * 0.04 +
-    scarcity * 0.2
+    Math.max(0, country.econ.taxRate - 10) * 0.08 +
+    Math.max(0, country.econ.tariff - 10) * 0.03 +
+    Math.max(0, 40 - country.pops.sol) * 0.03 +
+    country.military.exhaustion * 0.06 +
+    country.econ.unemployment * 0.03 +
+    scarcity * 0.12
   const relief =
-    (country.government.legitimacy / 100) * 0.25 +
-    country.econ.spending.welfare * 0.15 +
-    country.econ.spending.education * 0.05 +
-    country.pops.loyalists * 0.01
+    0.3 +
+    (country.government.legitimacy / 100) * 0.35 +
+    country.econ.spending.welfare * 0.2 +
+    country.econ.spending.education * 0.08 +
+    country.pops.loyalists * 0.015
   // Radicals and loyalists are stocks updated by a monthly flow; modifiers
   // scale the flow, not the stock, so a percent buff cannot compound monthly.
   country.pops.radicals = clamp(
@@ -888,7 +1222,8 @@ export function advance(
   const log: LogEntry[] = []
   const pending: GameEvent[] = []
 
-  for (const decision of decisions.slice(0, 8)) {
+  // One decision per AI country, plus the player's own actions.
+  for (const decision of decisions.slice(0, 12)) {
     const result = applyDecision(world, decision, rng)
     if (result.ok) {
       log.push({
@@ -963,6 +1298,7 @@ export function applyDecision(
         id: `proj-${world.tick}-${country.id}-${country.econ.constructionQueue.length}`,
         building,
         count,
+        owner: 'state',
         monthsLeft: months,
         monthlyCost,
         progress: 0,
@@ -996,6 +1332,18 @@ export function applyDecision(
       const name = String(params.tech ?? techName(country.tech.level + 1))
       country.tech.researching = name
       return { ok: true, text: `${tag} 将研究方向定为「${name}」` }
+    }
+    case 'invest': {
+      // AI investment confidence, bounded to ±10 around the country's base
+      // and ±3 per month (plan 0003 §4/§6).
+      const base = country.politicalEconomy.investmentConfidence
+      const delta = clamp(Number(params.amount ?? 1), -3, 3)
+      const next = clamp(country.econ.investmentConfidence + delta, base - 10, base + 10)
+      country.econ.investmentConfidence = next
+      return {
+        ok: true,
+        text: `${tag} 将投资信心调整为 ${next >= 0 ? '+' : ''}${next.toFixed(0)}`,
+      }
     }
     case 'conscript': {
       const wanted = clamp(Number(params.amount ?? 1), 1, 20)
@@ -1319,6 +1667,16 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
   const atWar = world.wars.some(
     war => war.attackers.includes(country.id) || war.defenders.includes(country.id),
   )
+  // Confidence drifts with the fiscal mood when the model is unavailable.
+  if (rng.chance(0.15)) {
+    const mood = country.econ.income - country.econ.expense > 0 ? 1 : -1
+    return {
+      countryId: country.id,
+      action: 'invest',
+      params: { amount: mood },
+      narrative: `${country.name}调整投资信心`,
+    }
+  }
   if (!atWar && country.econ.treasury > 8 && rng.chance(0.45)) {
     const options = ['factories', 'farms', 'mines', 'railroads', 'universities'] as const
     const building = rng.pick(options)
