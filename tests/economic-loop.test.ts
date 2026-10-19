@@ -4,6 +4,7 @@ import { deriveLabor, makeRngForWorld, resourceMultiplier } from '../engine/data
 import {
   advance,
   applyDecision,
+  applyPolicy,
   computeEconomy,
   investmentScore,
   newWorld,
@@ -162,10 +163,10 @@ describe('E2 private investment', () => {
     if (prussia === undefined) return
     const demand = computeEconomy(prussia).demand
     const production = prussia.econ.goods
-    prussia.econ.prices.coal = 4
-    const shortage = investmentScore(prussia, 'mines', demand, production)
-    prussia.econ.prices.coal = 0.4
-    const glut = investmentScore(prussia, 'mines', demand, production)
+    const shortageDemand = { ...demand, coal: production.coal * 2, iron: production.iron * 2 }
+    const glutDemand = { ...demand, coal: production.coal * 0.2, iron: production.iron * 0.2 }
+    const shortage = investmentScore(prussia, 'mines', shortageDemand, production)
+    const glut = investmentScore(prussia, 'mines', glutDemand, production)
     expect(shortage).toBeGreaterThan(glut)
   })
 })
@@ -374,7 +375,7 @@ describe('Round 1 regressions', () => {
     expect(report.error ?? '').toContain('兜底')
   })
 
-  test('privateInvestment now expands private investment instead of causing a slump', async () => {
+  test('privateInvestment trades short-run consumption for long-run capacity', async () => {
     const control = newWorld(119, 'QING')
     const boosted = clone(control)
     const qing = boosted.countries.QING
@@ -386,11 +387,11 @@ describe('Round 1 regressions', () => {
       stat: 'privateInvestment',
       stack: 'percent',
       value: 50,
-      monthsLeft: 24,
+      monthsLeft: 60,
       source: 'test',
     })
-    advance(control, 24, [], makeRngForWorld(control))
-    advance(boosted, 24, [], makeRngForWorld(boosted))
+    advance(control, 60, [], makeRngForWorld(control))
+    advance(boosted, 60, [], makeRngForWorld(boosted))
     const a = control.countries.QING
     const b = boosted.countries.QING
     expect(a).toBeDefined()
@@ -409,5 +410,124 @@ describe('Round 1 regressions', () => {
     expect(labor.raw).toBeLessThan(0.5)
     expect(labor.utilization).toBe(0.5)
     expect(qing.econ.laborRawUtilization).toBe(labor.raw)
+  })
+})
+
+describe('Round 2 regressions', () => {
+  test('string or infinite model parameters cannot poison the economy', async () => {
+    const world = newWorld(121, 'QING')
+    for (const decision of [
+      { countryId: 'GBR', action: 'tax', params: { rate: 'abc' } },
+      { countryId: 'FRA', action: 'tariff', params: { rate: 'abc' } },
+      { countryId: 'PRU', action: 'spending', params: { category: 'army', amount: 'abc' } },
+      { countryId: 'RUS', action: 'build', params: { building: 'farms', count: 'abc' } },
+      { countryId: 'USA', action: 'conscript', params: { amount: 'abc' } },
+      { countryId: 'OTT', action: 'invest', params: { amount: 'abc' } },
+    ]) {
+      applyDecision(world, decision as never, makeRngForWorld(world))
+    }
+    advance(world, 1, [], makeRngForWorld(world))
+    for (const country of Object.values(world.countries)) {
+      for (const value of [
+        country.econ.gdp,
+        country.econ.income,
+        country.econ.taxRate,
+        country.econ.tariff,
+        country.military.army,
+      ]) {
+        expect(Number.isFinite(value)).toBe(true)
+      }
+      for (const project of country.econ.constructionQueue) {
+        expect(Number.isFinite(project.count)).toBe(true)
+        expect(Number.isFinite(project.monthlyCost)).toBe(true)
+      }
+    }
+  })
+
+  test('unspent construction appropriations create no government demand', async () => {
+    const low = newWorld(122, 'QING')
+    const high = clone(low)
+    const lowQing = low.countries.QING
+    const highQing = high.countries.QING
+    expect(lowQing).toBeDefined()
+    expect(highQing).toBeDefined()
+    if (lowQing === undefined || highQing === undefined) return
+    lowQing.econ.spending.construction = 0
+    highQing.econ.spending.construction = 50
+    advance(low, 1, [], makeRngForWorld(low))
+    advance(high, 1, [], makeRngForWorld(high))
+    expect(highQing.econ.gdpComponents.g).toBe(lowQing.econ.gdpComponents.g)
+    expect(Math.abs(highQing.econ.gdp - lowQing.econ.gdp)).toBeLessThan(0.01)
+    expect(highQing.econ.lastStateConstructionSpend).toBe(0)
+  })
+
+  test('policies cost authority by magnitude and permanent same-stat policies replace', async () => {
+    const world = newWorld(123, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.government.authority = 100
+    const first = applyPolicy(world, 'QING', {
+      name: '增长甲',
+      effects: [{ stat: 'gdp', stack: 'percent', value: 50 }],
+    })
+    expect(first.ok).toBe(true)
+    // 50% × 12 months × 0.2 = 10 authority, not the old default 5.
+    expect(qing.government.authority).toBe(90)
+    const second = applyPolicy(world, 'QING', {
+      name: '增长乙',
+      effects: [{ stat: 'gdp', stack: 'percent', value: 50 }],
+    })
+    expect(second.ok).toBe(true)
+    expect(qing.modifiers.filter(one => one.stat === 'gdp').length).toBe(1)
+    const absurd = applyPolicy(world, 'QING', {
+      name: '疯狂',
+      effects: [{ stat: 'gdp', stack: 'percent', value: 100000 }],
+    })
+    expect(absurd.ok).toBe(false)
+  })
+
+  test('private investment keeps replacing stock for ten years', async () => {
+    const world = newWorld(124, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    let zeroRun = 0
+    let maxZeroRun = 0
+    for (let month = 0; month < 120; month += 1) {
+      advance(world, 1, [], makeRngForWorld(world))
+      if (qing.econ.gdpComponents.i <= 0.01) {
+        zeroRun += 1
+        maxZeroRun = Math.max(maxZeroRun, zeroRun)
+      } else {
+        zeroRun = 0
+      }
+    }
+    expect(maxZeroRun).toBeLessThanOrEqual(6)
+  })
+
+  test('high unrest activates the revolutionary thresholds', async () => {
+    const world = newWorld(125, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.pops.radicals = 100
+    advance(world, 1, [], makeRngForWorld(world))
+    expect(qing.modifiers.some(one => one.source === 'threshold:revolutionary-crisis')).toBe(true)
+    expect(qing.modifiers.some(one => one.source === 'threshold:state-collapse')).toBe(true)
+  })
+
+  test('unemployment moves at most 1.5 points per month', async () => {
+    const world = newWorld(126, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    let previous = qing.econ.unemployment
+    for (let month = 0; month < 36; month += 1) {
+      advance(world, 1, [], makeRngForWorld(world))
+      const current = qing.econ.unemployment
+      expect(Math.abs(current - previous)).toBeLessThan(1.51)
+      previous = current
+    }
   })
 })

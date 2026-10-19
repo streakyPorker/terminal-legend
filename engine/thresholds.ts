@@ -134,6 +134,32 @@ export const THRESHOLD_RULES: ThresholdRule[] = [
     ],
   },
   {
+    id: 'revolutionary-crisis',
+    label: '革命危机',
+    description: '激进达到 80',
+    mode: 'while',
+    conditions: [{ stat: 'radicals', op: '>=', value: 80 }],
+    modifiers: [
+      { stat: 'income', stack: 'percent', value: -20 },
+      { stat: 'constructionSpeed', stack: 'percent', value: -30 },
+      { stat: 'legitimacy', stack: 'flat', value: -2 },
+      { stat: 'armyStrength', stack: 'percent', value: -10 },
+    ],
+  },
+  {
+    id: 'state-collapse',
+    label: '国家崩解',
+    description: '激进达到 95',
+    mode: 'while',
+    conditions: [{ stat: 'radicals', op: '>=', value: 95 }],
+    modifiers: [
+      { stat: 'income', stack: 'percent', value: -35 },
+      { stat: 'constructionSpeed', stack: 'percent', value: -50 },
+      { stat: 'armyStrength', stack: 'percent', value: -20 },
+      { stat: 'authority', stack: 'flat', value: -3 },
+    ],
+  },
+  {
     id: 'debt-crisis',
     label: '债台高筑',
     description: '债务超过 GDP 的 1.5 倍',

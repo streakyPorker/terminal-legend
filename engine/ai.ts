@@ -17,7 +17,8 @@ const SYSTEM = `你是 19 世纪大战略游戏的世界决策引擎。你为每
 - 每个元素形如 {"country":"GBR","action":"build","params":{"building":"factories","count":1},"narrative":"一句符合该领袖性格的行动描述"}
 - 每个国家最多 1 条；只为他国（非玩家国）决策。
 - action 只能是：build, tax, tariff, spending, research, conscript, law, diplomacy, invest。
-- build 的 building 只能是：farms, mines, factories, railroads, ports, universities, barracks, offices。
+- build 的 building 只能是：farms, mines, factories, railroads, ports, universities, barracks, offices；params.count 为 1..20 的数字。官署提供行政能力与官僚上限。
+- tax/tariff 用 params.rate（0..60）；spending 用 params.category（army/navy/bureaucracy/education/welfare/construction）与 params.amount（0..50）；数值必须是 JSON 数字，不能写成字符串。
 - invest 调整投资信心：params.amount 取 -3..3，结果被限制在该国基准上下 10 点内。
 - diplomacy 需要 params.target（国家代码）与 params.move（improve, insult, alliance, rival, gift, war, peace）。
 - law 的 name 只能是：教育改革, 福利改革, 自由贸易, 保护关税, 征兵制, 宗教宽容。
@@ -172,23 +173,40 @@ function validParams(
   world: WorldState,
   countryId: string,
 ): boolean {
+  const finite = (value: unknown, min: number, max: number): boolean => {
+    if (value === undefined) return true
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed >= min && parsed <= max
+  }
   switch (action) {
     case 'build':
-      return (BUILDING_IDS as string[]).includes(String(params.building ?? ''))
+      return (
+        (BUILDING_IDS as string[]).includes(String(params.building ?? '')) &&
+        finite(params.count, 1, 20)
+      )
+    case 'tax':
+    case 'tariff':
+      return finite(params.rate, 0, 60)
     case 'spending':
-      return Object.prototype.hasOwnProperty.call(SPENDING, String(params.category ?? ''))
+      return (
+        Object.prototype.hasOwnProperty.call(SPENDING, String(params.category ?? '')) &&
+        finite(params.amount, 0, 50)
+      )
     case 'law':
       return LAWS.has(String(params.name ?? ''))
+    case 'conscript':
+      return finite(params.amount, 1, 20)
     case 'diplomacy': {
       const target = String(params.target ?? '')
       return (
         world.countries[target] !== undefined &&
         target !== countryId &&
-        DIPLOMACY_MOVES.has(String(params.move ?? ''))
+        DIPLOMACY_MOVES.has(String(params.move ?? '')) &&
+        finite(params.amount, 1, 30)
       )
     }
     case 'invest':
-      return Number.isFinite(Number(params.amount ?? 1))
+      return finite(params.amount, -3, 3)
     default:
       return true
   }
@@ -287,7 +305,11 @@ export async function decideForAi(
     }
   }
   if (fallbackCount > 0) {
-    error = error ?? `${fallbackCount} 国使用确定性政策兜底`
+    const suffix = `${fallbackCount} 国使用确定性政策兜底`
+    error =
+      error === undefined || error === '没有可执行的合法行动'
+        ? suffix
+        : `${error}；${suffix}`
   }
 
   if (shouldAsk) world.ai.lastDecisionTick = world.tick

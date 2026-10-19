@@ -1146,6 +1146,8 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         laborUtilization: 1,
         laborRawUtilization: 0,
         lastConstructionSpend: 0,
+        lastStateConstructionSpend: 0,
+        lastPrivateConstructionSpend: 0,
         history: {
           gdp: [seedRow.gdp],
           treasury: [seedRow.treasury],

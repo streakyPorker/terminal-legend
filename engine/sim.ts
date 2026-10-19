@@ -17,6 +17,7 @@ import type {
 import type { LaborStats } from './data'
 import {
   BUILDINGS,
+  BUILDING_IDS,
   BUILDING_OUTPUT,
   BUILDING_TIME,
   CONSUMPTION_PROPENSITY,
@@ -47,6 +48,7 @@ import {
   addModifier,
   applyModifiers,
   tickModifiers,
+  totalsFor,
 } from './modifiers'
 import { evaluateThresholds, logThresholds } from './thresholds'
 
@@ -78,7 +80,13 @@ export type EconomySnapshot = {
 }
 
 export const clamp = (value: number, min: number, max: number): number =>
-  Math.min(max, Math.max(min, value))
+  Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : min
+
+/** Numeric parameter with a finite fallback; model output can be a string. */
+const num = (value: unknown, fallback: number): number => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
 
 export function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
@@ -289,8 +297,11 @@ function computeDemand(country: Country): DemandBreakdown {
     navy: sp.navy * 0.5 + militaryBase * 0.3,
     bureaucracy: sp.bureaucracy * popFactor * 0.02,
     education: sp.education * popFactor * 0.03,
-    welfare: sp.welfare * popFactor * 0.03,
-    construction: sp.construction * 0.8,
+    // Welfare is a transfer to households (counted in C); construction is
+    // investment (counted in I when actually paid). Counting either as
+    // government purchases would double-count it.
+    welfare: 0,
+    construction: 0,
   }
   for (const [category, gold] of Object.entries(governmentGold) as [
     keyof typeof sp,
@@ -515,6 +526,8 @@ function settleConstruction(
   const queue = country.econ.constructionQueue
   if (queue.length === 0) {
     country.econ.lastConstructionSpend = 0
+    country.econ.lastStateConstructionSpend = 0
+    country.econ.lastPrivateConstructionSpend = 0
     return 0
   }
   let stateBudget = country.econ.spending.construction * 0.8
@@ -526,7 +539,10 @@ function settleConstruction(
   // bureaucracy still limits how fast their money turns into progress.
   const privateEfficiency = clamp(0.75 + country.bureaucracy.score / 400, 0.75, 1)
 
-  for (const project of queue) {
+  // Complete the oldest/near-finish projects first so a small budget does not
+  // starve the whole queue forever.
+  const ordered = [...queue].sort((a, b) => a.monthsLeft - b.monthsLeft)
+  for (const project of ordered) {
     const owner = project.owner ?? 'state'
     // Fund a full month's bill where the budget allows; bureaucratic leakage
     // then decides how much of it becomes progress. (Capping the spend at the
@@ -584,6 +600,8 @@ function settleConstruction(
   country.econ.constructionQueue = remaining
   country.econ.privateCapital = privateBudget
   country.econ.lastConstructionSpend = stateSpent + privateSpent
+  country.econ.lastStateConstructionSpend = stateSpent
+  country.econ.lastPrivateConstructionSpend = privateSpent
   // Unused appropriations are not spent at all: the appropriation is a monthly
   // cap, not a charge. This keeps the displayed budget equal to the treasury.
   return stateSpent
@@ -610,27 +628,36 @@ export function investmentScore(
     0.7,
     1.3,
   )
-  let value = 0
-  let baseValue = 0
-  let pressureValue = 0
+  let weightSum = 0
+  let pressureSum = 0
+  let potentialSum = 0
   for (const [id, quantity] of Object.entries(outputs) as [GoodId, number][]) {
-    const price = country.econ.prices[id]
     const resource = resourceMultiplier(country.econ.resources, id)
     const potential = building === 'factories' ? resource * industrial : resource
-    const valueHere = quantity * price * potential
-    value += valueHere
-    baseValue += quantity * GOODS[id].basePrice
+    const weight = quantity * GOODS[id].basePrice
     const ratio = clamp(demand[id] / Math.max(0.01, production[id]), 0.3, 2)
-    pressureValue += valueHere * ratio
+    weightSum += weight
+    pressureSum += weight * ratio
+    potentialSum += weight * potential
   }
-  if (value <= 0 || baseValue <= 0) return 0
-  return (value / baseValue) * (pressureValue / value)
+  if (weightSum <= 0) return 0
+  // Unmet demand is the primary signal; resource/industrial potential decides
+  // whether this country is a good place to add the capacity.
+  return (pressureSum / weightSum) * (potentialSum / weightSum)
 }
 
 function capitalThreshold(country: Country): number {
   const debtRatio = country.econ.debt / Math.max(1, country.econ.gdp)
-  return 1 + (0.04 + debtRatio * 0.02)
+  // 4%/year + debt ratio × 2%/year, expressed as a monthly markup. Confidence
+  // policies lower the hurdle rate, so `privateInvestment` boosts both savings
+  // and the range of projects that clear it.
+  const confidence = 1 + totalsFor(country, 'privateInvestment').percent / 100
+  return (1 + (0.04 + debtRatio * 0.02) / 12) / Math.max(0.5, confidence)
 }
+
+/** Monthly depreciation of the building stock; replacement investment keeps
+ *  the private-investment loop alive after the initial industrialisation. */
+const DEPRECIATION_PER_MONTH = 0.0015
 
 /**
  * Allocates this month's private savings to at most one new private project.
@@ -669,15 +696,16 @@ function investPrivateCapital(
     if (fullMonthly <= 0) return undefined
     return { months, affordable: Math.floor((headroom * months) / BUILDINGS[best.building].cost) }
   })()
+  let started = false
   if (
     best !== undefined &&
     canStart !== undefined &&
     best.score > threshold &&
-    ownProjects.length < 6 &&
+    ownProjects.length < 10 &&
     canStart.affordable >= 1
   ) {
     const { months } = canStart
-    const count = clamp(canStart.affordable, 1, 20)
+    const count = clamp(canStart.affordable, 1, 10)
     const monthlyCost = (BUILDINGS[best.building].cost * count) / months
     if (monthlyCost <= country.econ.privateCapital) {
       country.econ.constructionQueue.push({
@@ -697,6 +725,42 @@ function investPrivateCapital(
         countryId: country.id,
         text: `[${country.flag}] ${country.name}的私人资本投建 ${count} 座${BUILDINGS[best.building].name}`,
       })
+      started = true
+    }
+  }
+
+  // Replacement investment: when no expansion clears the capital threshold,
+  // a healthy existing stock (score > 0.7) still needs one-for-one renewal.
+  // This keeps private construction and I from freezing for years after the
+  // initial industrialisation (round-2 P1-1).
+  if (
+    !started &&
+    ownProjects.length === 0 &&
+    best !== undefined &&
+    best.score > 0.7 &&
+    country.econ.buildings[best.building] > 0
+  ) {
+    const months = BUILDING_TIME[best.building]
+    const monthlyCost = BUILDINGS[best.building].cost / months
+    if (monthlyCost <= headroom && monthlyCost <= country.econ.privateCapital) {
+      country.econ.constructionQueue.push({
+        id: `proj-${world.tick}-${country.id}-renew-${country.econ.constructionQueue.length}`,
+        building: best.building,
+        count: 1,
+        owner: 'private',
+        monthsLeft: months,
+        monthlyCost,
+        lastSpend: 0,
+        progress: 0,
+        startedAt: { ...world.date },
+      })
+      log.push({
+        date: { ...world.date },
+        kind: 'economy',
+        countryId: country.id,
+        text: `[${country.flag}] ${country.name}的私人资本更新 1 座${BUILDINGS[best.building].name}`,
+      })
+      started = true
     }
   }
 
@@ -772,6 +836,15 @@ function simulateCountry(
   const stateConstructionSpent = settleConstruction(world, country, rng, log)
   country.econ.expense = snap.expense + stateConstructionSpent
 
+  // Capital wears out slowly. Without this the private investment loop stops
+  // permanently once the capital stock satisfies demand (round-2 P1-1).
+  for (const id of BUILDING_IDS) {
+    country.econ.buildings[id] = Math.max(
+      0,
+      country.econ.buildings[id] * (1 - DEPRECIATION_PER_MONTH),
+    )
+  }
+
   // Pops: growth, urbanisation, standard of living.
   const growthRate = applyModifiers(
     country,
@@ -839,10 +912,15 @@ function simulateCountry(
     0,
     30,
   )
-  // Smooth the stock so one bad month does not shock a country from 6% to 30%.
+  // Smooth the stock and cap the monthly move so the factory-absorption
+  // threshold cannot swing unemployment from 6% to 29% in a year.
+  const unemploymentStep = clamp(
+    (unemploymentTarget - country.econ.unemployment) * 0.25,
+    -1.5,
+    1.5,
+  )
   country.econ.unemployment = clamp(
-    country.econ.unemployment +
-      (unemploymentTarget - country.econ.unemployment) * 0.25,
+    country.econ.unemployment + unemploymentStep,
     0,
     30,
   )
@@ -908,10 +986,13 @@ function simulateCountry(
   country.government.legitimacy +=
     (legitimacyTarget - country.government.legitimacy) * 0.08
 
-  // Authority recovers in proportion to legitimacy.
+  // Authority recovers in proportion to legitimacy; a discredited regime
+  // loses it (round-2 P1-6).
+  const authorityFlow =
+    country.government.legitimacy * 0.03 -
+    (country.government.legitimacy < 30 ? 1.5 : 0)
   country.government.authority = clamp(
-    country.government.authority +
-      applyModifiers(country, 'authority', country.government.legitimacy * 0.03),
+    country.government.authority + applyModifiers(country, 'authority', authorityFlow),
     0,
     100,
   )
@@ -1347,7 +1428,7 @@ export function applyDecision(
       const id = String(params.building ?? '')
       const building = buildOf(id)
       if (building === undefined) return { ok: false, text: `${tag} 未知建筑 ${id}` }
-      const count = clamp(Math.floor(Number(params.count ?? 1)), 1, 20)
+      const count = clamp(Math.floor(num(params.count, 1)), 1, 20)
       const months = BUILDING_TIME[building]
       const monthlyCost = (BUILDINGS[building].cost * count) / months
       const stateProjects = country.econ.constructionQueue.filter(
@@ -1357,6 +1438,13 @@ export function applyDecision(
         return {
           ok: false,
           text: `${tag} 国有建造队列已满（最多 8 个项目），先等现有项目完成`,
+        }
+      }
+      const constructionBudget = country.econ.spending.construction * 0.8
+      if (constructionBudget > 0 && monthlyCost > constructionBudget * 3) {
+        return {
+          ok: false,
+          text: `${tag} 建设拨款不足（每月 ${monthlyCost.toFixed(1)} 金，预算 ${constructionBudget.toFixed(1)}），先提高建设支出`,
         }
       }
       if (country.econ.treasury < monthlyCost) {
@@ -1382,12 +1470,12 @@ export function applyDecision(
       }
     }
     case 'tax': {
-      const rate = clamp(Number(params.rate ?? country.econ.taxRate), 0, 60)
+      const rate = clamp(num(params.rate, country.econ.taxRate), 0, 60)
       country.econ.taxRate = rate
       return { ok: true, text: `${tag} 将税率调整为 ${rate.toFixed(0)}%` }
     }
     case 'tariff': {
-      const rate = clamp(Number(params.rate ?? country.econ.tariff), 0, 60)
+      const rate = clamp(num(params.rate, country.econ.tariff), 0, 60)
       country.econ.tariff = rate
       return { ok: true, text: `${tag} 将关税调整为 ${rate.toFixed(0)}%` }
     }
@@ -1396,7 +1484,7 @@ export function applyDecision(
       if (!(category in country.econ.spending)) {
         return { ok: false, text: `${tag} 未知支出类别 ${category}` }
       }
-      const amount = clamp(Number(params.amount ?? country.econ.spending[category]), 0, 50)
+      const amount = clamp(num(params.amount, country.econ.spending[category]), 0, 50)
       country.econ.spending[category] = amount
       return { ok: true, text: `${tag} 将 ${category} 支出调整为 ${amount.toFixed(1)}` }
     }
@@ -1409,7 +1497,7 @@ export function applyDecision(
       // AI investment confidence, bounded to ±10 around the country's base
       // and ±3 per month (plan 0003 §4/§6).
       const base = country.politicalEconomy.investmentConfidence
-      const delta = clamp(Number(params.amount ?? 1), -3, 3)
+      const delta = clamp(num(params.amount, 1), -3, 3)
       const next = clamp(country.econ.investmentConfidence + delta, base - 10, base + 10)
       country.econ.investmentConfidence = next
       return {
@@ -1418,7 +1506,7 @@ export function applyDecision(
       }
     }
     case 'conscript': {
-      const wanted = clamp(Number(params.amount ?? 1), 1, 20)
+      const wanted = clamp(num(params.amount, 1), 1, 20)
       const possible = Math.min(wanted, country.military.manpower / 2)
       if (possible <= 0.1) return { ok: false, text: `${tag} 没有可用的人力` }
       country.military.army += possible
@@ -1530,7 +1618,7 @@ export function applyDecision(
       const current = country.diplo.relations[target.id] ?? 0
       switch (move) {
         case 'improve': {
-          const amount = clamp(Number(params.amount ?? 8), 1, 30)
+          const amount = clamp(num(params.amount, 8), 1, 30)
           country.diplo.relations[target.id] = clamp(current + amount, -100, 100)
           target.diplo.relations[country.id] = clamp(
             (target.diplo.relations[country.id] ?? 0) + amount * 0.6,
@@ -1562,7 +1650,7 @@ export function applyDecision(
           return { ok: true, text: `${tag} 将${target.name}列为竞争对手` }
         }
         case 'gift': {
-          const amount = clamp(Number(params.amount ?? 3), 1, 20)
+          const amount = clamp(num(params.amount, 3), 1, 20)
           if (country.econ.treasury < amount) return { ok: false, text: `${tag} 国库不足以赠礼` }
           country.econ.treasury -= amount
           country.diplo.relations[target.id] = clamp(current + amount * 2, -100, 100)
@@ -1676,6 +1764,9 @@ export function applyPolicy(
     }
     const value = Number(effect.value)
     if (!Number.isFinite(value)) return { ok: false, text: '效果数值必须是有限数字。' }
+    if (Math.abs(value) > 200) {
+      return { ok: false, text: '单个效果数值不能超过 200（防止无界政策）' }
+    }
     const stack = effect.stack ?? 'flat'
     if (stack !== 'flat' && stack !== 'percent' && stack !== 'multiply') {
       return { ok: false, text: '效果单位必须是 flat / percent / multiply。' }
@@ -1696,8 +1787,17 @@ export function applyPolicy(
     })
   }
 
-  const cost = clamp(Math.round(Number(proposal.authorityCost ?? 5)), 0, 40)
-  if (!Number.isFinite(cost)) return { ok: false, text: '权威成本必须是数字。' }
+  // Authority cost scales with the effect's magnitude and duration. This keeps
+  // a permanent +50% GDP policy from costing the same 5 points as a +2% one
+  // (round-2 playtest P0-3).
+  const weight = parsed.reduce((sum, effect) => {
+    const months = effect.months ?? 12
+    const magnitude = Math.min(Math.abs(effect.value), 100)
+    return sum + magnitude * (effect.stack === 'flat' ? 0.5 : 1) * (months / 12)
+  }, 0)
+  const required = clamp(Math.round(weight * 0.2), 0, 40)
+  const requested = clamp(Math.round(num(proposal.authorityCost, 5)), 0, 40)
+  const cost = Math.max(required, requested)
   if (country.government.authority < cost) {
     return {
       ok: false,
@@ -1707,8 +1807,15 @@ export function applyPolicy(
   country.government.authority = clamp(country.government.authority - cost, 0, 100)
 
   parsed.forEach((effect, index) => {
+    // A permanent policy replaces an earlier permanent policy on the same
+    // stat/stack instead of stacking with it; timed policies keep their own
+    // slots and expire normally.
+    const id =
+      effect.months === undefined
+        ? `policy:${effect.stat}:${effect.stack ?? 'flat'}`
+        : `policy:${name}:${index}`
     addModifier(country, {
-      id: `policy:${name}:${index}`,
+      id,
       label: effect.label ?? name,
       stat: effect.stat,
       stack: effect.stack ?? 'flat',
@@ -1749,7 +1856,25 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
       narrative: `${country.name}调整投资信心`,
     }
   }
-  if (!atWar && country.econ.treasury > 8 && rng.chance(0.45)) {
+  // A tiny construction appropriation starves the queue; raise it first.
+  if (
+    country.econ.spending.construction < 2 &&
+    country.econ.treasury > 4 &&
+    rng.chance(0.25)
+  ) {
+    return {
+      countryId: country.id,
+      action: 'spending',
+      params: { category: 'construction', amount: country.econ.spending.construction + 1 },
+      narrative: `${country.name}增加建设拨款`,
+    }
+  }
+  if (
+    !atWar &&
+    country.econ.treasury > 8 &&
+    country.econ.constructionQueue.length < 6 &&
+    rng.chance(0.45)
+  ) {
     const options = ['factories', 'farms', 'mines', 'railroads', 'universities'] as const
     const building = rng.pick(options)
     return {

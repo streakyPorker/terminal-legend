@@ -259,6 +259,8 @@ export type Economy = {
   laborRawUtilization: number
   /** Construction actually funded last month (state + private), gold. */
   lastConstructionSpend: number
+  lastStateConstructionSpend: number
+  lastPrivateConstructionSpend: number
   history: {
     gdp: number[]
     treasury: number[]
