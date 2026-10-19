@@ -81,7 +81,7 @@ export function buildAiPrompt(world: WorldState): string {
     lines.push(countryLine(country, world))
   }
   lines.push('')
-  const recent = world.log.slice(-10)
+  const recent = world.log.slice(-16)
   if (recent.length > 0) {
     lines.push('近期大事：')
     for (const entry of recent) lines.push(`- ${fmtDate(entry.date)} ${entry.text}`)
