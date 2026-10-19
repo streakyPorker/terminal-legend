@@ -922,6 +922,11 @@ export const register: Register = (on, options) => {
       } else {
         $.ui.status(undefined)
       }
+    } else {
+      // A world survives in plugin state after /v3 end (so /v3 load can
+      // resume it), but an inactive game must not leave its status line
+      // lingering under the prompt in the next session.
+      $.ui.status(undefined)
     }
 
     return next(e)
@@ -932,6 +937,8 @@ export const register: Register = (on, options) => {
     if (world !== undefined) {
       await saveGame($, world).catch(() => undefined)
     }
+    // Do not carry a status line into the next session.
+    $.ui.status(undefined)
     return next(e)
   })
 
@@ -1132,7 +1139,14 @@ export const register: Register = (on, options) => {
         }
 
         case 'status': {
-          if (current === undefined) return { text: statusHint() }
+          if (current === undefined) {
+            // Clear any status line left behind by a previous session.
+            $.ui.status(undefined)
+            return { text: statusHint() }
+          }
+          // Re-render the line so a stale unit/format from an older session
+          // is replaced the next time the player asks for status.
+          await refreshStatus($)
           return { text: statusText(current.world) }
         }
 

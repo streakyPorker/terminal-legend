@@ -54,6 +54,9 @@ export const MODIFIER_STAT_NAMES: Record<ModifierStat, string> = {
   marketAccess: '市场接入',
   transportInfrastructure: '交通基础设施',
   administrativeCapacity: '行政能力',
+  privateInvestment: '私人投资',
+  laborShare: '劳动份额',
+  consumption: '消费倾向',
 }
 
 export const MODIFIER_STATS = Object.keys(MODIFIER_STAT_NAMES) as ModifierStat[]
