@@ -266,6 +266,21 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
+        <Heading ui={props.ui} text="建造队列" hint={econ.constructionQueue.length === 0 ? '（空闲）' : `${econ.constructionQueue.length} 个项目`} />
+        {econ.constructionQueue.length === 0 ? (
+          <Text dimColor>用「建造」下令，项目按工期与建设预算逐月推进。</Text>
+        ) : (
+          econ.constructionQueue.map(project => (
+            <Box flexDirection="row" columnGap={1}>
+              <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
+              <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
+              <Text dimColor>剩余 {project.monthsLeft} 月 · 每月 {project.monthlyCost.toFixed(1)}</Text>
+            </Box>
+          ))
+        )}
+      </Box>
+
+      <Box flexDirection="column" marginTop={1}>
         <Heading ui={props.ui} text="官僚效能" hint={`行动预算 ${player.bureaucracy.actionBudget} 项/月`} />
         <Box flexDirection="row" columnGap={1}>
           <Text dimColor>{padEnd('效能', 8)}</Text>

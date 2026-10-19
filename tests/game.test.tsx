@@ -39,7 +39,7 @@ describe('terminal-legend engine', () => {
     expect(left.countries.GBR?.pops.total).toEqual(right.countries.GBR?.pops.total)
   })
 
-  test('building a factory spends treasury and adds a factory', async () => {
+  test('building a factory queues a project instead of finishing it', async () => {
     const world = newWorld(5, 'PRU')
     const prussia = world.countries.PRU
     expect(prussia).toBeDefined()
@@ -56,8 +56,9 @@ describe('terminal-legend engine', () => {
       makeRngForWorld(world),
     )
     expect(result.ok).toBe(true)
-    expect(prussia.econ.buildings.factories).toBe(beforeFactories + 1)
-    expect(prussia.econ.treasury).toBeLessThan(beforeTreasury)
+    expect(prussia.econ.buildings.factories).toBe(beforeFactories)
+    expect(prussia.econ.treasury).toBe(beforeTreasury)
+    expect(prussia.econ.constructionQueue.length).toBe(1)
   })
 
   test('an event option applies its effects and resolves', async () => {

@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { deriveBureaucracy } from '../engine/data'
-import { advance, newWorld } from '../engine/sim'
+import { deriveBureaucracy, deriveUnemployment } from '../engine/data'
+import {
+  advance,
+  applyDecision,
+  completeBuilding,
+  computeEconomy,
+  inspectEconomy,
+  newWorld,
+} from '../engine/sim'
 import { migrateWorld } from '../engine/save'
 import { makeRngForWorld } from '../engine/data'
 import type { Country, WorldState } from '../types'
@@ -119,3 +126,161 @@ describe('M1 types, data and migration', () => {
     expect(migrateWorld({ version: 9, tick: 0, date: {}, countries: {} })).toBeUndefined()
   })
 })
+
+// ---------------------------------------------------------------- M2
+
+describe('M2 construction queue and economy fixes', () => {
+  test('a build order is queued, not completed on the spot', async () => {
+    const world = newWorld(5, 'PRU')
+    const prussia = world.countries.PRU
+    expect(prussia).toBeDefined()
+    if (prussia === undefined) return
+
+    const beforeFactories = prussia.econ.buildings.factories
+    const beforeTreasury = prussia.econ.treasury
+    const result = applyDecision(
+      world,
+      { countryId: 'PRU', action: 'build', params: { building: 'factories', count: 2 } },
+      makeRngForWorld(world),
+    )
+    expect(result.ok).toBe(true)
+    expect(prussia.econ.buildings.factories).toBe(beforeFactories)
+    expect(prussia.econ.treasury).toBe(beforeTreasury)
+    expect(prussia.econ.constructionQueue.length).toBe(1)
+    const project = prussia.econ.constructionQueue[0]
+    expect(project?.monthsLeft).toBe(4)
+    expect(project?.monthlyCost).toBe(2)
+  })
+
+  test('a queued factory finishes after several funded months', async () => {
+    const world = newWorld(5, 'PRU')
+    const prussia = world.countries.PRU
+    expect(prussia).toBeDefined()
+    if (prussia === undefined) return
+
+    const before = prussia.econ.buildings.factories
+    prussia.econ.treasury = 200
+    applyDecision(
+      world,
+      { countryId: 'PRU', action: 'build', params: { building: 'factories', count: 1 } },
+      makeRngForWorld(world),
+    )
+    advance(world, 24, [], makeRngForWorld(world))
+    expect(prussia.econ.buildings.factories).toBe(before + 1)
+    expect(prussia.econ.constructionQueue.length).toBe(0)
+  })
+
+  test('without a construction budget projects make no progress', async () => {
+    const world = newWorld(6, 'PRU')
+    const prussia = world.countries.PRU
+    expect(prussia).toBeDefined()
+    if (prussia === undefined) return
+
+    prussia.econ.spending.construction = 0
+    applyDecision(
+      world,
+      { countryId: 'PRU', action: 'build', params: { building: 'factories', count: 1 } },
+      makeRngForWorld(world),
+    )
+    advance(world, 3, [], makeRngForWorld(world))
+    expect(prussia.econ.constructionQueue[0]?.progress).toBe(0)
+  })
+
+  test('railroads and offices feed different infrastructure values', async () => {
+    const world = newWorld(7, 'GBR')
+    const gbr = world.countries.GBR
+    expect(gbr).toBeDefined()
+    if (gbr === undefined) return
+
+    const transportBefore = gbr.econ.transportInfrastructure
+    const administrativeBefore = gbr.econ.administrativeCapacity
+
+    completeBuilding(gbr, 'railroads', 2)
+    expect(gbr.econ.transportInfrastructure).toBe(transportBefore + 6)
+    expect(gbr.econ.administrativeCapacity).toBe(administrativeBefore)
+    const productionAfterRail = inspectEconomy(gbr).production.grain
+
+    completeBuilding(gbr, 'offices', 3)
+    completeBuilding(gbr, 'universities', 2)
+    expect(gbr.econ.administrativeCapacity).toBe(administrativeBefore + 3 + 1)
+    expect(gbr.econ.transportInfrastructure).toBe(transportBefore + 6)
+    expect(inspectEconomy(gbr).production.grain).toBe(productionAfterRail)
+  })
+
+  test('army and navy appropriations cost money', async () => {
+    const world = newWorld(8, 'FRA')
+    const fra = world.countries.FRA
+    expect(fra).toBeDefined()
+    if (fra === undefined) return
+
+    fra.econ.spending.army = 0
+    fra.econ.spending.navy = 0
+    const leanExpense = computeEconomy(fra).expense
+    fra.econ.spending.army = 10
+    fra.econ.spending.navy = 10
+    const armedExpense = computeEconomy(fra).expense
+    // Prices drift between the two calls, so compare the appropriation itself
+    // within a small tolerance.
+    expect(armedExpense - leanExpense).toBeGreaterThan(9.5)
+    expect(armedExpense - leanExpense).toBeLessThan(10.5)
+  })
+
+  test('unemployment reacts to factories, literacy and unrest', async () => {
+    const world = newWorld(9, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+
+    const base = deriveUnemployment(qing)
+    expect(base).toBeGreaterThan(0)
+    qing.econ.buildings.factories += 40
+    expect(deriveUnemployment(qing)).toBeLessThan(base)
+    qing.pops.literacy += 0.2
+    expect(deriveUnemployment(qing)).toBeLessThan(base)
+    qing.pops.radicals = 100
+    expect(deriveUnemployment(qing)).toBeGreaterThan(base)
+  })
+
+  test('laws spend authority and fail when authority is gone', async () => {
+    const world = newWorld(10, 'AUS')
+    const aus = world.countries.AUS
+    expect(aus).toBeDefined()
+    if (aus === undefined) return
+
+    aus.government.authority = 3
+    const denied = applyDecision(
+      world,
+      { countryId: 'AUS', action: 'law', params: { name: '教育改革' } },
+      makeRngForWorld(world),
+    )
+    expect(denied.ok).toBe(false)
+
+    aus.government.authority = 100
+    const passed = applyDecision(
+      world,
+      { countryId: 'AUS', action: 'law', params: { name: '教育改革' } },
+      makeRngForWorld(world),
+    )
+    expect(passed.ok).toBe(true)
+    expect(aus.government.authority).toBeLessThan(100)
+    expect(aus.government.authority).toBeGreaterThanOrEqual(85)
+  })
+
+  test('infamy drags relations down', async () => {
+    const clean = newWorld(11, 'RUS')
+    const infamous = newWorld(11, 'RUS')
+    const cleanRus = clean.countries.RUS
+    const infamousRus = infamous.countries.RUS
+    expect(cleanRus).toBeDefined()
+    expect(infamousRus).toBeDefined()
+    if (cleanRus === undefined || infamousRus === undefined) return
+
+    infamousRus.diplo.infamy = 50
+    advance(clean, 1, [], makeRngForWorld(clean))
+    advance(infamous, 1, [], makeRngForWorld(infamous))
+    expect(infamousRus.diplo.relations.GBR ?? 0).toBeLessThan(
+      cleanRus.diplo.relations.GBR ?? 0,
+    )
+  })
+})
+

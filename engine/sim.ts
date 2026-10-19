@@ -1,5 +1,7 @@
 import type {
+  BuildingId,
   Country,
+  ConstructionProject,
   EventOption,
   GameDate,
   GameEvent,
@@ -11,11 +13,13 @@ import type {
 } from '../types'
 import {
   BUILDINGS,
+  BUILDING_TIME,
   GOODS,
   GOOD_IDS,
   buildOf,
   createWorld,
   deriveBureaucracy,
+  deriveUnemployment,
   makeRngForWorld,
   spawnEvent,
   successorFor,
@@ -160,11 +164,15 @@ export function computeEconomy(country: Country): EconomySnapshot {
   const expense =
     country.military.army * 0.05 * (1 + country.military.quality) +
     country.military.navy * 0.04 +
+    // Standing appropriations: armies and fleets are no longer free.
+    sp.army * 0.5 +
+    sp.navy * 0.5 +
     popFactor * 0.12 +
     sp.bureaucracy * popFactor * 0.02 +
     sp.education * popFactor * 0.03 +
     sp.welfare * popFactor * 0.03 +
-    sp.construction * 0.8 +
+    // Construction is spent by the queue in simulateCountry, and folded into
+    // the displayed expense there.
     country.econ.debt * 0.004 +
     gdp * (1 - country.econ.marketAccess) * 0.02 +
     (b.universities + b.barracks) * 0.01
@@ -207,6 +215,97 @@ function pushHistory(list: number[], value: number): void {
   if (list.length > 36) list.shift()
 }
 
+/** Adds built structures and their side effects. */
+export function completeBuilding(country: Country, building: BuildingId, count: number): void {
+  country.econ.buildings[building] += count
+  if (building === 'railroads') {
+    country.econ.transportInfrastructure = clamp(
+      country.econ.transportInfrastructure + count * 3,
+      0,
+      100,
+    )
+    country.econ.marketAccess = clamp(country.econ.marketAccess + count * 0.02, 0, 1)
+  }
+  if (building === 'ports') {
+    country.econ.marketAccess = clamp(country.econ.marketAccess + count * 0.01, 0, 1)
+  }
+  if (building === 'universities') {
+    country.econ.administrativeCapacity = clamp(
+      country.econ.administrativeCapacity + count * 0.5,
+      0,
+      100,
+    )
+  }
+  if (building === 'offices') {
+    country.econ.administrativeCapacity = clamp(
+      country.econ.administrativeCapacity + count,
+      0,
+      100,
+    )
+  }
+  country.bureaucracy = deriveBureaucracy(country, true)
+}
+
+/**
+ * Spends the month's construction budget on queued projects. Money is
+ * deducted as it is spent; whatever no project absorbs is administrative
+ * waste (plan §7.3). Projects whose cash or budget runs out keep their
+ * progress and wait for a better month.
+ */
+function settleConstruction(
+  world: WorldState,
+  country: Country,
+  rng: Rng,
+  log: LogEntry[],
+): void {
+  const queue = country.econ.constructionQueue
+  if (queue.length === 0) return
+  let budget = country.econ.spending.construction * 0.8
+  const remaining: ConstructionProject[] = []
+
+  for (const project of queue) {
+    // Fund a full month's bill where the budget allows; bureaucratic leakage
+    // then decides how much of it becomes progress. (Capping the spend at the
+    // remaining progress would approach 1 asymptotically and never finish.)
+    const spend = Math.min(budget, project.monthlyCost, Math.max(0, country.econ.treasury))
+    if (spend > 0) {
+      budget -= spend
+      country.econ.treasury -= spend
+      const effective = spend * country.bureaucracy.fundEfficiency
+      project.progress = Math.min(
+        1,
+        project.progress + effective / Math.max(0.0001, project.monthlyCost),
+      )
+    }
+
+    if (project.progress >= 1) {
+      project.monthsLeft -= 1
+      project.progress = 0
+      if (project.monthsLeft <= 0) {
+        if (rng.chance(country.bureaucracy.delayChance)) {
+          project.monthsLeft = 1
+          remaining.push(project)
+          continue
+        }
+        completeBuilding(country, project.building, project.count)
+        log.push({
+          date: { ...world.date },
+          kind: 'economy',
+          countryId: country.id,
+          text: `[${country.flag}] ${country.name}建成 ${project.count} 座${BUILDINGS[project.building].name}`,
+        })
+        continue
+      }
+    }
+    remaining.push(project)
+  }
+
+  country.econ.constructionQueue = remaining
+  // Unused appropriations evaporate into the administration.
+  const waste = Math.min(Math.max(0, budget), Math.max(0, country.econ.treasury))
+  country.econ.treasury -= waste
+}
+
 function simulateCountry(
   world: WorldState,
   country: Country,
@@ -226,9 +325,10 @@ function simulateCountry(
   }
   scarcity = clamp(scarcity, 0, 8)
 
+  const constructionBudget = country.econ.spending.construction * 0.8
   country.econ.gdp = snap.gdp
   country.econ.income = snap.income
-  country.econ.expense = snap.expense
+  country.econ.expense = snap.expense + constructionBudget
   country.econ.goods = snap.production
 
   const balance = snap.income - snap.expense
@@ -241,6 +341,9 @@ function simulateCountry(
     country.econ.debt -= repay
     country.econ.treasury -= repay
   }
+
+  // The construction queue pays from the appropriation, including its waste.
+  settleConstruction(world, country, rng, log)
 
   // Pops: growth, urbanisation, standard of living.
   const growthRate =
@@ -288,6 +391,9 @@ function simulateCountry(
       country.econ.buildings.universities * 0.0002) *
     (1 - country.pops.literacy)
   country.pops.literacy = clamp(country.pops.literacy + literacyGain, 0, 1)
+
+  // Industry absorbs labour; literacy and unrest move the rate the other way.
+  country.econ.unemployment = deriveUnemployment(country)
 
   const radicalPressure =
     Math.max(0, country.econ.taxRate - 10) * 0.12 +
@@ -337,6 +443,13 @@ function simulateCountry(
   )
   country.government.legitimacy +=
     (legitimacyTarget - country.government.legitimacy) * 0.08
+
+  // Authority recovers in proportion to legitimacy.
+  country.government.authority = clamp(
+    country.government.authority + country.government.legitimacy * 0.03,
+    0,
+    100,
+  )
 
   // Bureaucratic effectiveness and the four constraints it feeds.
   country.bureaucracy = deriveBureaucracy(country, true)
@@ -403,7 +516,7 @@ function simulateCountry(
   pushHistory(country.econ.history.legitimacy, country.government.legitimacy)
   pushHistory(country.econ.history.radicals, country.pops.radicals)
 
-  if (country.econ.treasury <= 0 && balance < 0 && rng.chance(0.2)) {
+  if (country.econ.treasury <= 0 && snap.income - country.econ.expense < 0 && rng.chance(0.2)) {
     log.push({
       date: { ...world.date },
       kind: 'economy',
@@ -418,11 +531,14 @@ function driftRelations(world: WorldState): void {
     for (const other of Object.values(world.countries)) {
       if (other.id === country.id) continue
       const current = country.diplo.relations[other.id] ?? 0
-      const target = country.diplo.alliances.includes(other.id)
-        ? 55
-        : country.diplo.rivals.includes(other.id)
-          ? -35
-          : 0
+      // Infamy drags every relationship's resting point down.
+      const infamyDrag = country.diplo.infamy * 0.1
+      const target =
+        (country.diplo.alliances.includes(other.id)
+          ? 55
+          : country.diplo.rivals.includes(other.id)
+            ? -35
+            : 0) - infamyDrag
       country.diplo.relations[other.id] = current + (target - current) * 0.012
     }
   }
@@ -697,6 +813,16 @@ function relationLine(country: Country, other: Country): string {
   return `[${other.flag}]${other.name} ${value >= 0 ? '+' : ''}${value}`
 }
 
+/** Political capital each law consumes (plan §7.6). */
+const LAW_AUTHORITY_COST: Record<string, number> = {
+  教育改革: 8,
+  福利改革: 10,
+  自由贸易: 12,
+  保护关税: 10,
+  征兵制: 15,
+  宗教宽容: 5,
+}
+
 export function applyDecision(
   world: WorldState,
   decision: Decision,
@@ -712,43 +838,27 @@ export function applyDecision(
       const id = String(params.building ?? '')
       const building = buildOf(id)
       if (building === undefined) return { ok: false, text: `${tag} 未知建筑 ${id}` }
-      const wanted = clamp(Math.floor(Number(params.count ?? 1)), 1, 20)
-      const unitCost = BUILDINGS[building].cost
-      const affordable = Math.min(wanted, Math.floor(country.econ.treasury / unitCost))
-      if (affordable <= 0) return { ok: false, text: `${tag} 国库不足以建造${BUILDINGS[building].name}` }
-      country.econ.treasury -= affordable * unitCost
-      country.econ.buildings[building] += affordable
-      if (building === 'railroads') {
-        country.econ.transportInfrastructure = clamp(
-          country.econ.transportInfrastructure + affordable * 3,
-          0,
-          100,
-        )
-        country.econ.marketAccess = clamp(country.econ.marketAccess + affordable * 0.02, 0, 1)
+      const count = clamp(Math.floor(Number(params.count ?? 1)), 1, 20)
+      const months = BUILDING_TIME[building]
+      const monthlyCost = (BUILDINGS[building].cost * count) / months
+      if (country.econ.treasury < monthlyCost) {
+        return {
+          ok: false,
+          text: `${tag} 国库不足以启动${BUILDINGS[building].name}（首月需 ${monthlyCost.toFixed(1)}）`,
+        }
       }
-      if (building === 'ports') {
-        country.econ.marketAccess = clamp(country.econ.marketAccess + affordable * 0.01, 0, 1)
-      }
-      if (building === 'universities') {
-        country.econ.administrativeCapacity = clamp(
-          country.econ.administrativeCapacity + affordable * 0.5,
-          0,
-          100,
-        )
-      }
-      if (building === 'offices') {
-        country.econ.administrativeCapacity = clamp(
-          country.econ.administrativeCapacity + affordable,
-          0,
-          100,
-        )
-      }
-      if (building === 'railroads' || building === 'universities' || building === 'offices') {
-        country.bureaucracy = deriveBureaucracy(country, true)
-      }
+      country.econ.constructionQueue.push({
+        id: `proj-${world.tick}-${country.id}-${country.econ.constructionQueue.length}`,
+        building,
+        count,
+        monthsLeft: months,
+        monthlyCost,
+        progress: 0,
+        startedAt: { ...world.date },
+      })
       return {
         ok: true,
-        text: `${tag} 建造了 ${affordable} 座${BUILDINGS[building].name}（花费 ${(affordable * unitCost).toFixed(1)}）`,
+        text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列（${months} 个月，每月 ${monthlyCost.toFixed(1)}）`,
       }
     }
     case 'tax': {
@@ -822,6 +932,14 @@ export function applyDecision(
       }
       const apply = legal[name]
       if (apply === undefined) return { ok: false, text: `${tag} 未知法案 ${name}` }
+      const cost = LAW_AUTHORITY_COST[name] ?? 8
+      if (country.government.authority < cost) {
+        return {
+          ok: false,
+          text: `${tag} 权威不足，无法通过${name}（需要 ${cost}，现有 ${Math.round(country.government.authority)}）`,
+        }
+      }
+      country.government.authority = clamp(country.government.authority - cost, 0, 100)
       return { ok: true, text: apply() }
     }
     case 'diplomacy': {
@@ -976,8 +1094,20 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
       narrative: `${country.name}以福利安抚民怨`,
     }
   }
+  const others = Object.values(world.countries).filter(one => one.id !== country.id)
+  const infamous = others.filter(
+    one => one.diplo.infamy > 25 && !country.diplo.rivals.includes(one.id),
+  )
+  if (!atWar && infamous.length > 0 && rng.chance(0.08)) {
+    const target = rng.pick(infamous)
+    return {
+      countryId: country.id,
+      action: 'diplomacy',
+      params: { target: target.id, move: 'rival' },
+      narrative: `${country.name}对声名狼藉的${target.name}提高警惕`,
+    }
+  }
   if (!atWar && rng.chance(0.12)) {
-    const others = Object.values(world.countries).filter(one => one.id !== country.id)
     const target = rng.pick(others)
     const current = country.diplo.relations[target.id] ?? 0
     if (current > -60 && rng.chance(0.4)) {
