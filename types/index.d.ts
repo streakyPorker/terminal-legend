@@ -85,6 +85,9 @@ export type Spending = Record<SpendingCategory, number>
 export type ModifierStat =
   | 'production'
   | `${GoodId}Output`
+  | 'demand'
+  | `${GoodId}Demand`
+  | 'gdp'
   | 'income'
   | 'expense'
   | 'taxEfficiency'

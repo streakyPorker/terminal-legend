@@ -113,23 +113,27 @@ function computeDemand(country: Country): Record<GoodId, number> {
   const solFactor = 0.7 + country.pops.sol / 100
   const b = country.econ.buildings
   const out = zeroGoods()
+  const demand = (id: GoodId, value: number): number =>
+    applyModifiers(country, 'demand', applyModifiers(country, `${id}Demand`, value))
 
-  out.grain = popFactor * 9 * solFactor
-  out.clothes = popFactor * 2.2 * solFactor
-  out.furniture = popFactor * 0.7 * solFactor
-  out.liquor = popFactor * 1.1 * solFactor
-  out.services = popFactor * 2.0 * solFactor
-  out.luxury =
+  out.grain = demand('grain', popFactor * 9 * solFactor)
+  out.clothes = demand('clothes', popFactor * 2.2 * solFactor)
+  out.furniture = demand('furniture', popFactor * 0.7 * solFactor)
+  out.liquor = demand('liquor', popFactor * 1.1 * solFactor)
+  out.services = demand('services', popFactor * 2.0 * solFactor)
+  out.luxury = demand(
+    'luxury',
     popFactor *
-    0.18 *
-    solFactor *
-    (0.5 + (country.pops.capitalists / Math.max(1, country.pops.total)) * 8)
-  out.coal = popFactor * 1.2 + b.factories * 0.35
-  out.iron = popFactor * 0.8 + b.factories * 0.4 + b.railroads * 0.5
-  out.fabric = b.factories * 0.45 + popFactor * 0.5
-  out.wood = b.factories * 0.2 + b.railroads * 0.4 + popFactor * 0.3
-  out.machinery = b.factories * 0.18
-  out.arms = country.military.army * 0.02 + country.military.navy * 0.01
+      0.18 *
+      solFactor *
+      (0.5 + (country.pops.capitalists / Math.max(1, country.pops.total)) * 8),
+  )
+  out.coal = demand('coal', popFactor * 1.2 + b.factories * 0.35)
+  out.iron = demand('iron', popFactor * 0.8 + b.factories * 0.4 + b.railroads * 0.5)
+  out.fabric = demand('fabric', b.factories * 0.45 + popFactor * 0.5)
+  out.wood = demand('wood', b.factories * 0.2 + b.railroads * 0.4 + popFactor * 0.3)
+  out.machinery = demand('machinery', b.factories * 0.18)
+  out.arms = demand('arms', country.military.army * 0.02 + country.military.navy * 0.01)
   return out
 }
 
@@ -160,7 +164,7 @@ export function computeEconomy(country: Country): EconomySnapshot {
 
   let gross = 0
   for (const id of GOOD_IDS) gross += production[id] * country.econ.prices[id]
-  const gdp = gross * 0.36 + country.pops.total * 0.008
+  const gdp = applyModifiers(country, 'gdp', gross * 0.36 + country.pops.total * 0.008)
 
   const tradeVolume = gross * 0.35
   const taxEfficiency = applyModifiers(
