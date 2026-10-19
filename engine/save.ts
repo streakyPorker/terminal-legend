@@ -1,8 +1,6 @@
 import type { EngineInterface } from 'claude-code'
 import type { WorldState } from '../types'
 
-const ACTIVE_TTL_MS = 12 * 60 * 60 * 1000
-
 const safeName = (name: string | undefined): string => {
   const cleaned = (name ?? 'save').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32)
   return cleaned === '' ? 'save' : cleaned
@@ -66,50 +64,5 @@ export async function hasSave($: EngineInterface, name?: string): Promise<boolea
     return await $.fs.exists(await savePath($, name))
   } catch {
     return false
-  }
-}
-
-type ActiveEntry = { id: string; cwd: string; at: number }
-
-async function activePath($: EngineInterface): Promise<string | undefined> {
-  const home = await $.env.get('HOME')
-  if (home === undefined || home === '') return undefined
-  return `${home}/.claude/plugins/terminal-legend/active.json`
-}
-
-async function readActive($: EngineInterface, path: string): Promise<ActiveEntry[]> {
-  try {
-    if (!(await $.fs.exists(path))) return []
-    const text = await $.fs.read(path)
-    const parsed = JSON.parse(text) as { sessions?: ActiveEntry[] }
-    if (!Array.isArray(parsed.sessions)) return []
-    const cutoff = Date.now() - ACTIVE_TTL_MS
-    return parsed.sessions.filter(
-      entry =>
-        typeof entry.id === 'string' &&
-        typeof entry.cwd === 'string' &&
-        typeof entry.at === 'number' &&
-        entry.at >= cutoff,
-    )
-  } catch {
-    return []
-  }
-}
-
-/**
- * Notes that this session is running a game. The status line now always shows
- * claude-hud and the campaign's band together, so this is bookkeeping only.
- */
-export async function setActive($: EngineInterface, isActive: boolean): Promise<void> {
-  const path = await activePath($)
-  if (path === undefined) return
-  const id = await $.session.id()
-  const cwd = await $.session.cwd()
-  const entries = (await readActive($, path)).filter(entry => entry.id !== id)
-  if (isActive) entries.push({ id, cwd, at: Date.now() })
-  try {
-    await $.fs.write(path, JSON.stringify({ sessions: entries }, null, 2))
-  } catch {
-    // A status line is decoration; the game runs without it.
   }
 }

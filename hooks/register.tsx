@@ -14,7 +14,7 @@ import {
   type AdvanceReport,
   type Decision,
 } from '../engine/sim'
-import { loadGame, saveGame, setActive } from '../engine/save'
+import { loadGame, saveGame } from '../engine/save'
 import { applyCheat, type CheatParams } from '../engine/cheat'
 import { SECRETARY_PROMPT, monthlyBriefing } from '../engine/secretary'
 import { countryTag, fmtDate, fmtDateLong, fmtNumber, statusLine } from '../view/format'
@@ -830,7 +830,6 @@ export const register: Register = (on, options) => {
     const world = await getWorld($)
     const ui = await getUi($)
     if (world !== undefined && ui.isActive) {
-      await setActive($, true)
       await patchUi($, { council: { ...ui.council, isOpen: true } })
       await refreshStatus($)
     } else if (world === undefined) {
@@ -848,11 +847,9 @@ export const register: Register = (on, options) => {
           tab: 'council',
           council: { isOpen: true, report: '', secretaryReport: '', isRunning: false },
         })
-        await setActive($, true)
         await refreshStatus($)
         $.ui.log(`终末传奇：已载入 ${fmtDateLong(loaded.date)} 的存档，御前会议已开始`)
       } else {
-        await setActive($, false)
         $.ui.status(undefined)
       }
     }
@@ -865,7 +862,6 @@ export const register: Register = (on, options) => {
     if (world !== undefined) {
       await saveGame($, world).catch(() => undefined)
     }
-    await setActive($, false)
     return next(e)
   })
 
@@ -937,7 +933,6 @@ export const register: Register = (on, options) => {
               isRunning: false,
             },
           })
-          await setActive($, true)
           await refreshStatus($)
           await openPane($)
           await saveGame($, world).catch(() => undefined)
@@ -1142,7 +1137,6 @@ export const register: Register = (on, options) => {
               isRunning: false,
             },
           })
-          await setActive($, true)
           await refreshStatus($)
           await openPane($)
           return { text: `已载入 ${fmtDateLong(loaded.date)} 的存档，你扮演 ${loaded.countries[loaded.playerId]?.name ?? loaded.playerId}。` }
@@ -1156,7 +1150,6 @@ export const register: Register = (on, options) => {
             await saveGame($, world).catch(() => undefined)
           }
           await patchUi($, { isActive: false, isPaneOpen: false })
-          await setActive($, false)
           $.ui.status(undefined)
           $.ui.toast('本局已结束，存档保留')
           return { text: '本局已结束。存档保留，/v3 load 可继续，/v3 new 可开新局。' }

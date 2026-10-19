@@ -89,7 +89,7 @@ Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplo
 `~/.claude/plugins/terminal-legend/statusline.mjs` 是一个状态行调度器：它始终执行
 `delegate.txt` 里保存的原始命令（即 claude-hud 的 statusline），不再按游戏是否激活
 屏蔽对方。游戏的状态文字与 `AbovePrompt` Band 叠加在同一屏上，两者共存。
-`active.json` 仍由插件写入，仅作会话记录，不参与显示决策。
+插件不再写入 `active.json`，也不再判断游戏是否激活。
 
 安装/修复：
 
