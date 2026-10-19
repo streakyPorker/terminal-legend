@@ -1,0 +1,10 @@
+# Engine-generated types (rewritten on every load)
+.claude-plugin/types/
+
+# Game saves and the statusline activation flag
+.terminal-legend/
+
+# Editor / OS
+.DS_Store
+*.log
+node_modules/

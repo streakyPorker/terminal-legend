@@ -1,0 +1,27 @@
+{
+  "name": "terminal-legend",
+  "version": "0.1.0",
+  "description": "A Victoria-3-inspired grand strategy simulation inside Claude Code: deterministic economy and diplomacy, persona-driven AI leaders, a live HUD, and chat-native play.",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "aiModel": {
+      "title": "AI leader model",
+      "type": "string",
+      "default": "haiku",
+      "options": ["haiku", "sonnet", "opus"],
+      "description": "Model used for background AI leader decisions."
+    },
+    "autoTickSeconds": {
+      "title": "Seconds per month",
+      "type": "number",
+      "default": 60,
+      "description": "Seconds of real time per simulated month when auto-advance is on."
+    },
+    "autoStart": {
+      "title": "Start new games on auto-advance",
+      "type": "boolean",
+      "default": true,
+      "description": "Whether /v3 new begins with the clock running. A player message pauses it either way."
+    }
+  }
+}
