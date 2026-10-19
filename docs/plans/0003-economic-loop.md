@@ -23,6 +23,14 @@
 | 验收 | 60 个月确定性螺旋测试 + 可玩 UI |
 | 科技线 | 后续横切层，影响所有线路；本切片不做 |
 
+### 0.1 已定约束参数
+
+- 规模边际递减：`capacity ∝ count^0.98`（3000 座约 −3.7%，100 座约 −9%）。
+- 资本门槛：基础 4%/年 + 债务率 × 2%；预期回报低于门槛的利润转闲置。
+- 劳动力：`laborDemand = farms×0.3 + mines×0.6 + factories×1.0 + railroads×0.2 + ports×0.4 + offices×0.1 + universities×0.2 + barracks×0.3`（万）；`laborForce = peasants×0.6 + workers + artisans`；利用率夹在 0.5–1。
+- 价格平滑：沿用 0.3 的月度收敛系数。
+- 政府需求：按 §2.3 的支出映射表，把支出金额转为对应商品需求。
+
 ## 1. 月度结算顺序
 
 1. 读取资源禀赋，计算每种商品的资源乘数。
@@ -53,7 +61,18 @@
 - 资本利润的消费部分主要购买奢侈品、家具、服务（收入弹性更高）。
 - 需求随收入增长但逐步饱和，避免无限螺旋。
 
-初始参数（可调）：粮食生存底线最高，成衣/家具次之；奢侈品弹性最高，粮食接近 0。
+已定参数（每 popFactor = 人口万 / 1000，每月）：
+
+| 商品 | 生存底线 | 收入弹性份额 |
+| --- | --- | --- |
+| 粮食 | 7.0 | 0.15 |
+| 成衣 | 1.2 | 0.18 |
+| 家具 | 0.3 | 0.10 |
+| 酒类 | 0.6 | 0.10 |
+| 服务 | 1.0 | 0.27 |
+| 奢侈品 | 0.02 | 0.20 |
+
+清国 popFactor≈40 时生存成本约 693 金/月；粮食需求约 370，与旧手感接近。奢侈品弹性最高，粮食最低，收入上升自然升级消费。
 
 ### 2.2 投资需求 I
 
@@ -78,12 +97,30 @@
 
 ```
  unemployment = 现有公式
- laborShare   = clamp(baseLaborShare − (unemployment − 5) × 0.01, 0.35, 0.70)
+ laborShare   = clamp(profile.laborShareBase − (unemployment − 5) × 0.01, 0.35, 0.70)
  wages        = GDP × laborShare
  profits      = GDP × (1 − laborShare)
+ savingsRate  = profile.savingsRate × (1 + privateInvestment/100)
 ```
 
-- 工资进入劳动家庭消费预算；利润按储蓄率分为投资与资本家消费。
+每国在 `COUNTRY_SEEDS` 中显式配置 `politicalEconomy`：
+
+| 国家 | 劳动份额 | 储蓄率 | 闲置留存 | 投资信心 |
+| --- | --- | --- | --- | --- |
+| 英国 | 0.52 | 0.42 | 0.55 | +10 |
+| 法国 | 0.55 | 0.35 | 0.50 | +5 |
+| 普鲁士 | 0.54 | 0.38 | 0.55 | +8 |
+| 美国 | 0.54 | 0.40 | 0.55 | +12 |
+| 大清 | 0.62 | 0.20 | 0.40 | −5 |
+| 俄国 | 0.63 | 0.18 | 0.35 | −8 |
+| 奥地利 | 0.60 | 0.22 | 0.40 | −3 |
+| 日本 | 0.60 | 0.24 | 0.45 | 0 |
+| 奥斯曼 | 0.62 | 0.18 | 0.35 | −6 |
+| 西班牙 | 0.61 | 0.20 | 0.40 | −4 |
+
+- 工资进入劳动家庭消费预算；利润按各国储蓄率分为投资与资本家消费。
+- 闲置留存是该国闲置利润留在私人资本池的比例，其余转为奢侈品消费。
+- AI 投资信心与政策修正叠加在 `profile.investmentConfidence` 之上。
 - 税收从工资/利润中扣除；福利作为转移支付回到劳动家庭。
 - 阶级人口权重影响两组的消费规模；本切片先用总量 × 份额。
 
@@ -94,7 +131,7 @@
  privateCapital += savings
  投资分配：按各商品利润率（价格 × 产能利用率 − 成本）与未满足需求排序
  项目进入建造队列（owner='private'），每月从 privateCapital 支付
- 闲置资金：idleSplit 比例转为奢侈品消费 / 留存私人资本（受政策与信心修正）
+ 闲置资金：按 profile.idleRetained 留存私人资本，其余转为奢侈品消费（受政策与信心修正）
 ```
 
 - 私人项目在 UI 中可见，标注「私人」，**不可取消**。
@@ -130,7 +167,7 @@ export const RESOURCE_MAP: Record<ResourceId, {
 
 | 国家 | 农田 | 林地 | 煤 | 铁 |
 | --- | --- | --- | --- | --- |
-| 大清 | 85 | 60 | 70 | 45 |
+| 大清 | 85 | 60 | 65 | 40 |
 | 英国 | 45 | 25 | 100 | 95 |
 | 法国 | 70 | 55 | 55 | 60 |
 | 普鲁士 | 60 | 45 | 80 | 70 |
@@ -153,7 +190,7 @@ export const RESOURCE_MAP: Record<ResourceId, {
 
 - `Economy` 新增：`privateCapital`、`investmentConfidence`（或直接用修正）、`resources`、`gdpComponents: {c,i,g,nx}`、`laborShare`、`profits`、`wages`。
 - `ConstructionProject` 新增 `owner: 'state' | 'private'`。
-- `Country` 新增 `resources: Record<ResourceId, number>`。
+- `Country` 新增 `resources: Record<ResourceId, number>` 与 `politicalEconomy: { laborShareBase, savingsRate, idleRetained, investmentConfidence }`。
 - `ModifierStat` 新增 `privateInvestment`、`laborShare`、`consumption`。
 - 世界版本升到 5；按 ADR 0005 不做迁移，旧存档删除。
 
