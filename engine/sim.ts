@@ -27,6 +27,7 @@ import {
   GOVERNMENT_DEMAND,
   INCOME_ELASTICITY,
   INVESTMENT_DEMAND,
+  SPENDING,
   SUBSISTENCE,
   buildOf,
   createWorld,
@@ -803,12 +804,8 @@ function investPrivateCapital(
         progress: 0,
         startedAt: { ...world.date },
       })
-      log.push({
-        date: { ...world.date },
-        kind: 'economy',
-        countryId: country.id,
-        text: `[${country.flag}] ${country.name}的私人资本更新 1 座${BUILDINGS[renewal.building].name}`,
-      })
+      // Renewal is routine maintenance; it stays visible in the queue but is
+      // not worth a chronicle line every few months for every country.
       started = true
     }
   }
@@ -1603,7 +1600,10 @@ export function applyDecision(
       }
       const amount = clamp(num(params.amount, country.econ.spending[category]), 0, 50)
       country.econ.spending[category] = amount
-      return { ok: true, text: `${tag} 将 ${category} 支出调整为 ${amount.toFixed(1)}` }
+      return {
+        ok: true,
+        text: `${tag} 将${SPENDING[category].name}支出调整为 ${amount.toFixed(1)}`,
+      }
     }
     case 'research': {
       const name = String(params.tech ?? techName(country.tech.level + 1))
