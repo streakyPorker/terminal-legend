@@ -159,6 +159,7 @@ describe('terminal-legend command surface', () => {
 
     const status = await run({ command: 'v3', args: 'status' })
     expect(status.text).toContain('大清')
+    expect(status.text).toContain('金')
 
       const built = await run({ command: 'v3', args: 'help' })
       expect(built.text).toContain('/v3 new')
@@ -199,6 +200,7 @@ describe('terminal-legend drawing', () => {
     const tabs: TabId[] = [
       'council',
       'overview',
+      'rankings',
       'economy',
       'pops',
       'diplomacy',
@@ -281,6 +283,40 @@ describe('terminal-legend drawing', () => {
       expect(await ui.find({ type: 'Text', text: /已执行：调整税率/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /农场×1/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /纺织繁荣/ })).toBeDefined()
+      await ui.unmount()
+    }
+  })
+
+  test('the rankings tab draws world tables', async ($, on) => {
+    const world = newWorld(3, 'QING')
+    on('ui.render', { component: 'Pane', requestId: 'rank-pane' }, async ($hang, e) => {
+      const kit = ($hang as unknown as { ui: { resolve: (x: unknown) => UiKit } }).ui.resolve(e)
+      return (
+        <Panel
+          ui={kit}
+          world={world}
+          width={e.props.bodyColumns}
+          tab="rankings"
+          notice=""
+          onTab={() => undefined}
+          onControl={() => undefined}
+          onEvent={() => undefined}
+          council={{ isOpen: true, report: '', secretaryReport: '', isRunning: false }}
+          onCouncil={() => undefined}
+        />
+      )
+    })
+    for (const surface of ['terminal', 'desktop'] as const) {
+      const ui = await $.ui.mount({
+        plugin: 'terminal-legend',
+        surface,
+        component: 'Pane',
+        requestId: 'rank-pane',
+        props: PANE_PROPS,
+      })
+      expect(await ui.find({ type: 'Text', text: /经济/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /人口与社会/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /军事/ })).toBeDefined()
       await ui.unmount()
     }
   })

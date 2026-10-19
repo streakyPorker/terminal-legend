@@ -53,7 +53,11 @@ export async function loadGame(
   if (!exists) return undefined
   try {
     const text = await $.fs.read(path)
-    return parseWorld(JSON.parse(text))
+    const world = parseWorld(JSON.parse(text))
+    // A session that ended mid-secretary leaves this transient flag set; it
+    // must not lock the next session out of summoning the secretary.
+    if (world !== undefined) world.secretary.isRunning = false
+    return world
   } catch {
     return undefined
   }

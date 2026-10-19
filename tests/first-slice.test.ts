@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { deriveBureaucracy, deriveUnemployment, initialUi } from '../engine/data'
+import { deriveBureaucracy, deriveUnemployment, initialUi, spawnEvent } from '../engine/data'
 import { applyCheat } from '../engine/cheat'
 import { statusLine } from '../view/format'
 import {
@@ -13,6 +13,7 @@ import {
   advance,
   applyDecision,
   applyEventOption,
+  applyPolicy,
   clone,
   completeBuilding,
   computeEconomy,
@@ -443,7 +444,7 @@ describe('M4/M5 council and managed runs', () => {
       options: [],
       isResolved: false,
     })
-    expect(councilInterrupt(before, withEvent)).toBe('有新的待决事件')
+    expect(councilInterrupt(before, withEvent)).toBe('有待决事件')
 
     const withWar = clone(before)
     withWar.wars.push({
@@ -502,6 +503,12 @@ describe('M6 destiny and ironman', () => {
     expect(applyCheat(world, { action: 'building', building: 'farms', count: 3 }).ok).toBe(true)
     expect(qing.econ.buildings.farms).toBe(farms + 3)
 
+    const transport = qing.econ.transportInfrastructure
+    expect(applyCheat(world, { action: 'building', building: 'railroads', count: 2 }).ok).toBe(true)
+    expect(qing.econ.transportInfrastructure).toBe(transport + 6)
+    expect(applyCheat(world, { action: 'building', building: 'railroads', count: -2 }).ok).toBe(true)
+    expect(qing.econ.transportInfrastructure).toBe(transport)
+
     expect(applyCheat(world, { action: 'date', year: 1840, month: 6 }).ok).toBe(true)
     expect(world.date).toEqual({ year: 1840, month: 6 })
 
@@ -526,6 +533,17 @@ describe('M6 destiny and ironman', () => {
 })
 
 describe('M6 ironman command surface', () => {
+  test('the cheat command accepts camelCase actions', async ($, on) => {
+    const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
+    setupSurface(anyOn)
+    const run = await startCampaign($ as any)
+    const points = await run({ command: 'v3', args: 'cheat techPoints 50' })
+    expect(points.text).toContain('科技点')
+    const score = await run({ command: 'v3', args: 'cheat warScore GBR 10' })
+    expect(score.text).toContain('并未交战')
+  })
+
+
   test(
     'ironman blocks destiny, named saves and loading',
     async ($, on) => {
@@ -665,6 +683,76 @@ describe('buff/debuff stacking', () => {
     } as never
     applyEventOption(world, event as never, 'take')
     expect(aus.modifiers.some(one => one.label === '恩泽' && one.monthsLeft === 6)).toBe(true)
+  })
+})
+
+describe('policy proposals, events and thresholds as buff sources', () => {
+  test('a policy proposal costs authority and installs its effects', async () => {
+    const world = newWorld(24, 'AUS')
+    const aus = world.countries.AUS
+    expect(aus).toBeDefined()
+    if (aus === undefined) return
+    aus.government.authority = 100
+    const result = applyPolicy(world, 'AUS', {
+      name: '重商主义',
+      authorityCost: 10,
+      effects: [
+        { stat: 'income', stack: 'percent', value: 10, months: 12 },
+        { stat: 'factoryOutput', stack: 'percent', value: 5 },
+      ],
+    })
+    expect(result.ok).toBe(true)
+    expect(aus.government.authority).toBe(90)
+    expect(aus.modifiers.filter(one => one.source === 'policy:重商主义').length).toBe(2)
+    expect(result.text).toContain('重商主义')
+
+    const invalid = applyPolicy(world, 'AUS', {
+      name: '错误政策',
+      effects: [{ stat: 'nonsense' as never, value: 1 }],
+    })
+    expect(invalid.ok).toBe(false)
+  })
+
+  test('state thresholds grant and lift a while-buff', async () => {
+    const world = newWorld(25, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.pops.radicals = 60
+    advance(world, 1, [], makeRngForWorld(world))
+    expect(qing.modifiers.some(one => one.source === 'threshold:unrest')).toBe(true)
+
+    qing.pops.radicals = 0
+    advance(world, 1, [], makeRngForWorld(world))
+    expect(qing.modifiers.some(one => one.source === 'threshold:unrest')).toBe(false)
+  })
+
+  test('a once threshold stays after the condition lapses', async () => {
+    const world = newWorld(26, 'GBR')
+    const gbr = world.countries.GBR
+    expect(gbr).toBeDefined()
+    if (gbr === undefined) return
+    gbr.pops.literacy = 0.7
+    advance(world, 1, [], makeRngForWorld(world))
+    expect(gbr.modifiers.some(one => one.source === 'threshold:enlightenment')).toBe(true)
+
+    gbr.pops.literacy = 0.1
+    advance(world, 1, [], makeRngForWorld(world))
+    expect(gbr.modifiers.some(one => one.source === 'threshold:enlightenment')).toBe(true)
+  })
+
+  test('an event option can carry timed modifiers', async () => {
+    const world = newWorld(27, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    const event = spawnEvent(world, qing, makeRngForWorld(world), 'harvest')
+    expect(event).toBeDefined()
+    if (event === undefined) return
+    applyEventOption(world, event, 'celebrate')
+    expect(
+      qing.modifiers.some(one => one.label === '丰年余庆' && one.monthsLeft === 6),
+    ).toBe(true)
   })
 })
 

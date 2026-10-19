@@ -51,15 +51,15 @@ function countryLine(country: Country, world: WorldState): string {
     `领袖:${country.leader.name}(${country.leader.traits.join(',')})`,
     `议程:${country.leader.agenda}`,
     `情绪:${Math.round(country.leader.mood)}`,
-    `国库:${n1(country.econ.treasury)}`,
-    `GDP:${n1(country.econ.gdp)}`,
+    `国库:${n1(country.econ.treasury)}金`,
+    `GDP:${n1(country.econ.gdp)}金/年`,
     `合法性:${Math.round(country.government.legitimacy)}`,
     `激进:${Math.round(country.pops.radicals)}`,
     `生活:${Math.round(country.pops.sol)}`,
     `陆军:${n1(country.military.army)}`,
     `海军:${n1(country.military.navy)}`,
     `科技:${country.tech.level}`,
-    `月盈余:${surplus >= 0 ? '+' : ''}${n1(surplus)}`,
+    `月盈余:${surplus >= 0 ? '+' : ''}${n1(surplus)}金/月`,
     war ? '战争:是' : '战争:否',
     `关系:${topRelations(country, world)}`,
     country.leader.memory.length > 0
@@ -245,7 +245,7 @@ export function describeWorldForNarrator(world: WorldState): string {
   const lines: string[] = []
   lines.push(`日期 ${fmtDate(world.date)}｜玩家 ${player.name}`)
   lines.push(
-    `国库 ${n1(player.econ.treasury)}（${player.econ.income - player.econ.expense >= 0 ? '+' : ''}${n1(player.econ.income - player.econ.expense)}/月）｜GDP ${n1(player.econ.gdp)}｜合法性 ${Math.round(player.government.legitimacy)}｜激进 ${Math.round(player.pops.radicals)}｜生活水平 ${Math.round(player.pops.sol)}`,
+    `国库 ${n1(player.econ.treasury)} 金（${player.econ.income - player.econ.expense >= 0 ? '+' : ''}${n1(player.econ.income - player.econ.expense)} 金/月）｜GDP ${n1(player.econ.gdp)} 金/年｜合法性 ${Math.round(player.government.legitimacy)}｜激进 ${Math.round(player.pops.radicals)}｜生活水平 ${Math.round(player.pops.sol)}`,
   )
   lines.push(
     `人口 ${n1(player.pops.total)} 万｜识字率 ${Math.round(player.pops.literacy * 100)}%｜陆军 ${n1(player.military.army)} 万｜海军 ${n1(player.military.navy)}｜科技 ${player.tech.level}（${techName(player.tech.level)}）｜研究 ${player.tech.researching}`,

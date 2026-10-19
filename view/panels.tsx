@@ -10,6 +10,8 @@ import {
   eventSummary,
   fmtDate,
   fmtDateLong,
+  fmtGdp,
+  fmtMoney,
   fmtNumber,
   fmtPercent,
   fmtPop,
@@ -77,6 +79,7 @@ export type ReportProps = {
 const TABS: [TabId, string][] = [
   ['council', '御前'],
   ['overview', '概览'],
+  ['rankings', '排名'],
   ['economy', '经济'],
   ['pops', '人口'],
   ['diplomacy', '外交'],
@@ -173,9 +176,9 @@ function Overview(props: { ui: UiKit; world: WorldState; width: number }): any {
       <Box flexDirection={sideBySide ? 'row' : 'column'} columnGap={4}>
         <Box flexDirection="column">
           <Heading ui={props.ui} text="经济" />
-          <StatLine ui={props.ui} label="国库" value={`${fmtNumber(econ.treasury)} (${fmtSigned(surplus)}/月)`} color={surplus >= 0 ? 'green' : 'red'} />
-          <StatLine ui={props.ui} label="GDP" value={`${fmtNumber(econ.gdp)} ${sparkline(econ.history.gdp, 12)} ${trend(econ.history.gdp)}`} />
-          <StatLine ui={props.ui} label="债务" value={fmtNumber(econ.debt)} color={econ.debt > econ.gdp ? 'red' : undefined} />
+          <StatLine ui={props.ui} label="国库" value={`${fmtMoney(econ.treasury)} (${fmtSigned(surplus)}金/月)`} color={surplus >= 0 ? 'green' : 'red'} />
+          <StatLine ui={props.ui} label="GDP" value={`${fmtGdp(econ.gdp)} ${sparkline(econ.history.gdp, 12)} ${trend(econ.history.gdp)}`} />
+          <StatLine ui={props.ui} label="债务" value={fmtMoney(econ.debt)} color={econ.debt > econ.gdp ? 'red' : undefined} />
           <StatLine ui={props.ui} label="税率" value={`${econ.taxRate}%  关税 ${econ.tariff}%`} />
           <StatLine ui={props.ui} label="物价" value={GOOD_IDS.slice(0, 5).map(id => `${GOODS[id].name}${econ.prices[id].toFixed(1)}`).join(' ')} />
           <Meter ui={props.ui} label="生活水平" value={player.pops.sol} max={100} color="cyan" />
@@ -230,6 +233,99 @@ function Overview(props: { ui: UiKit; world: WorldState; width: number }): any {
 
 function pendingOf(world: WorldState): GameEvent[] {
   return world.events.filter(event => event.countryId === world.playerId && !event.isResolved)
+}
+
+// ---------------------------------------------------------------- rankings
+
+type RankColumn = {
+  label: string
+  width: number
+  value: (country: Country) => string
+}
+
+function RankingsPanel(props: { ui: UiKit; world: WorldState }): any {
+  const { Box, Text } = props.ui
+  const player = playerOf(props.world)
+  const all = Object.values(props.world.countries)
+  const majors = all.filter(country => country.isMajor)
+  const countries = majors.length >= 3 ? majors : all
+  const by = (key: (country: Country) => number): Country[] =>
+    [...countries].sort((a, b) => key(b) - key(a))
+  const playerColor = player?.color ?? 'cyan'
+
+  const table = (
+    title: string,
+    hint: string,
+    rows: Country[],
+    columns: RankColumn[],
+  ): any => {
+    const widths = [14, ...columns.map(column => column.width)]
+    return (
+      <Box flexDirection="column" marginTop={1}>
+        <Heading ui={props.ui} text={title} hint={hint} />
+        <TableRow
+          ui={props.ui}
+          cells={['国家', ...columns.map(column => column.label)]}
+          widths={widths}
+        />
+        {rows.map(country => (
+          <TableRow
+            ui={props.ui}
+            cells={[
+              countryTag(country),
+              ...columns.map(column => column.value(country)),
+            ]}
+            widths={widths}
+            colors={[country.isPlayer ? playerColor : undefined]}
+          />
+        ))}
+      </Box>
+    )
+  }
+
+  return (
+    <Box flexDirection="column">
+      <Heading ui={props.ui} text="列强排名" hint={`${countries.length} 国 · 各维度从高到低`} />
+      <Text dimColor>高亮行为你扮演的国家。单位：金（国库/GDP）、万（人口/陆军）、%（比率）。</Text>
+
+      {table('经济', '按 GDP 排序', by(country => country.econ.gdp), [
+        { label: 'GDP(金/年)', width: 12, value: country => fmtNumber(country.econ.gdp) },
+        { label: '国库(金)', width: 10, value: country => fmtNumber(country.econ.treasury) },
+        { label: '收入(金/月)', width: 12, value: country => fmtNumber(country.econ.income) },
+        { label: '债务(金)', width: 10, value: country => fmtNumber(country.econ.debt) },
+      ])}
+
+      {table('人口与社会', '按人口排序', by(country => country.pops.total), [
+        { label: '人口', width: 10, value: country => fmtPop(country.pops.total) },
+        { label: '识字率', width: 8, value: country => fmtPercent(country.pops.literacy) },
+        { label: '生活水平', width: 8, value: country => String(Math.round(country.pops.sol)) },
+        { label: '失业', width: 8, value: country => `${country.econ.unemployment.toFixed(1)}%` },
+        { label: '激进', width: 6, value: country => String(Math.round(country.pops.radicals)) },
+      ])}
+
+      {table('军事', '按陆军战力排序', by(country => country.military.army * country.military.quality), [
+        { label: '陆军(万)', width: 10, value: country => fmtNumber(country.military.army) },
+        { label: '海军', width: 8, value: country => fmtNumber(country.military.navy) },
+        { label: '士气', width: 6, value: country => String(Math.round(country.military.morale)) },
+        { label: '陆军战力', width: 10, value: country => fmtNumber(country.military.army * country.military.quality) },
+      ])}
+
+      {table('科技与行政', '按科技等级排序', by(country => country.tech.level), [
+        { label: '科技', width: 7, value: country => `${country.tech.level} 级` },
+        { label: '官僚效能', width: 10, value: country => `${Math.round(country.bureaucracy.score)}/${Math.round(country.bureaucracy.ceiling)}` },
+        { label: '合法性', width: 7, value: country => String(Math.round(country.government.legitimacy)) },
+        { label: '权威', width: 6, value: country => String(Math.round(country.government.authority)) },
+      ])}
+
+      {table('外交与威望', '按威望排序', by(country => country.diplo.prestige), [
+        { label: '威望', width: 6, value: country => String(Math.round(country.diplo.prestige)) },
+        { label: '恶名', width: 6, value: country => String(Math.round(country.diplo.infamy)) },
+        { label: '盟友', width: 6, value: country => String(country.diplo.alliances.length) },
+        { label: '对手', width: 6, value: country => String(country.diplo.rivals.length) },
+        { label: '战争', width: 6, value: country => String(props.world.wars.filter(war => war.attackers.includes(country.id) || war.defenders.includes(country.id)).length) },
+      ])}
+    </Box>
+  )
 }
 
 // ---------------------------------------------------------------- economy
@@ -289,7 +385,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
             <Box flexDirection="row" columnGap={1}>
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
-              <Text dimColor>剩余 {project.monthsLeft} 月 · 每月 {project.monthlyCost.toFixed(1)}</Text>
+              <Text dimColor>剩余 {project.monthsLeft} 月 · 每月 {project.monthlyCost.toFixed(1)}金</Text>
             </Box>
           ))
         )}
@@ -306,7 +402,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
-        <Heading ui={props.ui} text="财政" hint={`收入 ${fmtNumber(econ.income)} · 支出 ${fmtNumber(econ.expense)} · 债务 ${fmtNumber(econ.debt)}`} />
+        <Heading ui={props.ui} text="财政" hint={`收入 ${fmtMoney(econ.income)}/月 · 支出 ${fmtMoney(econ.expense)}/月 · 债务 ${fmtMoney(econ.debt)}`} />
         {Object.entries(econ.spending).map(([key, value]) => (
           <Box flexDirection="row" columnGap={1}>
             <Text wrap="truncate">{padEnd(SPENDING[key as keyof typeof SPENDING].name, 6)}</Text>
@@ -610,8 +706,10 @@ function CouncilPanel(props: {
         <Text color={props.council.isOpen ? 'yellow' : 'green'} weight="bold">
           {props.council.isOpen ? '· 待议' : '· 已批'}
         </Text>
-        {props.world.secretary.isRunning || props.council.isRunning ? (
+        {props.world.secretary.isRunning ? (
           <Text dimColor>秘书拟旨中…</Text>
+        ) : props.council.isRunning ? (
+          <Text dimColor>托管推进中…</Text>
         ) : null}
       </Box>
 
@@ -707,7 +805,7 @@ function CouncilPanel(props: {
             <Box flexDirection="row" columnGap={1}>
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
-              <Text dimColor>剩余 {project.monthsLeft} 月 · 每月 {project.monthlyCost.toFixed(1)} · 资金效率 {fmtPercent(bureaucracy.fundEfficiency)}</Text>
+              <Text dimColor>剩余 {project.monthsLeft} 月 · 每月 {project.monthlyCost.toFixed(1)}金 · 资金效率 {fmtPercent(bureaucracy.fundEfficiency)}</Text>
             </Box>
           ))
         )}
@@ -744,6 +842,9 @@ export function Panel(props: PanelProps): any {
           onCouncil={props.onCouncil}
         />
       )
+      break
+    case 'rankings':
+      body = <RankingsPanel ui={props.ui} world={props.world} />
       break
     case 'economy':
       body = <EconomyPanel ui={props.ui} world={props.world} width={props.width} />
@@ -849,11 +950,11 @@ export function Band(props: BandProps): any {
   rows.push(
     <Box flexDirection="row" columnGap={2} flexWrap="wrap">
       <Text>
-        国库 <Text color={surplus >= 0 ? 'green' : 'red'}>{fmtNumber(econ.treasury)}</Text>
-        <Text dimColor>（{fmtSigned(surplus)}/月）</Text>
+        国库 <Text color={surplus >= 0 ? 'green' : 'red'}>{fmtMoney(econ.treasury)}</Text>
+        <Text dimColor>（{fmtSigned(surplus)}金/月）</Text>
       </Text>
       <Text>
-        国内生产总值 <Text>{fmtNumber(econ.gdp)}</Text>
+        国内生产总值 <Text>{fmtGdp(econ.gdp)}</Text>
         <Text color="cyan"> 近月 {sparkline(econ.history.gdp, 8)}</Text>
       </Text>
       <Text>
@@ -969,6 +1070,9 @@ export function Report(props: ReportProps): any {
       return <TurnReport ui={props.ui} world={props.world} width={props.width} />
     case 'events':
       return <EventsPanel ui={props.ui} world={props.world} onEvent={props.onEvent} />
+    case 'rankings':
+    case 'rank':
+      return <RankingsPanel ui={props.ui} world={props.world} />
     case 'economy':
       return <EconomyPanel ui={props.ui} world={props.world} width={props.width} />
     case 'pops':
@@ -1006,6 +1110,7 @@ export function helpText(): string {
     '/v3 next              批准并推进一月',
     '/v3 run [月数]        后台托管 N 月，遇事件/战争/越权即中断',
     '/v3 council           打开御前议事',
+    '/v3 rankings          查看列强经济/人口/军事/科技/外交排名',
     '/v3 secretary         让秘书拟旨（报告稍后呈上）',
     '/v3 delegate internal|diplomacy on|off  切换委托',
     '/v3 panel             打开完整面板',

@@ -29,7 +29,7 @@ export function applyCheat(
     case 'treasury': {
       const amount = finite(params.amount)
       player.econ.treasury = Math.max(0, player.econ.treasury + amount)
-      text = `国库${amount >= 0 ? '增加' : '减少'} ${Math.abs(amount).toFixed(1)}，现为 ${player.econ.treasury.toFixed(1)}`
+      text = `国库${amount >= 0 ? '增加' : '减少'} ${Math.abs(amount).toFixed(1)} 金，现为 ${player.econ.treasury.toFixed(1)} 金`
       break
     }
     case 'techPoints': {
@@ -43,11 +43,9 @@ export function applyCheat(
       if (id === undefined) return { ok: false, text: `未知建筑 ${String(params.building ?? '')}` }
       const count = clamp(Math.round(finite(params.count ?? params.amount, 1)), -20, 20)
       if (count === 0) return { ok: false, text: '数量不能为 0。' }
-      if (count > 0) {
-        completeBuilding(player, id, count)
-      } else {
-        player.econ.buildings[id] = Math.max(0, player.econ.buildings[id] + count)
-      }
+      // completeBuilding applies (or reverses) the side effects and re-derives
+      // bureaucracy, so removing a railroad also removes its infrastructure.
+      completeBuilding(player, id, count)
       text = `${player.name}的${id}数量${count > 0 ? '增加' : '减少'} ${Math.abs(count)}，现为 ${player.econ.buildings[id]}`
       break
     }

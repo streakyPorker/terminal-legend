@@ -1010,13 +1010,28 @@ const EVENT_TEMPLATES: EventTemplate[] = [
         id: 'celebrate',
         label: '开仓平粜，与民同乐',
         result: '粮价稳定，民心稍安。',
-        effects: { treasury: 2, legitimacy: 3, radicals: -2 },
+        effects: {
+          treasury: 2,
+          legitimacy: 3,
+          radicals: -2,
+          modifiers: [
+            { stat: 'sol', stack: 'flat', value: 2, months: 6, label: '丰年余庆' },
+            { stat: 'growth', stack: 'percent', value: 10, months: 6, label: '丰年余庆' },
+          ],
+        },
       },
       {
         id: 'store',
         label: '囤积粮食，以备荒年',
         result: '国库多了些底气，百姓却觉得官府小气。',
-        effects: { treasury: 4, legitimacy: -1, radicals: 1 },
+        effects: {
+          treasury: 4,
+          legitimacy: -1,
+          radicals: 1,
+          modifiers: [
+            { stat: 'income', stack: 'percent', value: 4, months: 6, label: '囤粮溢价' },
+          ],
+        },
       },
     ],
   },
@@ -1052,7 +1067,15 @@ const EVENT_TEMPLATES: EventTemplate[] = [
         id: 'invest',
         label: '鼓励投资，扩大生产',
         result: '工业资本加速积累。',
-        effects: { treasury: -2, techPoints: 35, radicals: -1 },
+        effects: {
+          treasury: -2,
+          techPoints: 35,
+          radicals: -1,
+          modifiers: [
+            { stat: 'factoryOutput', stack: 'percent', value: 10, months: 12, label: '工业投资' },
+            { stat: 'techPoints', stack: 'percent', value: 10, months: 12, label: '工业投资' },
+          ],
+        },
       },
       {
         id: 'tax',
@@ -1073,7 +1096,14 @@ const EVENT_TEMPLATES: EventTemplate[] = [
         id: 'bailout',
         label: '政府出面救市',
         result: '市场暂时稳住，财政背上包袱。',
-        effects: { treasury: -Math.max(3, c.econ.gdp * 0.01), radicals: -3 },
+        effects: {
+          treasury: -Math.max(3, c.econ.gdp * 0.01),
+          radicals: -3,
+          modifiers: [
+            { stat: 'income', stack: 'percent', value: 5, months: 6, label: '救市余波' },
+            { stat: 'expense', stack: 'percent', value: 5, months: 6, label: '救市余波' },
+          ],
+        },
       },
       {
         id: 'austerity',

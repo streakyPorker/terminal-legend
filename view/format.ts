@@ -21,6 +21,17 @@ export function fmtSigned(value: number): string {
   return `${value >= 0 ? '+' : ''}${fmtNumber(value)}`
 }
 
+/** The game uses one abstract currency across countries. */
+export const CURRENCY = '金'
+
+export function fmtMoney(value: number): string {
+  return `${fmtNumber(value)}${CURRENCY}`
+}
+
+export function fmtGdp(value: number): string {
+  return `${fmtNumber(value)}${CURRENCY}/年`
+}
+
 export function fmtPercent(value: number, digits = 0): string {
   return `${(value * 100).toFixed(digits)}%`
 }
@@ -143,8 +154,8 @@ export function statusLine(world: WorldState): string {
   return [
     fmtDate(world.date),
     `[${player.flag}]${player.name}`,
-    `库${fmtNumber(player.econ.treasury)}(${fmtSigned(surplus)})`,
-    `GDP${fmtNumber(player.econ.gdp)}`,
+    `国库${fmtMoney(player.econ.treasury)}(${fmtSigned(surplus)}金/月)`,
+    `GDP${fmtGdp(player.econ.gdp)}`,
     `合法性${Math.round(player.government.legitimacy)}`,
     `激进${Math.round(player.pops.radicals)}`,
     `科技${player.tech.level}`,

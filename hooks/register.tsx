@@ -1,11 +1,13 @@
 import type { EngineInterface, Register } from 'claude-code'
-import type { TabId, UiState, WorldState } from '../types'
+import type { PolicyProposal, TabId, UiState, WorldState } from '../types'
+import { MODIFIER_STATS } from '../engine/modifiers'
 import { BUILDINGS, COUNTRY_SEEDS, initialUi, makeRngForWorld } from '../engine/data'
 import { decideForAi, describeWorldForNarrator } from '../engine/ai'
 import {
   advance,
   applyDecision,
   applyEventOption,
+  applyPolicy,
   clamp,
   clone,
   councilInterrupt,
@@ -17,7 +19,15 @@ import {
 import { loadGame, saveGame } from '../engine/save'
 import { applyCheat, type CheatParams } from '../engine/cheat'
 import { SECRETARY_PROMPT, monthlyBriefing } from '../engine/secretary'
-import { countryTag, fmtDate, fmtDateLong, fmtNumber, statusLine } from '../view/format'
+import {
+  countryTag,
+  fmtDate,
+  fmtDateLong,
+  fmtGdp,
+  fmtMoney,
+  fmtNumber,
+  statusLine,
+} from '../view/format'
 import {
   Band,
   Panel,
@@ -40,6 +50,7 @@ const SECRETARY_TOOLS = [
   'mcp__terminal-legend__v3_advance',
   'mcp__terminal-legend__v3_cheat',
   'mcp__terminal-legend__v3_action',
+  'mcp__terminal-legend__v3_policy',
   'mcp__terminal-legend__v3_diplomacy',
   'mcp__terminal-legend__v3_event',
   'mcp__terminal-legend__v3_leader',
@@ -91,7 +102,7 @@ function statusText(world: WorldState): string {
   for (const country of Object.values(world.countries)) {
     const playerMark = country.isPlayer ? '★' : ' '
     lines.push(
-      `${playerMark}[${country.flag}]${country.name}(${country.id}) 库${fmtNumber(country.econ.treasury)} GDP${fmtNumber(country.econ.gdp)} 合法性${Math.round(country.government.legitimacy)} 激进${Math.round(country.pops.radicals)} 陆军${fmtNumber(country.military.army)} 海军${fmtNumber(country.military.navy)} 科技${country.tech.level}`,
+      `${playerMark}[${country.flag}]${country.name}(${country.id}) 国库${fmtMoney(country.econ.treasury)} GDP${fmtGdp(country.econ.gdp)} 合法性${Math.round(country.government.legitimacy)} 激进${Math.round(country.pops.radicals)} 陆军${fmtNumber(country.military.army)}万 海军${fmtNumber(country.military.navy)} 科技${country.tech.level}`,
     )
   }
   const player = world.countries[world.playerId]
@@ -161,7 +172,7 @@ function narratorPrompt(world: WorldState): string {
     `你是这个 19 世纪世界的叙事者，同时也是各国领袖的扮演者。玩家扮演 ${countryTag(player)}。`,
     '硬性规则：',
     '1. 所有数值以工具返回为准；需要世界状态时调用 v3_status，绝不要编造数字。',
-    '2. 玩家用自然语言下达命令时，先判断意图，再调用对应工具：v3_action（内政/建造/税收/征兵/法案）、v3_diplomacy（外交/宣战/停战）、v3_event（处理事件）、v3_advance（批准推进一月；months>1 视为托管）。',
+    '2. 玩家用自然语言下达命令时，先判断意图，再调用对应工具：v3_action（内政/建造/税收/征兵/法案）、v3_policy（提出政策并施加 buff/debuff）、v3_diplomacy（外交/宣战/停战）、v3_event（处理事件）、v3_advance（批准推进一月；months>1 视为托管）。',
     '3. 玩家与某国领袖交谈时，用该领袖的第一人称口吻回应，体现其人格、特质与议程；随后调用 v3_leader 记录这次交流（可带上 mood / relation 调整）。',
     '4. 时间按月推进：每月停在御前会议，只有玩家批准或托管后才推进；绝不要自行推进。',
     '5. 月度秘书是独立子代理（玩家用 /v3 secretary 召见）。你可以解读它的报告，但不要假装自己执行了它的计划。',
@@ -407,7 +418,11 @@ async function finishSecretary(
       next.secretary.isRunning = false
       await setWorld($, next).catch(() => undefined)
     }
-    await patchUi($, { notice: '秘书出错' }).catch(() => undefined)
+    const ui = await getUi($)
+    await patchUi($, {
+      notice: '秘书出错',
+      council: { ...ui.council, isRunning: false },
+    }).catch(() => undefined)
     $.ui.toast(`秘书出错：${String(error)}`)
   }
 }
@@ -489,6 +504,10 @@ async function startDelegated($: EngineInterface, months: number): Promise<strin
   const current = await activeWorld($)
   if (current === undefined) return '还没有进行中的游戏。'
   if (isDelegatedRun) return '已有托管在进行中，请等它结束。'
+  if (pendingOf(current.world).length > 0) return '先处理待决事件，再开始托管。'
+  if (current.world.secretary.isRunning || secretaryAnswers.size > 0) {
+    return '秘书正在拟旨，请等报告到达后再托管。'
+  }
   const total = clamp(Number.isFinite(months) ? Math.round(months) : 1, 1, 12)
   overreachDuringRun = false
   isDelegatedRun = true
@@ -727,6 +746,38 @@ const TOOL_SPECS: {
     },
   },
   {
+    name: 'v3_policy',
+    description:
+      '终末传奇：提交一项政策提议。政策由若干效果条目组成，每条把某个数值入口加上 buff/debuff；引擎校验单位与数值后按叠算规则结算，并消耗权威（默认 5，最多 40）。效果条目字段：stat（修正对象）、stack（flat/percent/multiply，默认 flat）、value、months（可选，持续月数）、label（可选）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '政策名称，例如「重商主义」。' },
+        description: { type: 'string' },
+        authorityCost: { type: 'integer', minimum: 0, maximum: 40 },
+        effects: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 12,
+          items: {
+            type: 'object',
+            properties: {
+              stat: { type: 'string', enum: MODIFIER_STATS },
+              stack: { type: 'string', enum: ['flat', 'percent', 'multiply'] },
+              value: { type: 'number' },
+              months: { type: 'integer', minimum: 1, maximum: 240 },
+              label: { type: 'string' },
+            },
+            required: ['stat', 'value'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['name', 'effects'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'v3_diplomacy',
     description:
       '终末传奇：执行外交行动。move 取值：improve（改善关系）、insult（交恶）、alliance（结盟）、rival（设为对手）、gift（赠礼）、war（宣战）、peace（停战）。target 是国家代码，例如 GBR、RUS、QING。',
@@ -840,7 +891,12 @@ export const register: Register = (on, options) => {
     const world = await getWorld($)
     const ui = await getUi($)
     if (world !== undefined && ui.isActive) {
-      await patchUi($, { council: { ...ui.council, isOpen: true } })
+      if (world.secretary.isRunning) {
+        const resumed = clone(world)
+        resumed.secretary.isRunning = false
+        await setWorld($, resumed)
+      }
+      await patchUi($, { council: { ...ui.council, isOpen: true, isRunning: false } })
       await refreshStatus($)
     } else if (world === undefined) {
       let loaded: WorldState | undefined
@@ -920,6 +976,7 @@ export const register: Register = (on, options) => {
     try {
       switch (sub) {
         case 'new': {
+          if (isDelegatedRun) return { text: '托管进行中，请等它结束再开新局。' }
           const requested = (parts[1] ?? 'QING').toUpperCase()
           const seedRow = COUNTRY_SEEDS.find(row => row.id === requested)
           if (seedRow === undefined) {
@@ -1002,7 +1059,10 @@ export const register: Register = (on, options) => {
 
         case 'cheat': {
           if (current === undefined) return { text: '还没有进行中的游戏。' }
-          const action = (parts[1] ?? '').toLowerCase()
+          const lower = (parts[1] ?? '').toLowerCase()
+          // The tool schema spells two actions in camelCase; accept either.
+          const action =
+            lower === 'techpoints' ? 'techPoints' : lower === 'warscore' ? 'warScore' : lower
           const params: CheatParams = { action }
           if (action === 'treasury' || action === 'techPoints') {
             params.amount = Number(parts[2] ?? 0)
@@ -1098,6 +1158,7 @@ export const register: Register = (on, options) => {
 
         case 'play': {
           if (current === undefined) return { text: '还没有进行中的游戏。' }
+          if (isDelegatedRun) return { text: '托管进行中，请等它结束再切换国家。' }
           const target = (parts[1] ?? '').toUpperCase()
           const country = current.world.countries[target]
           if (country === undefined) {
@@ -1129,6 +1190,7 @@ export const register: Register = (on, options) => {
         }
 
         case 'load': {
+          if (isDelegatedRun) return { text: '托管进行中，请等它结束再读取存档。' }
           if (current !== undefined && current.world.ironman) {
             return { text: '铁人模式不能读取其他存档。' }
           }
@@ -1163,6 +1225,14 @@ export const register: Register = (on, options) => {
           $.ui.status(undefined)
           $.ui.toast('本局已结束，存档保留')
           return { text: '本局已结束。存档保留，/v3 load 可继续，/v3 new 可开新局。' }
+        }
+
+        case 'rank':
+        case 'rankings': {
+          if (current === undefined) return { text: '还没有进行中的游戏。' }
+          await patchUi($, { tab: 'rankings' })
+          await openPane($)
+          return { text: '已切换到列强排名。' }
         }
 
         case 'economy':
@@ -1295,6 +1365,34 @@ export const register: Register = (on, options) => {
     }
   })
 
+  on('tool.call', { tool: 'mcp__terminal-legend__v3_policy' }, async ($, e) => {
+    try {
+      const current = await activeWorld($)
+      if (current === undefined) return toolFail('还没有进行中的游戏。')
+      const args = e as unknown as Args
+      const rawEffects = (args as { effects?: unknown }).effects
+      const proposal: PolicyProposal = {
+        name: String(args.name ?? ''),
+        description: typeof args.description === 'string' ? args.description : undefined,
+        authorityCost:
+          typeof args.authorityCost === 'number' ? args.authorityCost : undefined,
+        effects: Array.isArray(rawEffects)
+          ? (rawEffects as PolicyProposal['effects'])
+          : [],
+      }
+      const world = clone(current.world)
+      const result = applyPolicy(world, world.playerId, proposal)
+      if (!result.ok) return toolFail(result.text)
+      await setWorld($, world)
+      await saveGame($, world).catch(() => undefined)
+      await refreshStatus($)
+      await patchUi($, { notice: result.text })
+      return toolOk(result.text)
+    } catch (error) {
+      return toolFail(`政策失败：${String(error)}`)
+    }
+  })
+
   on('tool.call', { tool: 'mcp__terminal-legend__v3_diplomacy' }, async ($, e) => {
     try {
       const args = e as unknown as Args
@@ -1415,6 +1513,7 @@ export const register: Register = (on, options) => {
 
   on('tool.call', { tool: 'mcp__terminal-legend__v3_play' }, async ($, e) => {
     try {
+      if (isDelegatedRun) return toolFail('托管进行中，请等它结束再切换国家。')
       const current = await activeWorld($)
       if (current === undefined) return toolFail('还没有进行中的游戏。')
       const args = e as unknown as Args

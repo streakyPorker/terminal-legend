@@ -85,6 +85,9 @@ export type Spending = Record<SpendingCategory, number>
 export type ModifierStat =
   | 'production'
   | `${GoodId}Output`
+  | 'farmOutput'
+  | 'mineOutput'
+  | 'factoryOutput'
   | 'demand'
   | `${GoodId}Demand`
   | 'gdp'
@@ -130,6 +133,25 @@ export type Modifier = {
   monthsLeft?: number
   /** Who granted it, e.g. `law:教育改革`, `event:ev-1`, `policy:关税`. */
   source: string
+}
+
+/** One effect entry of a policy proposal (ADR 0002/0003). */
+export type PolicyEffect = {
+  stat: ModifierStat
+  stack?: ModifierStack
+  value: number
+  /** Months; absent means permanent. */
+  months?: number
+  label?: string
+}
+
+/** A policy the model or secretary submits to the engine for validation. */
+export type PolicyProposal = {
+  name: string
+  description?: string
+  /** Political capital, default 5; the engine validates the range. */
+  authorityCost?: number
+  effects: PolicyEffect[]
 }
 
 export type Bureaucracy = {
@@ -368,6 +390,7 @@ export type WorldState = {
 export type TabId =
   | 'council'
   | 'overview'
+  | 'rankings'
   | 'economy'
   | 'pops'
   | 'diplomacy'

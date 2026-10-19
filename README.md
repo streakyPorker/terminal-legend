@@ -18,13 +18,19 @@
   会被记录并提示，但不会被打断。
 - **官僚效能**：0–100 的派生分数，决定每月行动预算、资金效率、工期延迟与信息失真；
   官署抬高上限，交通基础设施与行政能力各管一摊。
-- **修正叠算**：政策、法案、事件与天命都通过 `engine/modifiers.ts` 给同一批数值入口
-  挂 buff/debuff；按 flat → percent → multiply 固定顺序结算，支持持续时间与来源，
-  同一 `id` 覆盖而不是无限叠加（ADR 0004）。
+- **修正叠算**：政策、法案、事件、阈值与天命都通过 `engine/modifiers.ts` 给同一批
+  数值入口挂 buff/debuff；按 flat → percent → multiply 固定顺序结算，支持持续时间与
+  来源，同一 `id` 覆盖而不是无限叠加（ADR 0004）。
+  - **政策**：`v3_policy` 接受一组效果条目，引擎校验、消耗权威后落成修正。
+  - **阈值**：`engine/thresholds.ts` 的规则在每月结算后检查状态（如激进 ≥50 → 民怨沸腾，
+    识字率 ≥60% → 启蒙时代）；`while` 规则条件消失即移除，`once` 规则永久保留。
+  - **事件**：事件选项的 `effects.modifiers` 直接携带限时 buff。
+- **货币单位**：所有金钱与产出价值统一用抽象单位「金」，显示为「金」「金/月」「金/年」。
 - **三层界面**：
   1. `$.ui.status` —— 最底部的单行 HUD（日期、国库、GDP、合法性、激进、科技、战争、铁人）；
   2. `AbovePrompt` —— 输入框上方的常驻仪表盘；会议打开时第一行是「御前会议 · 待议」；
-  3. `Pane` —— `/v3 panel` 打开的完整面板，九个标签页（御前/概览/经济/人口/外交/军事/科技/事件/日志）。
+  3. `Pane` —— `/v3 panel` 打开的完整面板，十个标签页（御前/概览/排名/经济/人口/外交/军事/科技/事件/日志）。
+     「排名」按经济、人口与社会、军事、科技与行政、外交与威望五个维度列出列强。
   另外 `/v3 ...` 命令的输出会在对话里渲染成富文本报告。
 - **与 claude-hud 共存**：状态行调度器始终把输出转交给 claude-hud，游戏自己的 Band 与
   状态行叠加在上面，不再互相屏蔽。
@@ -39,6 +45,7 @@
 /v3 next           批准并推进一月
 /v3 run 6          后台托管六个月，遇中断即停
 /v3 council        打开御前议事
+/v3 rankings       查看列强经济/人口/军事/科技/外交排名
 /v3 secretary      让秘书拟旨（命令立即返回，报告稍后到达）
 /v3 delegate internal on     授权秘书处理内政（diplomacy 同理）
 /v3 panel          打开完整面板
@@ -68,6 +75,7 @@ Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplo
 | `v3_advance` | 批准推进一月；months>1 视为托管并检测中断 |
 | `v3_cheat` | 天命：金钱/科技点/建筑/关系/战争分数/日期/事件/领袖（铁人禁用） |
 | `v3_action` | 建造（入队）、税率、关税、支出、研究、征兵、法案 |
+| `v3_policy` | 提交政策提议：一组效果条目变成可叠算的 buff/debuff |
 | `v3_diplomacy` | 改善/交恶/结盟/设对手/赠礼/宣战/停战 |
 | `v3_event` | 列出或处理待决事件 |
 | `v3_leader` | 记录与某国领袖的交流，调整情绪与关系，暂停该国后台 AI |
@@ -99,6 +107,12 @@ node statusline/install.mjs
 
 它会把当前 `~/.claude/settings.json` 的 `statusLine.command` 备份到 `delegate.txt`，
 然后把状态行指向调度器。设置改动对**新启动的会话**生效；当前会话可能需要重启 Claude Code。
+
+## 下一步
+
+`docs/plans/0002-agent-event-trees.md`：先做主要大国的专属国策/事件树，再做多国交互
+事件树。树只定义触发条件、参与者、效果信封与历史上下文；具体提案由各国 agent 根据
+当前史实生成，引擎校验后落成修正，不做死模板。
 
 ## 开发
 
@@ -135,6 +149,7 @@ engine/sim.ts                确定性月度模拟、建造队列、玩家行动
 engine/ai.ts                 批量 AI 领袖决策提示与解析
 engine/secretary.ts          秘书系统提示与月度简报
 engine/modifiers.ts          buff/debuff 叠算入口与到期结算
+engine/thresholds.ts         状态阈值触发的修正规则
 engine/cheat.ts              天命工具
 engine/save.ts               存档、版本校验与状态行激活文件
 view/format.ts               数字、进度条、火花线、状态行

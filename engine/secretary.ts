@@ -1,5 +1,6 @@
 import type { WorldState } from '../types'
 import { BUILDINGS } from './data'
+import { MODIFIER_STAT_NAMES, describeModifier } from './modifiers'
 
 /**
  * System prompt for the secretary subagent. The delegation itself changes
@@ -14,7 +15,7 @@ export const SECRETARY_PROMPT = [
   '1. 禁止调用 v3_advance（推进时间只能由玩家批准）。',
   '2. 禁止调用 v3_cheat（天命），禁止修改存档。',
   '3. 禁止宣战（v3_diplomacy move=war）与停战（move=peace），即使已获外交授权。',
-  '4. 内政授权时，你可以：调整税率与关税、调整支出、排建造、定研究方向、代玩家处理待决事件。',
+  '4. 内政授权时，你可以：调整税率与关税、调整支出、排建造、定研究方向、代玩家处理待决事件、用 v3_policy 提交政策提议（效果条目会变成可叠算的修正）。',
   '5. 外交授权时，你可以：改善关系、结盟、设对手、赠礼。',
   '6. 未授权的领域只在报告的「建议」里写，不要调用任何工具。',
   '7. 简报会给你本月的行动预算（可执行的内政行动数）；不要超额。',
@@ -44,7 +45,7 @@ export function monthlyBriefing(world: WorldState): string {
     `日期 ${world.date.year} 年 ${world.date.month} 月（第 ${world.tick} 回合）｜玩家国家 ${player.name}（${player.id}）`,
   )
   lines.push(
-    `财政：国库 ${player.econ.treasury.toFixed(1)}（${(player.econ.income - player.econ.expense).toFixed(1)}/月），收入 ${player.econ.income.toFixed(1)}，支出 ${player.econ.expense.toFixed(1)}，债务 ${player.econ.debt.toFixed(1)}，税率 ${player.econ.taxRate}%，关税 ${player.econ.tariff}%`,
+    `财政：国库 ${player.econ.treasury.toFixed(1)} 金（${(player.econ.income - player.econ.expense).toFixed(1)} 金/月），收入 ${player.econ.income.toFixed(1)} 金/月，支出 ${player.econ.expense.toFixed(1)} 金/月，债务 ${player.econ.debt.toFixed(1)} 金，税率 ${player.econ.taxRate}%，关税 ${player.econ.tariff}%`,
   )
   lines.push(
     `社会：人口 ${player.pops.total.toFixed(0)} 万，识字率 ${pct(player.pops.literacy)}，生活水平 ${Math.round(player.pops.sol)}，激进 ${Math.round(player.pops.radicals)}，合法性 ${Math.round(player.government.legitimacy)}，权威 ${Math.round(player.government.authority)}，失业 ${player.econ.unemployment.toFixed(1)}%`,
@@ -60,12 +61,7 @@ export function monthlyBriefing(world: WorldState): string {
       player.modifiers.length === 0
         ? '无'
         : player.modifiers
-            .map(
-              modifier =>
-                `${modifier.label}(${modifier.stat} ${modifier.value >= 0 ? '+' : ''}${modifier.value}${modifier.stack === 'flat' ? '' : '%'}${
-                  modifier.monthsLeft === undefined ? '，长期' : `，${modifier.monthsLeft} 月`
-                })`,
-            )
+            .map(modifier => `${describeModifier(modifier)}（${MODIFIER_STAT_NAMES[modifier.stat]}）`)
             .join('；')
     }`,
   )

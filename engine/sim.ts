@@ -8,6 +8,8 @@ import type {
   GoodId,
   LogEntry,
   LogKind,
+  PolicyEffect,
+  PolicyProposal,
   War,
   WorldState,
 } from '../types'
@@ -27,7 +29,14 @@ import {
   techName,
 } from './data'
 import type { Rng } from './rng'
-import { addModifier, applyModifiers, tickModifiers } from './modifiers'
+import {
+  MODIFIER_STATS,
+  MODIFIER_STAT_NAMES,
+  addModifier,
+  applyModifiers,
+  tickModifiers,
+} from './modifiers'
+import { evaluateThresholds, logThresholds } from './thresholds'
 
 export type Decision = {
   countryId: string
@@ -92,18 +101,21 @@ function computeProduction(country: Country): Record<GoodId, number> {
   // per-good buff, so policies can target either scale.
   const output = (id: GoodId, value: number): number =>
     applyModifiers(country, 'production', applyModifiers(country, `${id}Output`, value))
+  const farm = (value: number): number => applyModifiers(country, 'farmOutput', value)
+  const mine = (value: number): number => applyModifiers(country, 'mineOutput', value)
+  const factory = (value: number): number => applyModifiers(country, 'factoryOutput', value)
 
-  out.grain = output('grain', b.farms * 1.05 * tech * infra * access)
-  out.wood = output('wood', b.farms * 0.16 + b.mines * 0.06)
-  out.coal = output('coal', b.mines * 0.5 * tech)
-  out.iron = output('iron', b.mines * 0.42 * tech)
-  out.fabric = output('fabric', b.factories * 0.6 * tech)
-  out.clothes = output('clothes', b.factories * 0.38 * tech)
-  out.liquor = output('liquor', b.factories * 0.2)
-  out.furniture = output('furniture', b.factories * 0.22 * tech)
-  out.machinery = output('machinery', b.factories * 0.09 * tech)
-  out.arms = output('arms', b.factories * 0.07 * tech + b.barracks * 0.05)
-  out.luxury = output('luxury', b.factories * 0.035 * tech)
+  out.grain = output('grain', farm(b.farms * 1.05 * tech * infra * access))
+  out.wood = output('wood', farm(b.farms * 0.16) + mine(b.mines * 0.06))
+  out.coal = output('coal', mine(b.mines * 0.5 * tech))
+  out.iron = output('iron', mine(b.mines * 0.42 * tech))
+  out.fabric = output('fabric', factory(b.factories * 0.6 * tech))
+  out.clothes = output('clothes', factory(b.factories * 0.38 * tech))
+  out.liquor = output('liquor', factory(b.factories * 0.2))
+  out.furniture = output('furniture', factory(b.factories * 0.22 * tech))
+  out.machinery = output('machinery', factory(b.factories * 0.09 * tech))
+  out.arms = output('arms', factory(b.factories * 0.07 * tech) + b.barracks * 0.05)
+  out.luxury = output('luxury', factory(b.factories * 0.035 * tech))
   out.services = output('services', (country.pops.total / 1000) * 0.5 * access)
   return out
 }
@@ -249,7 +261,8 @@ function pushHistory(list: number[], value: number): void {
 
 /** Adds built structures and their side effects. */
 export function completeBuilding(country: Country, building: BuildingId, count: number): void {
-  country.econ.buildings[building] += count
+  // Negative counts remove buildings (天命); never go below zero.
+  country.econ.buildings[building] = Math.max(0, country.econ.buildings[building] + count)
   if (building === 'railroads') {
     country.econ.transportInfrastructure = clamp(
       country.econ.transportInfrastructure + count * 3,
@@ -589,6 +602,9 @@ function simulateCountry(
       text: `[${country.flag}] ${country.name}：「${label}」到期`,
     })
   }
+
+  // State thresholds grant or lift buffs after the month's numbers settle.
+  logThresholds(world, country, evaluateThresholds(country), log)
 
   pushHistory(country.econ.history.gdp, snap.gdp)
   pushHistory(country.econ.history.treasury, country.econ.treasury)
@@ -954,7 +970,7 @@ export function applyDecision(
       })
       return {
         ok: true,
-        text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列（${months} 个月，每月 ${monthlyCost.toFixed(1)}）`,
+        text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列（${months} 个月，每月 ${monthlyCost.toFixed(1)} 金）`,
       }
     }
     case 'tax': {
@@ -1216,6 +1232,89 @@ export function applyDecision(
   }
 }
 
+/**
+ * Validates and applies a policy proposal from the model or the secretary.
+ * Magnitudes are free (ADR 0002); the engine checks shapes, costs authority,
+ * and turns each effect entry into a modifier (ADR 0003/0004).
+ */
+export function applyPolicy(
+  world: WorldState,
+  countryId: string,
+  proposal: PolicyProposal,
+): { ok: boolean; text: string } {
+  const country = world.countries[countryId]
+  if (country === undefined) return { ok: false, text: `未知国家 ${countryId}` }
+  const name = String(proposal.name ?? '').trim().slice(0, 40)
+  if (name === '') return { ok: false, text: '政策需要一个名称。' }
+  const effects = Array.isArray(proposal.effects) ? proposal.effects.slice(0, 12) : []
+  if (effects.length === 0) return { ok: false, text: '政策至少需要一个效果条目。' }
+
+  const parsed: PolicyEffect[] = []
+  for (const effect of effects) {
+    if (!MODIFIER_STATS.includes(effect.stat)) {
+      return { ok: false, text: `未知修正对象 ${String(effect.stat)}` }
+    }
+    const value = Number(effect.value)
+    if (!Number.isFinite(value)) return { ok: false, text: '效果数值必须是有限数字。' }
+    const stack = effect.stack ?? 'flat'
+    if (stack !== 'flat' && stack !== 'percent' && stack !== 'multiply') {
+      return { ok: false, text: '效果单位必须是 flat / percent / multiply。' }
+    }
+    const months =
+      effect.months === undefined
+        ? undefined
+        : Math.max(1, Math.round(Number(effect.months)))
+    if (months !== undefined && !Number.isFinite(months)) {
+      return { ok: false, text: '持续月数必须是数字。' }
+    }
+    parsed.push({
+      stat: effect.stat,
+      stack,
+      value,
+      months,
+      label: effect.label,
+    })
+  }
+
+  const cost = clamp(Math.round(Number(proposal.authorityCost ?? 5)), 0, 40)
+  if (!Number.isFinite(cost)) return { ok: false, text: '权威成本必须是数字。' }
+  if (country.government.authority < cost) {
+    return {
+      ok: false,
+      text: `权威不足，无法推行「${name}」（需要 ${cost}，现有 ${Math.round(country.government.authority)}）`,
+    }
+  }
+  country.government.authority = clamp(country.government.authority - cost, 0, 100)
+
+  parsed.forEach((effect, index) => {
+    addModifier(country, {
+      id: `policy:${name}:${index}`,
+      label: effect.label ?? name,
+      stat: effect.stat,
+      stack: effect.stack ?? 'flat',
+      value: effect.value,
+      monthsLeft: effect.months,
+      source: `policy:${name}`,
+    })
+  })
+
+  const summary = parsed
+    .map(
+      effect =>
+        `${MODIFIER_STAT_NAMES[effect.stat]} ${effect.value >= 0 ? '+' : ''}${effect.value}${effect.stack === 'flat' ? '' : '%'}${effect.months === undefined ? '' : `（${effect.months} 月）`}`,
+    )
+    .join('；')
+  const text = `[${country.flag}] ${country.name} 推行政策「${name}」：${summary}（权威 -${cost}）`
+  world.log.push({
+    date: { ...world.date },
+    kind: 'politics',
+    countryId: country.id,
+    text,
+  })
+  if (world.log.length > 400) world.log.splice(0, world.log.length - 400)
+  return { ok: true, text }
+}
+
 export function randomDecision(world: WorldState, country: Country, rng: Rng): Decision | undefined {
   const atWar = world.wars.some(
     war => war.attackers.includes(country.id) || war.defenders.includes(country.id),
@@ -1292,7 +1391,9 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
 export function councilInterrupt(before: WorldState, after: WorldState): string {
   const pendingOf = (world: WorldState): number =>
     world.events.filter(event => event.countryId === world.playerId && !event.isResolved).length
-  if (pendingOf(after) > pendingOf(before)) return '有新的待决事件'
+  // Any unresolved player event stops a run, whether it was already open or
+  // arrived this month (plan §4.5).
+  if (pendingOf(after) > 0) return '有待决事件'
 
   const atWar = (world: WorldState, id: string): boolean =>
     world.wars.some(
