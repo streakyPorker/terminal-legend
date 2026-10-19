@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { deriveBureaucracy, deriveUnemployment } from '../engine/data'
+import { deriveBureaucracy, deriveUnemployment, initialUi } from '../engine/data'
+import { monthlyBriefing } from '../engine/secretary'
 import {
   advance,
   applyDecision,
@@ -284,3 +285,122 @@ describe('M2 construction queue and economy fixes', () => {
   })
 })
 
+
+// ---------------------------------------------------------------- M3
+
+const setupSurface = (
+  anyOn: (event: string, hook: ($: any, e: any) => unknown) => void,
+  extra?: Record<string, ($: any, e: any) => unknown>,
+): void => {
+  const hooks: Record<string, ($: any, e: any) => unknown> = {
+    'session.start': ($: any, e: any) => ({ cwd: e.cwd }),
+    'command.register': ($: any, e: any) => ({ value: { command: e.command } }),
+    'tool.register': ($: any, e: any) => ({
+      value: { tool: `mcp__terminal-legend__${e.name}` },
+    }),
+    'agent.register': () => ({ value: { agent: 'terminal-legend:secretary' } }),
+    'turn.complete': () => ({ text: '' }),
+    'fs.exists': () => ({ value: false }),
+    'fs.write': () => ({ value: undefined }),
+    'fs.read': () => ({ value: '' }),
+    'env.get': () => ({ value: '/tmp' }),
+    'session.root': () => ({ value: '/tmp' }),
+    'session.cwd': () => ({ value: '/tmp' }),
+    'session.id': () => ({ value: 'test-session' }),
+    'ui.open': () => ({ value: { isPlaced: true } }),
+    'ui.status': () => ({ value: undefined }),
+    'ui.log': () => ({ value: undefined }),
+    'ui.toast': () => ({ value: undefined }),
+    ...extra,
+  }
+  for (const [event, hook] of Object.entries(hooks)) anyOn(event, hook)
+}
+
+const startCampaign = async (
+  $: any,
+): Promise<((input: unknown) => Promise<{ text: string }>)> => {
+  await ($.session.start as unknown as (e: unknown) => Promise<unknown>)({
+    cwd: '/tmp',
+    surface: 'terminal',
+    isInteractive: true,
+  })
+  const run = (input: unknown) =>
+    ($.command.run as unknown as (e: unknown) => Promise<{ text: string }>)(input)
+  await run({ command: 'v3', args: 'new QING' })
+  return run
+}
+
+describe('M3 secretary subagent', () => {
+  test('the briefing states which domains are delegated', async () => {
+    const world = newWorld(12, 'QING')
+    expect(monthlyBriefing(world)).toContain('内政：未授权')
+    expect(monthlyBriefing(world)).toContain('外交：未授权')
+    world.secretary.delegation.internal = true
+    expect(monthlyBriefing(world)).toContain('内政：已授权')
+  })
+
+  test('the secretary type is hidden from the model', async ($) => {
+    const offered = await $.agent.offer({ agent: 'terminal-legend:secretary' })
+    expect(offered).toEqual({ isOffered: false })
+  })
+
+  test(
+    'a secretary war declaration is audited, not refused',
+    { options: { autoStart: false } },
+    async ($, on) => {
+      const toasts: string[] = []
+      const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
+      setupSurface(anyOn, {
+        'ui.toast': (_$: any, e: any) => {
+          toasts.push(String(e.text ?? ''))
+          return { value: undefined }
+        },
+      })
+      await startCampaign($ as any)
+
+      const result = (await ($.tool.call as unknown as (e: unknown) => Promise<unknown>)({
+        tool: 'mcp__terminal-legend__v3_diplomacy',
+        target: 'GBR',
+        move: 'war',
+        reason: '秘书擅自开战',
+        agentId: 'secretary-1',
+      })) as { result?: string; deny?: string }
+      expect(result.result).toBeDefined()
+      expect(result.result ?? '').toContain('宣战')
+      expect(toasts.some(text => text.includes('秘书越权'))).toBe(true)
+    },
+  )
+})
+
+describe('M3 secretary command surface', () => {
+  // The test harness has no engine beneath `agent.spawn` that starts a real
+  // subagent and mints an agentId, so the full spawn -> turn.complete round
+  // trip cannot be mocked here. The command surface and the tool path the
+  // secretary uses are covered instead.
+  test(
+    'delegation toggles and an agent build uses the same tool path',
+    { options: { autoStart: false } },
+    async ($, on) => {
+      const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
+      setupSurface(anyOn)
+      const run = await startCampaign($ as any)
+
+      const delegated = await run({ command: 'v3', args: 'delegate internal on' })
+      expect(delegated.text).toContain('内政委托已开启')
+
+      const built = (await ($.tool.call as unknown as (e: unknown) => Promise<unknown>)({
+        tool: 'mcp__terminal-legend__v3_action',
+        action: 'build',
+        building: 'farms',
+        count: 1,
+        agentId: 'secretary-1',
+      })) as { result?: string; deny?: string }
+      expect(built.result ?? '').toContain('建造队列')
+
+      const status = await run({ command: 'v3', args: 'status' })
+      expect(status.text).toContain('建造队列')
+      expect(status.text).toContain('农场×1')
+      expect(status.text).toContain('内政开')
+    },
+  )
+})

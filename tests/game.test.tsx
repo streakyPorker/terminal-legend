@@ -110,6 +110,9 @@ describe('terminal-legend command surface', () => {
     anyOn('tool.register', ($: any, e: any) => ({
       value: { tool: `mcp__terminal-legend__${e.name}` },
     }))
+    anyOn('agent.register', () => ({
+      value: { agent: 'terminal-legend:secretary' },
+    }))
     anyOn('fs.exists', () => ({ value: false }))
     anyOn('fs.write', () => ({ value: undefined }))
     anyOn('fs.read', () => ({ value: '' }))

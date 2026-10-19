@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { TabId, UiState, WorldState } from '../types'
-import { COUNTRY_SEEDS, initialUi, makeRngForWorld } from '../engine/data'
+import { BUILDINGS, COUNTRY_SEEDS, initialUi, makeRngForWorld } from '../engine/data'
 import { decideForAi, describeWorldForNarrator } from '../engine/ai'
 import {
   advance,
@@ -14,6 +14,7 @@ import {
   type Decision,
 } from '../engine/sim'
 import { loadGame, saveGame, setActive } from '../engine/save'
+import { SECRETARY_PROMPT, monthlyBriefing } from '../engine/secretary'
 import { countryTag, fmtDate, fmtDateLong, fmtNumber, statusLine } from '../view/format'
 import {
   Band,
@@ -27,6 +28,19 @@ import {
 const PANE = 'terminal-legend'
 const WORLD = { plugin: 'terminal-legend', key: 'world' } as const
 const UI = { plugin: 'terminal-legend', key: 'ui' } as const
+const SECRETARY_AGENT = 'terminal-legend:secretary'
+const SECRETARY_TIMEOUT_MS = 240_000
+const SECRETARY_TOOLS = [
+  'mcp__terminal-legend__v3_status',
+  'mcp__terminal-legend__v3_action',
+  'mcp__terminal-legend__v3_diplomacy',
+  'mcp__terminal-legend__v3_event',
+  'mcp__terminal-legend__v3_leader',
+  'mcp__terminal-legend__v3_save',
+] as const
+
+/** agentId -> settle the answer its `turn.complete` will carry. */
+const secretaryAnswers = new Map<string, (text: string) => void>()
 
 // ---------------------------------------------------------------- state
 
@@ -71,6 +85,26 @@ function statusText(world: WorldState): string {
     const playerMark = country.isPlayer ? '★' : ' '
     lines.push(
       `${playerMark}[${country.flag}]${country.name}(${country.id}) 库${fmtNumber(country.econ.treasury)} GDP${fmtNumber(country.econ.gdp)} 合${Math.round(country.government.legitimacy)} 激${Math.round(country.pops.radicals)} 陆${fmtNumber(country.military.army)} 海${fmtNumber(country.military.navy)} 科${country.tech.level}`,
+    )
+  }
+  const player = world.countries[world.playerId]
+  if (player !== undefined) {
+    const queue = player.econ.constructionQueue
+    lines.push(
+      '',
+      `本国官僚：${Math.round(player.bureaucracy.score)}/${Math.round(player.bureaucracy.ceiling)}，行动预算 ${player.bureaucracy.actionBudget} 项/月，资金效率 ${Math.round(player.bureaucracy.fundEfficiency * 100)}%，延迟 ${Math.round(player.bureaucracy.delayChance * 100)}%，失真 ${Math.round(player.bureaucracy.infoDistortion * 100)}%`,
+      `交通基础设施 ${Math.round(player.econ.transportInfrastructure)} · 行政能力 ${Math.round(player.econ.administrativeCapacity)} · 失业 ${player.econ.unemployment.toFixed(1)}%`,
+      `建造队列：${
+        queue.length === 0
+          ? '空'
+          : queue
+              .map(
+                project =>
+                  `${BUILDINGS[project.building].name}×${project.count}（剩余 ${project.monthsLeft} 月，进度 ${Math.round(project.progress * 100)}%）`,
+              )
+              .join('；')
+      }`,
+      `秘书委托：内政${world.secretary.delegation.internal ? '开' : '关'}，外交${world.secretary.delegation.diplomacy ? '开' : '关'}${world.secretary.lastReport === '' ? '' : `｜上次报告：${world.secretary.lastReport.slice(0, 200)}`}`,
     )
   }
   const pending = pendingOf(world)
@@ -280,6 +314,104 @@ async function resolveEvent(
   await refreshStatus($)
   $.ui.toast(text)
   return text
+}
+
+/**
+ * Spawns the secretary subagent and waits for its final answer, bounded by
+ * the 240-second timeout. An empty answer means it did not report in time.
+ */
+async function askSecretary(
+  $: EngineInterface,
+  world: WorldState,
+): Promise<{ text: string; isTimeout: boolean }> {
+  const spawned = await $.agent.spawn({
+    subagentType: SECRETARY_AGENT,
+    prompt: monthlyBriefing(world),
+    description: '月度秘书',
+  })
+  const agentId = spawned.agentId
+  if (agentId === undefined) {
+    return { text: '秘书未能受命', isTimeout: false }
+  }
+  const answer = await new Promise<string>(resolve => {
+    let timer: { cancel: () => void } | undefined
+    timer = $.clock.after(SECRETARY_TIMEOUT_MS, () => {
+      secretaryAnswers.delete(agentId)
+      resolve('')
+    })
+    secretaryAnswers.set(agentId, text => {
+      timer?.cancel()
+      resolve(text)
+    })
+  })
+  return { text: answer, isTimeout: answer === '' }
+}
+
+/** Runs one secretary turn and stores its report on the world. */
+async function runSecretary($: EngineInterface): Promise<string> {
+  const current = await activeWorld($)
+  if (current === undefined) return '还没有进行中的游戏。输入 /v3 new 开始一局。'
+  if (current.world.secretary.isRunning || secretaryAnswers.size > 0) {
+    return '秘书正在拟旨，请稍候。'
+  }
+  const world = clone(current.world)
+  world.secretary.isRunning = true
+  await setWorld($, world)
+  await patchUi($, { notice: '秘书正在拟旨…' })
+
+  try {
+    const answer = await askSecretary($, world)
+    // The subagent's tool calls wrote their own world; reload rather than
+    // overwriting them with the pre-run copy.
+    const latest = await activeWorld($)
+    const next = clone(latest?.world ?? world)
+    next.secretary.isRunning = false
+    next.secretary.lastRunTick = next.tick
+    next.secretary.lastReport = answer.isTimeout ? '秘书未按时呈报' : answer.text
+    if (!answer.isTimeout && answer.text !== '') {
+      next.log.push({
+        date: { ...next.date },
+        kind: 'politics',
+        text: `[秘书] ${answer.text.replace(/\s+/g, ' ').slice(0, 160)}`,
+      })
+      if (next.log.length > 400) next.log.splice(0, next.log.length - 400)
+    }
+    await setWorld($, next)
+    await saveGame($, next).catch(() => undefined)
+    await refreshStatus($)
+    await patchUi($, { notice: answer.isTimeout ? '秘书未按时呈报' : '秘书已呈报，请审阅' })
+    $.ui.toast(answer.isTimeout ? '秘书未按时呈报' : '秘书已呈报')
+    return next.secretary.lastReport
+  } catch (error) {
+    const latest = await activeWorld($)
+    if (latest !== undefined) {
+      const next = clone(latest.world)
+      next.secretary.isRunning = false
+      await setWorld($, next).catch(() => undefined)
+    }
+    await patchUi($, { notice: '秘书出错' }).catch(() => undefined)
+    return `秘书出错：${String(error)}`
+  }
+}
+
+/**
+ * Records a secretary overreach (advance, cheat, war, peace) in the chronicle
+ * and tells the player. Per ADR 0001 the call itself still runs.
+ */
+async function auditOverreach($: EngineInterface, action: string): Promise<void> {
+  const current = await activeWorld($)
+  if (current === undefined) return
+  const world = clone(current.world)
+  world.log.push({
+    date: { ...world.date },
+    kind: 'politics',
+    text: `[秘书越权] ${action}`,
+  })
+  if (world.log.length > 400) world.log.splice(0, world.log.length - 400)
+  await setWorld($, world)
+  await saveGame($, world).catch(() => undefined)
+  $.ui.toast(`秘书越权：${action}`)
+  await patchUi($, { notice: `秘书越权：${action}` })
 }
 
 async function controlGame($: EngineInterface, action: ControlAction): Promise<string> {
@@ -499,6 +631,16 @@ export const register: Register = (on, options) => {
     for (const spec of TOOL_SPECS) {
       await $.tool.register({ ...spec, isDeferred: false })
     }
+    // The monthly secretary: a cheap subagent with the full game toolset,
+    // constrained by its prompt and audited after the fact.
+    await $.agent.register({
+      name: 'secretary',
+      description: '终末传奇月度秘书：起草并执行御前会议计划。',
+      prompt: SECRETARY_PROMPT,
+      tools: [...SECRETARY_TOOLS],
+      model: 'haiku',
+      omitClaudeMd: true,
+    })
 
     const world = await getWorld($)
     const ui = await getUi($)
@@ -545,13 +687,24 @@ export const register: Register = (on, options) => {
 
   // ------------------------------------------------------------ turn lifecycle
 
+  // The secretary is spawned only by this plugin; the model never sees it.
+  on('agent.offer', { agent: SECRETARY_AGENT }, () => ({ isOffered: false }))
+
   on('turn.start', ($, e, next) => {
     if (e.agentId === undefined) isTurnRunning = true
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
-    if (e.agentId === undefined) isTurnRunning = false
+    if (e.agentId !== undefined) {
+      const settle = secretaryAnswers.get(e.agentId)
+      if (settle !== undefined) {
+        secretaryAnswers.delete(e.agentId)
+        settle(e.answer)
+      }
+      return next(e)
+    }
+    isTurnRunning = false
     if (resumeAfterTurn) {
       resumeAfterTurn = false
       const current = await activeWorld($)
@@ -647,6 +800,34 @@ export const register: Register = (on, options) => {
           const months = clamp(Math.floor(Number(parts[1] ?? 1)), 1, 24)
           const summary = await advanceGame($, months, true)
           return { text: summary }
+        }
+
+        case 'secretary': {
+          if (current === undefined) return { text: '还没有进行中的游戏。' }
+          return { text: await runSecretary($) }
+        }
+
+        case 'delegate': {
+          if (current === undefined) return { text: '还没有进行中的游戏。' }
+          const domain = (parts[1] ?? '').toLowerCase()
+          const toggle = (parts[2] ?? '').toLowerCase()
+          if (
+            (domain !== 'internal' && domain !== 'diplomacy') ||
+            (toggle !== 'on' && toggle !== 'off')
+          ) {
+            return {
+              text: '用法：/v3 delegate internal on|off，或 /v3 delegate diplomacy on|off。',
+            }
+          }
+          const world = clone(current.world)
+          if (domain === 'internal') world.secretary.delegation.internal = toggle === 'on'
+          else world.secretary.delegation.diplomacy = toggle === 'on'
+          await setWorld($, world)
+          await saveGame($, world).catch(() => undefined)
+          await refreshStatus($)
+          return {
+            text: `${domain === 'internal' ? '内政' : '外交'}委托已${toggle === 'on' ? '开启' : '关闭'}。`,
+          }
         }
 
         case 'auto': {
@@ -833,6 +1014,7 @@ export const register: Register = (on, options) => {
 
   on('tool.call', { tool: 'mcp__terminal-legend__v3_advance' }, async ($, e) => {
     try {
+      if (e.agentId !== undefined) await auditOverreach($, '推进时间')
       const args = e as unknown as Args
       const months = clamp(Math.floor(Number(args.months ?? 1)), 1, 24)
       const summary = await advanceGame($, months, true)
@@ -884,10 +1066,14 @@ export const register: Register = (on, options) => {
       const current = await activeWorld($)
       if (current === undefined) return toolFail('还没有进行中的游戏。')
       const args = e as unknown as Args
+      const move = String(args.move ?? '')
+      if (e.agentId !== undefined && (move === 'war' || move === 'peace')) {
+        await auditOverreach($, move === 'war' ? '宣战' : '停战')
+      }
       const world = clone(current.world)
       const params: Record<string, string | number | boolean | undefined> = {
         target: String(args.target ?? '').toUpperCase(),
-        move: String(args.move ?? ''),
+        move,
       }
       if (typeof args.amount === 'number') params.amount = args.amount
       if (typeof args.reason === 'string') params.reason = args.reason
