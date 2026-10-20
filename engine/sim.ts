@@ -209,8 +209,8 @@ function computeProduction(country: Country): Record<GoodId, number> {
   const mine = (value: number): number => applyModifiers(country, 'mineOutput', value)
   const factory = (value: number): number => applyModifiers(country, 'factoryOutput', value)
 
-  out.grain = output('grain', farm(cap(b.farms) * 1.05 * tech * infra * access))
-  out.wood = output('wood', farm(cap(b.farms) * 0.16) + mine(cap(b.mines) * 0.06))
+  out.grain = output('grain', farm(cap(b.farms) * 0.30 * tech * infra * access))
+  out.wood = output('wood', farm(cap(b.farms) * 0.04) + mine(cap(b.mines) * 0.04))
   out.coal = output('coal', mine(cap(b.mines) * 0.5 * tech))
   out.iron = output('iron', mine(cap(b.mines) * 0.42 * tech))
   out.fabric = output('fabric', factory(cap(b.factories) * 0.6 * tech * industrial))
@@ -228,7 +228,7 @@ function computeProduction(country: Country): Record<GoodId, number> {
     'furniture',
     factory(cap(b.factories) * 0.22 * tech * industrial) + country.pops.artisans * 0.006,
   )
-  out.machinery = output('machinery', factory(cap(b.factories) * 0.09 * tech * industrial))
+  out.machinery = output('machinery', factory(cap(b.factories) * 0.18 * tech * industrial))
   out.arms = output(
     'arms',
     factory(cap(b.factories) * 0.07 * tech * industrial) + cap(b.barracks) * 0.05,
@@ -338,6 +338,10 @@ function computeDemand(country: Country): DemandBreakdown {
   const government = zeroGoods()
 
   // ---- intermediate demand: industrial inputs, not part of GDP ----
+  // Industrial towns buy food off the market; this puts agrarian and
+  // industrial economies on opposite sides of the grain trade instead of
+  // every country holding a permanent grain mountain.
+  out.grain += demand('grain', b.factories * 1.0)
   out.coal += demand('coal', popFactor * 1.2 + b.factories * 0.35)
   out.iron += demand('iron', popFactor * 0.8 + b.factories * 0.4 + b.railroads * 0.5)
   out.fabric += demand('fabric', b.factories * 0.45 + popFactor * 0.5)
@@ -1368,8 +1372,11 @@ export const TRADE_WARMTH_MAX = 2
  * penalty could never outrun the share-scaled warmth and the crisis bar
  * (§4.1, 中英关系 ≤ −10) was unreachable. This scales with how much of the
  * bilateral trade is actually sensitive, so opium dependency sinks relations.
+ * It intentionally exceeds the ±10 monthly envelope: a fully sensitive
+ * partner always moves at the cap, while a marginal sensitive slice can still
+ * outrun the warmth term.
  */
-export const SENSITIVE_DRAG = 7
+export const SENSITIVE_DRAG = 15
 /** Per ordered pair per month: auto + sensitive + agent tension is clamped here (plan §2.7). */
 export const TRADE_RELATION_ENVELOPE = 10
 /**

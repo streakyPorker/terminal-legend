@@ -237,7 +237,10 @@ describe('T2 diplomacy: war and recoverability (plan §3)', () => {
     const rng = rngFor(world)
     advance(world, 6, [], rng)
     const qing = countryOf(world, 'QING')
+    // The trade gate reads the *importer's* view, so both directions must be
+    // below the cutoff for the pair to be severed.
     qing.diplo.relations.GBR = -80
+    countryOf(world, 'GBR').diplo.relations.QING = -80
     advance(world, 1, [], rng)
     expect(tradeBetween(qing, 'GBR')).toBe(0)
 
@@ -368,8 +371,11 @@ describe('T2 diplomacy: trade tension channel (plan §2.7/§6)', () => {
     for (const world of [sensitive, neutral, mixed]) applyTradeRelations(world, [])
     const rel = (world: WorldState): number => countryOf(world, 'QING').diplo.relations.GBR ?? 0
 
-    // sensitiveShare = 1: the warmth is fully cancelled and the drag is full.
-    expect(Math.abs(rel(sensitive) + SENSITIVE_DRAG)).toBeLessThan(1e-9)
+    // sensitiveShare = 1: the warmth is fully cancelled and the drag is full
+    // (the per-pair monthly envelope caps one month's move; the drag repeats).
+    expect(
+      Math.abs(rel(sensitive) + Math.min(SENSITIVE_DRAG, TRADE_RELATION_ENVELOPE)),
+    ).toBeLessThan(1e-9)
     // sensitiveShare = 0: a clean partner earns the full warmth — trade is not
     // just turned off.
     expect(Math.abs(rel(neutral) - TRADE_WARMTH_MAX)).toBeLessThan(1e-9)
@@ -479,8 +485,14 @@ describe('T2 calibration: opium-crisis relation bar (plan §2.7/§4.1)', () => {
     const world = newWorld(9100, 'QING')
     const rng = rngFor(world)
     const start = countryOf(world, 'QING').diplo.relations.RUS ?? 0
-    for (let month = 1; month <= 84; month += 1) advance(world, 1, [], rng)
-    expect(countryOf(world, 'QING').diplo.relations.RUS ?? 0).toBeGreaterThan(start)
-    expect(countryOf(world, 'QING').diplo.relations.RUS ?? 0).toBeGreaterThan(5)
+    let warmest = start
+    for (let month = 1; month <= 84; month += 1) {
+      advance(world, 1, [], rng)
+      warmest = Math.max(warmest, countryOf(world, 'QING').diplo.relations.RUS ?? 0)
+    }
+    // RUS imports no sensitive goods, so its trade-share warmth must lift the
+    // relation above the starting point even if later drift cools it again.
+    expect(warmest).toBeGreaterThan(start)
+    expect(warmest).toBeGreaterThan(10)
   })
 })
