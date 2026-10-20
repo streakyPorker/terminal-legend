@@ -46,6 +46,7 @@ import {
   techCost,
   techName,
 } from './data'
+import { expenseParts, incomeParts } from './fiscal'
 import type { Rng } from './rng'
 import {
   MODIFIER_STATS,
@@ -438,45 +439,29 @@ export function computeEconomy(
   components.g *= gdpFactor
   const gdp = realGdp * gdpFactor + nx
 
-  const taxEfficiency = applyModifiers(
-    country,
-    'taxEfficiency',
-    0.5 + country.government.legitimacy / 200,
-  )
-  // Beyond 25% the tax base erodes (evasion, flight, informal work), so the
-  // revenue curve peaks instead of rewarding a pure max-tax slider.
-  const taxCompliance =
-    country.econ.taxRate <= 25
-      ? 1
-      : clamp(1 - (country.econ.taxRate - 25) * 0.015, 0.45, 1)
-  // Tariff revenue is now the real gold collected on this month's import flows
-  // (plan §2.4), replacing the abstract trade-volume estimate.
+  // Revenue and expense are split by source/category in fiscal.ts so the HUD
+  // can show a real cash account instead of a single net figure. Tariff
+  // revenue is the gold actually collected on this month's import flows
+  // (plan §2.4); construction is settled separately and folded in later.
+  const revenue = incomeParts(country, gdp, override?.tariffRevenue ?? 0)
   const income = applyModifiers(
     country,
     'income',
-    gdp * (country.econ.taxRate / 100) * 0.45 * taxEfficiency * taxCompliance +
-      (override?.tariffRevenue ?? 0) +
-      country.econ.buildings.ports * 0.02,
+    revenue.taxes + revenue.tariffs + revenue.ports,
   )
-
-  const b = country.econ.buildings
-  const sp = country.econ.spending
-  const popFactor = Math.max(0.1, country.pops.total / 1000)
-  const expense =
-    country.military.army * 0.05 * (1 + country.military.quality) +
-    country.military.navy * 0.04 +
-    // Standing appropriations: armies and fleets are no longer free.
-    sp.army * 0.5 +
-    sp.navy * 0.5 +
-    popFactor * 0.12 +
-    sp.bureaucracy * popFactor * 0.02 +
-    sp.education * popFactor * 0.03 +
-    sp.welfare * popFactor * 0.03 +
-    // Construction is spent by the queue in simulateCountry, and folded into
-    // the displayed expense there.
-    country.econ.debt * 0.004 +
-    gdp * (1 - applyModifiers(country, 'marketAccess', country.econ.marketAccess)) * 0.02 +
-    (b.universities + b.barracks) * 0.01
+  const outlay = expenseParts(country, gdp)
+  const expense = applyModifiers(
+    country,
+    'expense',
+    outlay.army +
+      outlay.navy +
+      outlay.administration +
+      outlay.education +
+      outlay.welfare +
+      outlay.debtInterest +
+      outlay.marketLoss +
+      outlay.upkeep,
+  )
 
   const labor = deriveLabor(country)
   const rawShare =

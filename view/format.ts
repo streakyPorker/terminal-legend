@@ -1,4 +1,5 @@
 import type { Country, GameDate, LogEntry, WorldState } from '../types'
+import { fiscalLedger } from '../engine/fiscal'
 
 const BLOCKS = '▁▂▃▄▅▆▇█'
 
@@ -143,8 +144,8 @@ export function logKindMark(kind: LogEntry['kind']): string {
 export function statusLine(world: WorldState): string {
   const player = world.countries[world.playerId]
   if (player === undefined) return '终末传奇 · 无进行中的游戏'
-  const surplus =
-    player.econ.income - player.econ.expense - player.econ.lastDebtRepayment
+  const ledger = fiscalLedger(player)
+  const surplus = ledger.net
   const wars = world.wars.filter(
     war => war.attackers.includes(player.id) || war.defenders.includes(player.id),
   )
@@ -156,6 +157,7 @@ export function statusLine(world: WorldState): string {
     fmtDate(world.date),
     `[${player.flag}]${player.name}`,
     `国库${fmtMoney(player.econ.treasury)}(${fmtSigned(surplus)}金/月)`,
+    `收${fmtNumber(ledger.income.total)} 支${fmtNumber(ledger.expense.total + ledger.debtRepayment)}`,
     `GDP${fmtGdp(player.econ.gdp)}`,
     `合法性${Math.round(player.government.legitimacy)}`,
     `激进${Math.round(player.pops.radicals)}`,

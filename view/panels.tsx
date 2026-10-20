@@ -14,6 +14,7 @@ import {
   techName,
 } from '../engine/data'
 import { inspectEconomy } from '../engine/sim'
+import { fiscalLedger } from '../engine/fiscal'
 import { MODIFIER_STAT_NAMES, describeModifier } from '../engine/modifiers'
 import {
   OPIUM_CRISIS_TITLE,
@@ -377,6 +378,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
   if (player === undefined) return <Text dimColor>无进行中的游戏。</Text>
   const snapshot = inspectEconomy(player)
   const econ = player.econ
+  const ledger = fiscalLedger(player)
   const components = econ.gdpComponents
   const widths = [7, 7, 8, 8, 7, 11]
   const tradeWidths = [12, 10, 10, 10]
@@ -520,7 +522,58 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
-        <Heading ui={props.ui} text="财政" hint={`收入 ${fmtMoney(econ.income)}/月 · 支出 ${fmtMoney(econ.expense)}/月 · 债务 ${fmtMoney(econ.debt)}`} />
+        <Heading
+          ui={props.ui}
+          text="国库收支"
+          hint={`本月结算 · 收入 ${fmtMoney(ledger.income.total)} · 支出 ${fmtMoney(ledger.expense.total)} · 还本 ${fmtMoney(ledger.debtRepayment)} · 净 ${fmtSigned(ledger.net)}`}
+        />
+        <Text dimColor>财政收入</Text>
+        {([
+          ['税入', ledger.income.taxes],
+          ['关税', ledger.income.tariffs],
+          ['港口', ledger.income.ports],
+        ] as const).map(([name, value]) => (
+          <Box flexDirection="row" columnGap={1}>
+            <Text wrap="truncate">{padEnd(name, 6)}</Text>
+            <Text color="green">{padEnd(bar(value, Math.max(1, ledger.income.total), 10), 11)}</Text>
+            <Text>{value.toFixed(1)}</Text>
+          </Box>
+        ))}
+        <Text>
+          收入合计 <Text color="green">{fmtMoney(ledger.income.total)}</Text>
+          <Text dimColor>　税入占 GDP {ledger.gdp > 0 ? fmtPercent(ledger.income.taxes / ledger.gdp) : '—'}</Text>
+        </Text>
+
+        <Text dimColor>财政支出</Text>
+        {([
+          ['陆军', ledger.expense.army],
+          ['海军', ledger.expense.navy],
+          ['行政', ledger.expense.administration],
+          ['教育', ledger.expense.education],
+          ['福利', ledger.expense.welfare],
+          ['债息', ledger.expense.debtInterest],
+          ['市场损耗', ledger.expense.marketLoss],
+          ['设施维护', ledger.expense.upkeep],
+          ['国有建设', ledger.expense.construction],
+        ] as const).map(([name, value]) => (
+          <Box flexDirection="row" columnGap={1}>
+            <Text wrap="truncate">{padEnd(name, 6)}</Text>
+            <Text color="red">{padEnd(bar(value, Math.max(1, ledger.expense.total), 10), 11)}</Text>
+            <Text>{value.toFixed(1)}</Text>
+          </Box>
+        ))}
+        <Text>
+          支出合计 <Text color="red">{fmtMoney(ledger.expense.total)}</Text>
+          <Text dimColor>　还本 {fmtMoney(ledger.debtRepayment)}　债务余额 {fmtMoney(econ.debt)}</Text>
+        </Text>
+        <Text>
+          国库净额 <Text color={ledger.net >= 0 ? 'green' : 'red'}>{fmtSigned(ledger.net)} 金/月</Text>
+        </Text>
+        <Text dimColor>GDP {fmtGdp(ledger.gdp)} 是产出（基期价），不是国库收支；国库只经手税入、关税与港口。</Text>
+      </Box>
+
+      <Box flexDirection="column" marginTop={1}>
+        <Heading ui={props.ui} text="支出编制" hint="政策投入（每月上限，不等于本月实付）" />
         {Object.entries(econ.spending).map(([key, value]) => (
           <Box flexDirection="row" columnGap={1}>
             <Text wrap="truncate">{padEnd(SPENDING[key as keyof typeof SPENDING].name, 6)}</Text>
@@ -1142,7 +1195,8 @@ export function Band(props: BandProps): any {
   if (player === undefined) return <Text dimColor>终末传奇：输入 /v3 new 开始一局。</Text>
 
   const econ = player.econ
-  const surplus = econ.income - econ.expense - econ.lastDebtRepayment
+  const ledger = fiscalLedger(player)
+  const surplus = ledger.net
   const pending = pendingOf(props.world)
   const delegation = props.world.secretary.delegation
   const majors = Object.values(props.world.countries)
@@ -1179,6 +1233,11 @@ export function Band(props: BandProps): any {
       <Text>
         国库 <Text color={surplus >= 0 ? 'green' : 'red'}>{fmtMoney(econ.treasury)}</Text>
         <Text dimColor>（{fmtSigned(surplus)}金/月）</Text>
+      </Text>
+      <Text>
+        收支 <Text color="green">{fmtMoney(ledger.income.total)}</Text>
+        <Text dimColor> / </Text>
+        <Text color="red">{fmtMoney(ledger.expense.total + ledger.debtRepayment)}</Text>
       </Text>
       <Text>
         国内生产总值 <Text>{fmtGdp(econ.gdp)}</Text>

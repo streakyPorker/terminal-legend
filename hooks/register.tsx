@@ -17,6 +17,7 @@ import {
   type Decision,
 } from '../engine/sim'
 import { CURRENT_WORLD_VERSION, loadGame, saveGame } from '../engine/save'
+import { fiscalLedger } from '../engine/fiscal'
 import { applyCheat, type CheatParams } from '../engine/cheat'
 import { SECRETARY_PROMPT, monthlyBriefing } from '../engine/secretary'
 import {
@@ -121,11 +122,17 @@ function statusText(world: WorldState): string {
   const player = world.countries[world.playerId]
   if (player !== undefined) {
     const queue = player.econ.constructionQueue
+    const ledger = fiscalLedger(player)
+    const taxShare =
+      ledger.gdp > 0 ? ((ledger.income.taxes / ledger.gdp) * 100).toFixed(1) : '0.0'
     lines.push(
       '',
       `本国官僚：${Math.round(player.bureaucracy.score)}/${Math.round(player.bureaucracy.ceiling)}，行动预算 ${player.bureaucracy.actionBudget} 项/月，资金效率 ${Math.round(player.bureaucracy.fundEfficiency * 100)}%，延迟 ${Math.round(player.bureaucracy.delayChance * 100)}%，失真 ${Math.round(player.bureaucracy.infoDistortion * 100)}%`,
       `交通基础设施 ${Math.round(player.econ.transportInfrastructure)} · 行政能力 ${Math.round(player.econ.administrativeCapacity)} · 失业 ${player.econ.unemployment.toFixed(1)}%`,
       `GDP构成：消费 ${fmtNumber(player.econ.gdpComponents.c)} / 投资 ${fmtNumber(player.econ.gdpComponents.i)} / 政府 ${fmtNumber(player.econ.gdpComponents.g)}；工资 ${fmtNumber(player.econ.wages)}（劳动份额 ${Math.round(player.econ.laborShare * 100)}%）/ 利润 ${fmtNumber(player.econ.profits)}`,
+      `财政收入：税入 ${fmtNumber(ledger.income.taxes)} + 关税 ${fmtNumber(ledger.income.tariffs)} + 港口 ${fmtNumber(ledger.income.ports)} = ${fmtMoney(ledger.income.total)}/月（税入占 GDP ${taxShare}%）`,
+      `财政支出：陆军 ${fmtNumber(ledger.expense.army)} + 海军 ${fmtNumber(ledger.expense.navy)} + 行政 ${fmtNumber(ledger.expense.administration)} + 教育 ${fmtNumber(ledger.expense.education)} + 福利 ${fmtNumber(ledger.expense.welfare)} + 债息 ${fmtNumber(ledger.expense.debtInterest)} + 市场损耗 ${fmtNumber(ledger.expense.marketLoss)} + 设施维护 ${fmtNumber(ledger.expense.upkeep)} + 国有建设 ${fmtNumber(ledger.expense.construction)} = ${fmtMoney(ledger.expense.total)}/月`,
+      `国库净额：收入 − 支出 − 还本（${fmtNumber(ledger.debtRepayment)}）= ${fmtSigned(ledger.net)} 金/月；GDP 是产出，与国库收支不是同一本账`,
       `私人资本 ${fmtNumber(player.econ.privateCapital)} · 投资信心 ${player.econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(player.econ.investmentConfidence)} · 闲置利润 ${fmtNumber(player.econ.idleProfits)} · 劳动原始利用率 ${(player.econ.laborRawUtilization * 100).toFixed(1)}%（需求 ${fmtPop(player.econ.laborDemand)} / 劳动力 ${fmtPop(player.econ.laborForce)}）`,
       `资源禀赋：农田 ${player.econ.resources.farmland} · 林地 ${player.econ.resources.timber} · 煤矿 ${player.econ.resources.coal} · 铁矿 ${player.econ.resources.iron}`,
       `建造队列：${
@@ -314,7 +321,8 @@ async function advanceGame(
     if (beforePlayer !== undefined && afterPlayer !== undefined) {
       const delta = (now: number, before: number): string =>
         `${fmtNumber(now)}（${fmtSigned(now - before)}）`
-      summary += `\n本月：GDP ${delta(afterPlayer.econ.gdp, beforePlayer.econ.gdp)}｜国库 ${delta(afterPlayer.econ.treasury, beforePlayer.econ.treasury)}｜失业 ${afterPlayer.econ.unemployment.toFixed(1)}%｜债务 ${fmtNumber(afterPlayer.econ.debt)}｜激进 ${Math.round(afterPlayer.pops.radicals)}`
+      const ledger = fiscalLedger(afterPlayer)
+      summary += `\n本月：GDP ${delta(afterPlayer.econ.gdp, beforePlayer.econ.gdp)}｜国库 ${delta(afterPlayer.econ.treasury, beforePlayer.econ.treasury)}｜收入 ${fmtNumber(ledger.income.total)} 支出 ${fmtNumber(ledger.expense.total + ledger.debtRepayment)} 净 ${fmtSigned(ledger.net)}｜失业 ${afterPlayer.econ.unemployment.toFixed(1)}%｜债务 ${fmtNumber(afterPlayer.econ.debt)}｜激进 ${Math.round(afterPlayer.pops.radicals)}`
       summary += `\n私人资本 ${fmtNumber(afterPlayer.econ.privateCapital)} · 投资信心 ${afterPlayer.econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(afterPlayer.econ.investmentConfidence)} · 资源 农${afterPlayer.econ.resources.farmland}/林${afterPlayer.econ.resources.timber}/煤${afterPlayer.econ.resources.coal}/铁${afterPlayer.econ.resources.iron}`
     }
     await setWorld($, world)
