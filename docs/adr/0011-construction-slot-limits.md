@@ -1,6 +1,6 @@
 # 建造槽位：每槽最多 15 座、建造点上限 15×单座需求、订单不限量
 
-- Status: accepted（World v7，增量规则，不升版本）
+- Status: superseded by `0012-workload-construction.md`（15 座/满额 1 月的规则已改；工程量制见 0012）
 
 ## 背景
 

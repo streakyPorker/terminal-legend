@@ -104,8 +104,11 @@ describe('construction capacity (ADR 0010)', () => {
     advance(world, 1, [], makeRngForWorld(world))
     expect(qing.econ.lastConstructionRent).toBeGreaterThan(0)
     expect(qing.econ.treasury).toBeGreaterThan(before)
-    // A fully funded private slot finishes in the month; check the stock.
-    expect(qing.econ.buildings.factories).toBeGreaterThan(factoriesBefore)
+    // A private slot now carries ten rounds of workload; it stays in the
+    // queue and has made some progress.
+    expect(qing.econ.constructionQueue.length).toBeGreaterThan(0)
+    expect(qing.econ.constructionQueue[0]?.progress ?? 0).toBeGreaterThan(0)
+    expect(qing.econ.buildings.factories).toBeGreaterThan(factoriesBefore * 0.99)
   })
 
   test('an old v7 save without the new fields is normalized on load', async () => {
@@ -149,10 +152,10 @@ describe('construction slot limits (ADR 0011)', () => {
     )
     expect(result.ok).toBe(true)
     const project = qing.econ.constructionQueue[0]
-    expect(project?.count).toBe(15)
+    expect(project?.count).toBe(5)
     expect(project?.monthsLeft).toBe(1)
-    expect(project?.monthlyCost).toBe(60)
-    expect(maxSlotCapacity('factories')).toBe(30)
+    expect(project?.monthlyCost).toBe(2)
+    expect(maxSlotCapacity('factories')).toBe(10)
   })
 
   test('a legacy oversized slot is capped at 15 buildings worth of points', async () => {
@@ -205,7 +208,7 @@ describe('construction schedule estimate', () => {
     )
     normalizeConstructionQueue(qing)
     const schedule = constructionSchedule(qing)
-    expect(schedule.first?.turns).toBe(1)
-    expect(schedule.second?.turns ?? 0).toBeGreaterThan(1)
+    expect(schedule.first?.turns ?? 0).toBeGreaterThan(1)
+    expect(schedule.second?.turns ?? 0).toBeGreaterThan(schedule.first?.turns ?? 0)
   })
 })

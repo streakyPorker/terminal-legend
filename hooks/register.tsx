@@ -11,9 +11,11 @@ import {
   capacityCost,
   clamp,
   clone,
+  CONSTRUCTION_COST_PER_POINT,
   constructionLoad,
   constructionSchedule,
   councilInterrupt,
+  projectWorkload,
   newWorld,
   randomDecision,
   type AdvanceReport,
@@ -176,14 +178,14 @@ function statusText(world: WorldState): string {
       }`,
       `私人资本 ${fmtNumber(Math.max(0, player.econ.privateCapital))} · 私人外债 ${fmtMoney(ledger.privateDebt)} · 投资信心 ${player.econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(player.econ.investmentConfidence)} · 闲置利润 ${fmtNumber(player.econ.idleProfits)} · 劳动原始利用率 ${(player.econ.laborRawUtilization * 100).toFixed(1)}%（需求 ${fmtPop(player.econ.laborDemand)} / 劳动力 ${fmtPop(player.econ.laborForce)}）`,
       `资源禀赋：农田 ${player.econ.resources.farmland} · 林地 ${player.econ.resources.timber} · 煤矿 ${player.econ.resources.coal} · 铁矿 ${player.econ.resources.iron}`,
-      `建造能力 ${fmtNumber(load.capacity)} 点/月（国有需求 ${fmtNumber(load.requested)}，已分配 ${fmtNumber(load.allocated)}，闲置 ${fmtNumber(load.remaining)}）`,
+      `建造能力 ${fmtNumber(load.capacity)} 点/月（国有需求 ${fmtNumber(load.requested)}，已分配 ${fmtNumber(load.allocated)}，闲置 ${fmtNumber(load.remaining)}；每点工程量造价 ${CONSTRUCTION_COST_PER_POINT} 金）`,
       `国有建造队列：${
         stateQueue.length === 0
           ? '空'
           : stateQueue
               .map(
                 project =>
-                  `${BUILDINGS[project.building].name}×${project.count}（预计 ${schedule[project.id]?.turns ?? '—'} 回合，本月 ${Math.round((schedule[project.id]?.currentShare ?? 0) * 100)}%，建造点 ${fmtNumber(load.byProject[project.id] ?? 0)}/${fmtNumber(capacityCost(project))}）`,
+                  `${BUILDINGS[project.building].name}×${project.count}（工程量 ${fmtNumber(projectWorkload(project) * (1 - project.progress))}/${fmtNumber(projectWorkload(project))} 点，已完成 ${Math.round(project.progress * 100)}%，本月投入 ${fmtNumber(load.byProject[project.id] ?? 0)}/${fmtNumber(capacityCost(project))} 点，预计 ${schedule[project.id]?.turns ?? '—'} 回合，每月 ${fmtNumber(project.monthlyCost)} 金）`,
               )
               .join('；')
       }`,
@@ -193,7 +195,7 @@ function statusText(world: WorldState): string {
           : privateQueue
               .map(
                 project =>
-                  `${BUILDINGS[project.building].name}×${project.count}（进度 ${Math.round(project.progress * 100)}%，私人出资）`,
+                  `${BUILDINGS[project.building].name}×${project.count}（工程量 ${fmtNumber(projectWorkload(project) * (1 - project.progress))}/${fmtNumber(projectWorkload(project))} 点，进度 ${Math.round(project.progress * 100)}%，私人出资）`,
               )
               .join('；')
       }`,
@@ -853,7 +855,7 @@ const TOOL_SPECS: {
           ],
           description: 'build 时必填。',
         },
-        count: { type: 'integer', minimum: 1, maximum: 15 },
+        count: { type: 'integer', minimum: 1, maximum: 5 },
         rate: { type: 'number', minimum: 0, maximum: 60 },
         category: {
           type: 'string',

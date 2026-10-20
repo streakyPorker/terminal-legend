@@ -132,7 +132,7 @@ describe('M2 construction queue and economy fixes', () => {
     expect(prussia.econ.constructionQueue.length).toBe(1)
     const project = prussia.econ.constructionQueue[0]
     expect(project?.monthsLeft).toBe(1)
-    expect(project?.monthlyCost).toBe(8)
+    expect(project?.monthlyCost).toBe(0.8)
   })
 
   test('a queued factory finishes after several funded months', async () => {

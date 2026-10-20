@@ -15,9 +15,11 @@ import {
 } from '../engine/data'
 import {
   capacityCost,
+  CONSTRUCTION_COST_PER_POINT,
   constructionLoad,
   constructionSchedule,
   inspectEconomy,
+  projectWorkload,
 } from '../engine/sim'
 import { fiscalLedger, nationalDebt } from '../engine/fiscal'
 import { MODIFIER_STAT_NAMES, describeModifier } from '../engine/modifiers'
@@ -522,7 +524,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
           }
         />
         <Text dimColor>
-          建造能力 {fmtNumber(load.capacity)} 点/月 · 国有需求 {fmtNumber(load.requested)} · 已分配 {fmtNumber(load.allocated)} · 剩余 {fmtNumber(load.remaining)}
+          建造能力 {fmtNumber(load.capacity)} 点/月 · 国有需求 {fmtNumber(load.requested)} · 已分配 {fmtNumber(load.allocated)} · 剩余 {fmtNumber(load.remaining)} · 每点造价 {CONSTRUCTION_COST_PER_POINT} 金
           {player.econ.lastConstructionRent > 0 ? ` · 私人租用 +${fmtMoney(player.econ.lastConstructionRent)}` : ''}
         </Text>
         {stateQueue.length === 0 ? (
@@ -533,7 +535,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
               <Text dimColor>
-                预计 {schedule[project.id]?.turns ?? '—'} 回合 · 本月 {Math.round((schedule[project.id]?.currentShare ?? 0) * 100)}% · 建造点 {fmtNumber(load.byProject[project.id] ?? 0)}/{fmtNumber(capacityCost(project))} · 满额造价 {project.monthlyCost.toFixed(1)}金
+                工程量 {fmtNumber(projectWorkload(project) * (1 - project.progress))}/{fmtNumber(projectWorkload(project))} 点 · 已完成 {Math.round(project.progress * 100)}% · 本月投入 {fmtNumber(load.byProject[project.id] ?? 0)}/{fmtNumber(capacityCost(project))} 点 · 预计 {schedule[project.id]?.turns ?? '—'} 回合 · 每月造价 {project.monthlyCost.toFixed(1)}金
               </Text>
             </Box>
           ))
@@ -558,7 +560,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
               <Text color="magenta">{padEnd('私人', 4)}</Text>
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
-              <Text dimColor>进度 {Math.round(project.progress * 100)}% · 满额造价 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
+              <Text dimColor>工程量 {fmtNumber(projectWorkload(project) * (1 - project.progress))}/{fmtNumber(projectWorkload(project))} 点 · 进度 {Math.round(project.progress * 100)}% · 每月造价 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
             </Box>
           ))
         )}
@@ -1176,7 +1178,7 @@ function CouncilPanel(props: {
           }
         />
         <Text dimColor>
-          建造能力 {fmtNumber(load.capacity)} 点/月 · 国有需求 {fmtNumber(load.requested)} · 已分配 {fmtNumber(load.allocated)} · 剩余 {fmtNumber(load.remaining)}
+          建造能力 {fmtNumber(load.capacity)} 点/月 · 国有需求 {fmtNumber(load.requested)} · 已分配 {fmtNumber(load.allocated)} · 剩余 {fmtNumber(load.remaining)} · 每点造价 {CONSTRUCTION_COST_PER_POINT} 金
           {player.econ.lastConstructionRent > 0 ? ` · 私人租用 +${fmtMoney(player.econ.lastConstructionRent)}` : ''}
         </Text>
         {stateQueue.length === 0 ? (
@@ -1187,7 +1189,7 @@ function CouncilPanel(props: {
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
               <Text dimColor>
-                预计 {schedule[project.id]?.turns ?? '—'} 回合 · 本月 {Math.round((schedule[project.id]?.currentShare ?? 0) * 100)}% · 建造点 {fmtNumber(load.byProject[project.id] ?? 0)}/{fmtNumber(capacityCost(project))} · 满额造价 {project.monthlyCost.toFixed(1)}金
+                工程量 {fmtNumber(projectWorkload(project) * (1 - project.progress))}/{fmtNumber(projectWorkload(project))} 点 · 已完成 {Math.round(project.progress * 100)}% · 本月投入 {fmtNumber(load.byProject[project.id] ?? 0)}/{fmtNumber(capacityCost(project))} 点 · 预计 {schedule[project.id]?.turns ?? '—'} 回合 · 每月造价 {project.monthlyCost.toFixed(1)}金
               </Text>
             </Box>
           ))
@@ -1212,7 +1214,7 @@ function CouncilPanel(props: {
               <Text color="magenta">{padEnd('私人', 4)}</Text>
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
-              <Text dimColor>进度 {Math.round(project.progress * 100)}% · 满额造价 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
+              <Text dimColor>工程量 {fmtNumber(projectWorkload(project) * (1 - project.progress))}/{fmtNumber(projectWorkload(project))} 点 · 进度 {Math.round(project.progress * 100)}% · 每月造价 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
             </Box>
           ))
         )}

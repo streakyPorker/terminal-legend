@@ -298,9 +298,6 @@ export const CAPACITY_COST: Record<BuildingId, number> = {
   workshops: 1.5,
 }
 
-export const capacityCost = (project: ConstructionProject): number =>
-  (CAPACITY_COST[project.building] ?? 1) * project.count
-
 /**
  * Private builders can do half a slot's monthly work with their own
  * organisation; the other half can rent idle state construction points, which
@@ -310,15 +307,81 @@ export const PRIVATE_OWN_CAPACITY_SHARE = 0.5
 /** Gold the state charges per rented construction point. */
 export const CONSTRUCTION_RENT_PER_POINT = 0.3
 /**
- * A slot may hold at most 15 buildings. Its construction-point ceiling is
- * `15 × CAPACITY_COST[building]`, i.e. enough to finish a full 15-unit slot in
- * one month; a larger legacy slot is capped at that ceiling and spreads over
- * more months (ADR 0011).
+ * A slot may hold at most 5 buildings. Its construction-point ceiling is
+ * `5 × CAPACITY_COST[building]`; every slot also has a ten-month base duration,
+ * so full capacity controls how many slots can run, not how fast one finishes
+ * (ADR 0012).
  */
-export const MAX_BUILDINGS_PER_SLOT = 15
+export const MAX_BUILDINGS_PER_SLOT = 5
+
+/**
+ * Total construction workload per unit of monthly point requirement. A slot
+ * with 22.5 points/month needs 225 workload; at full input it takes ten
+ * months, at half input twenty. Duration is always workload / monthly points
+ * (ADR 0012), never a stored month count.
+ */
+export const WORKLOAD_MULTIPLIER = 10
+
+export const capacityCost = (project: ConstructionProject): number =>
+  (CAPACITY_COST[project.building] ?? 1) * project.count
+
+/** Total points of work a project must complete. */
+export const projectWorkload = (project: ConstructionProject): number =>
+  capacityCost(project) * WORKLOAD_MULTIPLIER
 
 export const maxSlotCapacity = (building: BuildingId): number =>
   MAX_BUILDINGS_PER_SLOT * (CAPACITY_COST[building] ?? 1)
+
+/** Base gold paid per construction-workload point (ADR 0012). */
+export const CONSTRUCTION_COST_PER_POINT = 0.2
+/** Per-building gold tuning; v1 is 1 for every type. */
+export const BUILDING_COST_MULTIPLIER: Record<BuildingId, number> = {
+  farms: 1,
+  mines: 1,
+  factories: 1,
+  railroads: 1,
+  ports: 1,
+  universities: 1,
+  barracks: 1,
+  offices: 1,
+  workshops: 1,
+}
+/** Per-building fixed gold addend; v1 is 0 for every type. */
+export const BUILDING_COST_ADDEND: Record<BuildingId, number> = {
+  farms: 0,
+  mines: 0,
+  factories: 0,
+  railroads: 0,
+  ports: 0,
+  universities: 0,
+  barracks: 0,
+  offices: 0,
+  workshops: 0,
+}
+
+/**
+ * Gold per workload point for a project: the fixed base times the building
+ * multiplier, plus its addend spread over the workload (so the total stays
+ * workload × per-point + addend).
+ */
+export function constructionGoldPerPoint(project: ConstructionProject): number {
+  const workload = projectWorkload(project)
+  return (
+    CONSTRUCTION_COST_PER_POINT *
+      (BUILDING_COST_MULTIPLIER[project.building] ?? 1) +
+    (BUILDING_COST_ADDEND[project.building] ?? 0) / Math.max(1, workload)
+  )
+}
+
+/** Total gold cost of the project: workload × per-point price. */
+export const constructionTotalCost = (
+  project: ConstructionProject,
+): number => projectWorkload(project) * constructionGoldPerPoint(project)
+
+/** Monthly gold bill when the slot receives its full monthly points. */
+export const constructionMonthlyCost = (
+  project: ConstructionProject,
+): number => capacityCost(project) * constructionGoldPerPoint(project)
 
 const importedQuantity = (country: Country, good: GoodId): number =>
   country.trade.imports
@@ -412,10 +475,12 @@ export function constructionSchedule(country: Country): ConstructionSchedule {
       if (!active.has(project.id)) continue
       const need = capacityCost(project)
       const slotCap = maxSlotCapacity(project.building)
-      const remainingPoints = need * Math.max(0, 1 - (progress.get(project.id) ?? 0))
+      const workload = projectWorkload(project)
+      const remainingPoints =
+        workload * Math.max(0, 1 - (progress.get(project.id) ?? 0))
       const take = Math.min(monthCapacity, slotCap, remainingPoints)
       monthCapacity -= take
-      const share = need > 0 ? take / need : 1
+      const share = workload > 0 ? take / workload : 1
       let projectProgress = (progress.get(project.id) ?? 0) + share
       let remainingMonths = monthsLeft.get(project.id) ?? 1
       while (projectProgress >= 1 && remainingMonths > 0) {
@@ -462,7 +527,8 @@ export function constructionLoad(country: Country): ConstructionLoad {
     if ((project.owner ?? 'state') === 'private') continue
     const need = capacityCost(project)
     const slotNeed = Math.min(need, maxSlotCapacity(project.building))
-    const remainingPoints = need * Math.max(0, 1 - project.progress)
+    const remainingPoints =
+      projectWorkload(project) * Math.max(0, 1 - project.progress)
     requested += slotNeed
     const take = Math.min(remaining, slotNeed, remainingPoints)
     remaining -= take
@@ -852,8 +918,9 @@ export function completeBuilding(country: Country, building: BuildingId, count: 
 }
 
 /**
- * Bring legacy projects onto the ADR 0011 rules: one-month slots, full gold
- * cost, and at most 15 buildings per slot (oversized slots are split).
+ * Bring legacy projects onto the ADR 0012 rules: ten-month slots with the
+ * total cost spread evenly, and at most five buildings per slot (oversized
+ * slots are split).
  */
 export function normalizeConstructionQueue(country: Country): void {
   const queue = country.econ.constructionQueue
@@ -861,13 +928,13 @@ export function normalizeConstructionQueue(country: Country): void {
   const next: ConstructionProject[] = []
   let changed = false
   for (const project of queue) {
-    const fullCost = BUILDINGS[project.building].cost * project.count
+    const expectedMonthly = constructionMonthlyCost(project)
     if (
-      project.monthsLeft > 1 ||
-      Math.abs(project.monthlyCost - fullCost) > 1e-9
+      project.monthsLeft !== 1 ||
+      Math.abs(project.monthlyCost - expectedMonthly) > 1e-9
     ) {
       project.monthsLeft = 1
-      project.monthlyCost = fullCost
+      project.monthlyCost = expectedMonthly
       changed = true
     }
     if (project.count > MAX_BUILDINGS_PER_SLOT) {
@@ -875,15 +942,17 @@ export function normalizeConstructionQueue(country: Country): void {
       let index = 0
       while (remaining > 0) {
         const count = Math.min(MAX_BUILDINGS_PER_SLOT, remaining)
-        next.push({
+        const part: ConstructionProject = {
           ...project,
           id: index === 0 ? project.id : `${project.id}-split${index}`,
           count,
           monthsLeft: 1,
-          monthlyCost: BUILDINGS[project.building].cost * count,
+          monthlyCost: 0,
           lastSpend: 0,
           lastCapacity: 0,
-        })
+        }
+        part.monthlyCost = constructionMonthlyCost(part)
+        next.push(part)
         remaining -= count
         index += 1
       }
@@ -936,20 +1005,18 @@ function settleConstruction(
   const runProject = (
     project: ConstructionProject,
     capacityTake: number,
-    capacityShare: number,
+    inputShare: number,
+    workShare: number,
     isPrivate: boolean,
   ): void => {
     const owner = isPrivate ? 'private' : 'state'
-    const goldNeed = project.monthlyCost * capacityShare
+    const goldNeed = project.monthlyCost * inputShare
     const spend =
       capacityTake <= 0
         ? 0
         : isPrivate
           ? Math.min(privateBudget, goldNeed)
-          : Math.min(
-              goldNeed,
-              Math.max(0, country.econ.treasury - debtFloor),
-            )
+          : Math.min(goldNeed, Math.max(0, country.econ.treasury - debtFloor))
     project.lastSpend = spend
     project.lastCapacity = capacityTake
     if (spend > 0) {
@@ -961,7 +1028,7 @@ function settleConstruction(
         country.econ.treasury -= spend
       }
       const funded =
-        project.monthlyCost > 0 ? spend / project.monthlyCost : 1
+        project.monthlyCost > 0 ? spend / project.monthlyCost : inputShare
       for (const [id, coefficient] of Object.entries(
         INVESTMENT_DEMAND[project.building],
       ) as [GoodId, number][]) {
@@ -969,40 +1036,28 @@ function settleConstruction(
           (nextConstructionDemand[id] ?? 0) + coefficient * project.count * funded
       }
     }
-    const goldShare =
-      project.monthlyCost > 0 ? spend / project.monthlyCost : 1
+    const goldShare = goldNeed > 0 ? spend / goldNeed : 1
     if (capacityTake > 0 && spend > 0) {
       const speed =
         constructionSpeed *
         (isPrivate ? 1 : 1 - debtPressure(country).constructionPenalty)
-      const effective = Math.min(capacityShare, goldShare) * speed
+      // Work is bounded by both the points invested and what the treasury or
+      // private pool could actually pay for.
+      const effective = workShare * Math.min(1, goldShare) * speed
       project.progress = Math.min(1, project.progress + effective)
     }
     if (project.progress >= 1) {
-      project.monthsLeft -= 1
-      project.progress = 0
-      if (project.monthsLeft <= 0) {
-        // A slot that received its full points and full payment finishes on
-        // schedule; only a partial slot can suffer the bureaucratic delay.
-        const fullyFunded =
-          capacityShare >= 1 - 1e-9 && goldShare >= 1 - 1e-9
-        if (!fullyFunded && rng.chance(country.bureaucracy.delayChance)) {
-          project.monthsLeft = 1
-          kept.add(project.id)
-          return
-        }
-        completeBuilding(country, project.building, project.count)
-        log.push({
-          date: { ...world.date },
-          kind: 'economy',
-          countryId: country.id,
-          text:
-            owner === 'private'
-              ? `[${country.flag}] ${country.name}的私人资本建成 ${project.count} 座${BUILDINGS[project.building].name}`
-              : `[${country.flag}] ${country.name}建成 ${project.count} 座${BUILDINGS[project.building].name}`,
-        })
-        return
-      }
+      completeBuilding(country, project.building, project.count)
+      log.push({
+        date: { ...world.date },
+        kind: 'economy',
+        countryId: country.id,
+        text:
+          owner === 'private'
+            ? `[${country.flag}] ${country.name}的私人资本建成 ${project.count} 座${BUILDINGS[project.building].name}`
+            : `[${country.flag}] ${country.name}建成 ${project.count} 座${BUILDINGS[project.building].name}`,
+      })
+      return
     }
     kept.add(project.id)
   }
@@ -1011,14 +1066,16 @@ function settleConstruction(
   for (const project of queue) {
     if ((project.owner ?? 'state') === 'private') continue
     const need = capacityCost(project)
+    const workload = projectWorkload(project)
     const slotNeed = Math.min(need, maxSlotCapacity(project.building))
-    const remainingPoints = need * Math.max(0, 1 - project.progress)
+    const remainingPoints = workload * Math.max(0, 1 - project.progress)
     const capacityTake = Math.min(capacityLeft, slotNeed, remainingPoints)
     capacityLeft -= capacityTake
     runProject(
       project,
       capacityTake,
       need > 0 ? capacityTake / need : 1,
+      workload > 0 ? capacityTake / workload : 1,
       false,
     )
   }
@@ -1028,10 +1085,11 @@ function settleConstruction(
   for (const project of queue) {
     if ((project.owner ?? 'state') !== 'private') continue
     const need = capacityCost(project)
+    const workload = projectWorkload(project)
     const slotNeed = Math.min(
       need,
       maxSlotCapacity(project.building),
-      need * Math.max(0, 1 - project.progress),
+      workload * Math.max(0, 1 - project.progress),
     )
     const own = slotNeed * PRIVATE_OWN_CAPACITY_SHARE
     const affordableRent =
@@ -1051,7 +1109,13 @@ function settleConstruction(
       rentalIncome += rent
     }
     const capacityTake = own + rented
-    runProject(project, capacityTake, need > 0 ? capacityTake / need : 1, true)
+    runProject(
+      project,
+      capacityTake,
+      need > 0 ? capacityTake / need : 1,
+      workload > 0 ? capacityTake / workload : 1,
+      true,
+    )
   }
 
   country.econ.constructionQueue = queue.filter(project => kept.has(project.id))
@@ -1185,11 +1249,25 @@ function investPrivateCapital(
   // Slots finish in a month now, so private builders can commit most of the
   // idle pool: keep only what active projects already need.
   const headroom = Math.max(0, country.econ.privateCapital - activePrivateCost)
+  const draftProject = (
+    building: BuildingId,
+    count: number,
+  ): ConstructionProject => ({
+    id: 'draft',
+    building,
+    count,
+    owner: 'private',
+    monthsLeft: 1,
+    monthlyCost: 0,
+    lastSpend: 0,
+    progress: 0,
+    startedAt: { ...world.date },
+  })
   const canStart = ((): { affordable: number } | undefined => {
     if (best === undefined) return undefined
-    const fullCost = BUILDINGS[best.building].cost
-    if (fullCost <= 0) return undefined
-    return { affordable: Math.floor(headroom / fullCost) }
+    const perMonth = constructionMonthlyCost(draftProject(best.building, 1))
+    if (perMonth <= 0) return undefined
+    return { affordable: Math.floor(headroom / perMonth) }
   })()
   let started = false
   if (
@@ -1199,8 +1277,8 @@ function investPrivateCapital(
     ownProjects.length < 10 &&
     canStart.affordable >= 1
   ) {
-    const count = clamp(canStart.affordable, 1, 10)
-    const monthlyCost = BUILDINGS[best.building].cost * count
+    const count = clamp(canStart.affordable, 1, MAX_BUILDINGS_PER_SLOT)
+    const monthlyCost = constructionMonthlyCost(draftProject(best.building, count))
     if (monthlyCost <= country.econ.privateCapital) {
       country.econ.constructionQueue.push({
         id: `proj-${world.tick}-${country.id}-priv-${country.econ.constructionQueue.length}`,
@@ -1228,7 +1306,9 @@ function investPrivateCapital(
   // This keeps private construction and I from freezing for years after the
   // initial industrialisation (round-2 P1-1).
   if (!started && ownProjects.length === 0 && renewal !== undefined) {
-    const monthlyCost = BUILDINGS[renewal.building].cost
+    const monthlyCost = constructionMonthlyCost(
+      draftProject(renewal.building, 1),
+    )
     if (monthlyCost <= headroom && monthlyCost <= country.econ.privateCapital) {
       country.econ.constructionQueue.push({
         id: `proj-${world.tick}-${country.id}-renew-${country.econ.constructionQueue.length}`,
@@ -2574,22 +2654,24 @@ export function applyDecision(
       const building = buildOf(id)
       if (building === undefined) return { ok: false, text: `${tag} 未知建筑 ${id}` }
       const count = clamp(Math.floor(num(params.count, 1)), 1, MAX_BUILDINGS_PER_SLOT)
-      // Orders per month are unlimited: every slot is capped at 15 buildings
-      // and at 15× its per-building point cost, so a long queue simply waits.
-      country.econ.constructionQueue.push({
+      // Orders per month are unlimited: every slot holds at most five buildings.
+      // Gold is paid per workload point; duration falls out of the points.
+      const draft: ConstructionProject = {
         id: `proj-${world.tick}-${country.id}-${country.econ.constructionQueue.length}`,
         building,
         count,
         owner: 'state',
         monthsLeft: 1,
-        monthlyCost: BUILDINGS[building].cost * count,
+        monthlyCost: 0,
         lastSpend: 0,
         progress: 0,
         startedAt: { ...world.date },
-      })
+      }
+      draft.monthlyCost = constructionMonthlyCost(draft)
+      country.econ.constructionQueue.push(draft)
       return {
         ok: true,
-        text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列（满额造价 ${(BUILDINGS[building].cost * count).toFixed(1)} 金，建造点 ${(CAPACITY_COST[building] * count).toFixed(1)}/月；满额 1 个月完成）`,
+        text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列（工程量 ${(capacityCost(draft) * WORKLOAD_MULTIPLIER).toFixed(1)} 点；满额投入 ${capacityCost(draft).toFixed(1)} 点/月，总造价 ${constructionTotalCost(draft).toFixed(1)} 金，每月 ${draft.monthlyCost.toFixed(2)} 金）`,
       }
     }
     case 'tax': {
