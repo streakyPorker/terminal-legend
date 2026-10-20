@@ -10,6 +10,7 @@ import {
   importCapacity,
   MAX_MONTHLY_DEFICIT_SHARE,
   paymentCapacity,
+  RELATION_CUTOFF,
   settleTrade,
   TRADABLE_GOODS,
   type MarketSnapshot,
@@ -377,13 +378,17 @@ describe('T1b payment capacity (plan §10)', () => {
     expect(qing.econ.debt).toBeLessThanOrEqual(debtAt60)
   })
 
-  test('the calibrated opium gates hold every month of the 1839-1842 window', async () => {
+  test('the calibrated opium gates hold for every month of the 1839-1842 window', async () => {
     const world = newWorld(9100, 'QING')
     const qing = countryOf(world, 'QING')
-    let months = 0
+    let windowMonths = 0
     for (let month = 1; month <= 84; month += 1) {
       advance(world, 1, [], makeRngForWorld(world))
       if (month < 37) continue
+      windowMonths += 1
+      // The automatic trade floor (plan §2.7) keeps 中英关系 above the hard trade
+      // cutoff, so the monopoly opium route never severs inside the window.
+      expect(qing.diplo.relations.GBR ?? 0).toBeGreaterThan(RELATION_CUTOFF)
       const imports = qing.trade.imports
         .filter(one => one.good === 'opium')
         .reduce((sum, one) => sum + one.quantity, 0)
@@ -395,9 +400,8 @@ describe('T1b payment capacity (plan §10)', () => {
       // Plan §4.1: ≥2 units/month and ≥20% of consumption from Britain.
       expect(imports).toBeGreaterThanOrEqual(2)
       expect(share).toBeGreaterThanOrEqual(0.2)
-      months += 1
     }
-    expect(months).toBe(48)
+    expect(windowMonths).toBe(48)
   })
 })
 

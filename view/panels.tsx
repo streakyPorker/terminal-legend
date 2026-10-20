@@ -624,6 +624,54 @@ function DiplomacyPanel(props: { ui: UiKit; world: WorldState }): any {
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
+        <Heading ui={props.ui} text="禁运列表" hint="玩家施加 · 范围 · 剩余" />
+        {player.embargoes.length === 0 ? (
+          <Text dimColor>无禁运。</Text>
+        ) : (
+          player.embargoes.map(embargo => {
+            const target = props.world.countries[embargo.target]
+            const scope =
+              embargo.goods === 'all'
+                ? '全部商品'
+                : embargo.goods.map(good => GOODS[good].name).join('、')
+            const duration = embargo.months === undefined ? '永久' : `剩 ${embargo.months} 月`
+            return (
+              <Box flexDirection="row" columnGap={1}>
+                <Text wrap="truncate">{padEnd(target !== undefined ? countryTag(target) : embargo.target, 12)}</Text>
+                <Text wrap="truncate">{padEnd(scope, 18)}</Text>
+                <Text dimColor>{duration}</Text>
+              </Box>
+            )
+          })
+        )}
+      </Box>
+
+      <Box flexDirection="column" marginTop={1}>
+        <Heading ui={props.ui} text="贸易张力记录" hint="近 5 条 · 最新在前" />
+        {props.world.tradeTensions.length === 0 ? (
+          <Text dimColor>暂无贸易张力。</Text>
+        ) : (
+          props.world.tradeTensions
+            .slice(-5)
+            .reverse()
+            .map(tension => {
+              const from = props.world.countries[tension.from]
+              const partner = props.world.countries[tension.partner]
+              return (
+                <Box flexDirection="row" columnGap={1}>
+                  <Text wrap="truncate">{padEnd(from !== undefined ? countryTag(from) : tension.from, 10)}</Text>
+                  <Text dimColor>→</Text>
+                  <Text wrap="truncate">{padEnd(partner !== undefined ? countryTag(partner) : tension.partner, 10)}</Text>
+                  <Text wrap="truncate">{padEnd(GOODS[tension.good].name, 6)}</Text>
+                  <Text color={relationColor(tension.relationDelta)}>{padEnd(fmtSigned(tension.relationDelta), 6)}</Text>
+                  <Text dimColor wrap="truncate">{clampText(tension.reason, 12)}</Text>
+                </Box>
+              )
+            })
+        )}
+      </Box>
+
+      <Box flexDirection="column" marginTop={1}>
         <Heading ui={props.ui} text="领袖与议程" />
         {others.filter(row => row.country.isMajor).map(row => (
           <Text wrap="truncate">{[countryTag(row.country), ` ${row.country.leader.persona}`].join(' · ')}</Text>

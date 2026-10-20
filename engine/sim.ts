@@ -2,6 +2,7 @@ import type {
   BuildingId,
   Country,
   ConstructionProject,
+  Embargo,
   EventOption,
   GameDate,
   GameEvent,
@@ -11,6 +12,7 @@ import type {
   LogKind,
   PolicyEffect,
   PolicyProposal,
+  TradeTension,
   War,
   WorldState,
 } from '../types'
@@ -59,9 +61,11 @@ import {
   deriveResourceImports,
   effectiveResources,
   effectiveSupply,
+  embargoed,
   settleTrade,
   type MarketSnapshot,
   type TradeBalance,
+  type TradeBlocker,
   type TradeSettlement,
 } from './trade'
 
@@ -105,6 +109,10 @@ const num = (value: unknown, fallback: number): number => {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
 }
+
+/** A validated GoodId, or undefined; the cast is safe because of the check. */
+const asGood = (value: string): GoodId | undefined =>
+  (GOOD_IDS as readonly string[]).includes(value) ? (value as GoodId) : undefined
 
 export function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
@@ -1286,6 +1294,179 @@ function simulateCountry(
   }
 }
 
+/**
+ * Goods whose trade sours relations (plan §2.7/§6): importing any of these
+ * from a partner adds a monthly tension. Tuned against the 60-month baseline.
+ */
+export const SENSITIVE_GOODS: GoodId[] = ['opium', 'arms', 'grain']
+/**
+ * §11 calibration knob: the automatic *warmth* a full trade share earns (plan
+ * §2.7 "最多 +2"). Scaled by `(1 - sensitiveShare)` so the sensitive slice of
+ * trade earns no warmth — otherwise a monopoly partner's warmth swamps the drag.
+ */
+export const TRADE_WARMTH_MAX = 2
+/**
+ * §11 calibration knob: monthly relation *drag* per unit of sensitive-import
+ * share (plan §2.7). The flat −0.5 draft was calibrated away (see §11.2): a
+ * monopoly partner's import share is almost entirely sensitive, so a flat
+ * penalty could never outrun the share-scaled warmth and the crisis bar
+ * (§4.1, 中英关系 ≤ −10) was unreachable. This scales with how much of the
+ * bilateral trade is actually sensitive, so opium dependency sinks relations.
+ */
+export const SENSITIVE_DRAG = 7
+/** Per ordered pair per month: auto + sensitive + agent tension is clamped here (plan §2.7). */
+export const TRADE_RELATION_ENVELOPE = 10
+/**
+ * §11 calibration knob: floor for the *automatic* trade effects. Trade friction
+ * alone must not reach the hard trade cut at `RELATION_CUTOFF` (−50, plan §1.2) —
+ * severance is a diplomatic act (tension, embargo, war). Without it a monopoly
+ * opium partner's drag crossed −50, closed the route, mean-reversion reopened it
+ * trading only opium (sensitiveShare → 1) and shoved it back under: a limit cycle
+ * that killed the opium flow through 1840–42.
+ */
+export const TRADE_RELATION_FLOOR = -45
+/** Months of trade-tension history kept for the diplomacy UI (plan §2.7). */
+export const TRADE_TENSION_RETENTION_MONTHS = 24
+/** Longest embargo an action may set; absent means permanent (plan §3). */
+export const EMBARGO_MONTHS_MAX = 60
+
+function atWar(world: WorldState, a: string, b: string): boolean {
+  return world.wars.some(
+    war =>
+      (war.attackers.includes(a) && war.defenders.includes(b)) ||
+      (war.defenders.includes(a) && war.attackers.includes(b)),
+  )
+}
+
+/**
+ * A blocked (importer, exporter, good) pair never trades (plan §3): a war
+ * severs it in either direction, and an embargo severs it in either direction
+ * because the embargoing country cuts the corresponding trade outright.
+ */
+function tradeBlocker(world: WorldState): TradeBlocker {
+  return (importerId, exporterId, good) => {
+    if (atWar(world, importerId, exporterId)) return true
+    const importer = world.countries[importerId]
+    const exporter = world.countries[exporterId]
+    if (importer !== undefined && embargoed(importer.embargoes, exporterId, good)) return true
+    if (exporter !== undefined && embargoed(exporter.embargoes, importerId, good)) return true
+    return false
+  }
+}
+
+/** Ages embargoes by one month; those reaching zero are lifted and logged. */
+function expireEmbargoes(world: WorldState, log: LogEntry[]): void {
+  for (const country of Object.values(world.countries)) {
+    const remaining: Embargo[] = []
+    for (const embargo of country.embargoes) {
+      if (embargo.months === undefined) {
+        remaining.push(embargo)
+        continue
+      }
+      const months = embargo.months - 1
+      if (months <= 0) {
+        const target = world.countries[embargo.target]
+        log.push({
+          date: { ...world.date },
+          kind: 'diplomacy',
+          countryId: country.id,
+          text: `[${country.flag}] ${country.name} 对 ${target?.name ?? embargo.target} 的禁运到期`,
+        })
+        continue
+      }
+      remaining.push({ ...embargo, months })
+    }
+    country.embargoes = remaining
+  }
+}
+
+/** This month's bilateral trade with one partner, at unit prices (plan §2.7). */
+function bilateralTradeValue(country: Country, partnerId: string): number {
+  let value = 0
+  for (const flow of country.trade.exports) if (flow.to === partnerId) value += flow.value
+  for (const flow of country.trade.imports) if (flow.from === partnerId) value += flow.value
+  return value
+}
+
+function sameDate(a: GameDate, b: GameDate): boolean {
+  return a.year === b.year && a.month === b.month
+}
+
+/**
+ * The sensitive slice of `country`'s imports from one partner, as a share of
+ * `country`'s *total* import gold value (plan §2.7). 0 when nothing is imported
+ * at all. This is the weight on the drag — and the part of trade warmed by 1×.
+ */
+function sensitiveImportShare(country: Country, partnerId: string): number {
+  const totalImports = country.trade.importValue
+  if (totalImports <= 0) return 0
+  let sensitive = 0
+  for (const flow of country.trade.imports) {
+    if (flow.from === partnerId && SENSITIVE_GOODS.includes(flow.good)) sensitive += flow.value
+  }
+  return sensitive / totalImports
+}
+
+/**
+ * Monthly trade-driven relation effects (plan §2.7), a deterministic step
+ * beside `driftRelations`. For each ordered pair:
+ *
+ *   delta = TRADE_WARMTH_MAX × (1 − sensitiveShare) × partnerShare
+ *         − SENSITIVE_DRAG × sensitiveShare
+ *         + Σ(agent tradeTension deltas recorded last month for this pair)
+ *
+ * A partner's trade share warms relations, but the sensitive slice earns no
+ * warmth and instead drags them down proportional to its share of imports — so
+ * a monsoon-trade partner (GBR for QING) sinks while a non-sensitive partner
+ * still warms. The sum is clamped to the ±10 envelope, then the relation is
+ * clamped to [-100, 100]; when no agent tension is involved the automatic part
+ * additionally floors at `TRADE_RELATION_FLOOR` so trade alone cannot sever the
+ * pair. Routine auto drift is *not* logged (it would flood the
+ * 400-entry chronicle); agent tensions are logged where they are submitted and
+ * embargo changes where they happen.
+ */
+export function applyTradeRelations(world: WorldState, log: LogEntry[]): void {
+  const ids = Object.keys(world.countries).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+  // Agent tensions are recorded at the pre-tick date and settled on the next
+  // tick, so each is applied exactly once as the month rolls forward.
+  const pending = world.tradeTensions.filter(tension =>
+    sameDate(advanceDate(tension.date), world.date),
+  )
+  for (const fromId of ids) {
+    const country = world.countries[fromId]
+    if (country === undefined) continue
+    const total = country.trade.exportValue + country.trade.importValue
+    for (const partnerId of ids) {
+      if (partnerId === fromId) continue
+      let auto = 0
+      if (total > 0) {
+        const partnerShare = bilateralTradeValue(country, partnerId) / total
+        const sensitiveShare = sensitiveImportShare(country, partnerId)
+        auto += TRADE_WARMTH_MAX * (1 - sensitiveShare) * partnerShare
+        auto -= SENSITIVE_DRAG * sensitiveShare
+      }
+      let agentDelta = 0
+      for (const tension of pending) {
+        if (tension.from === fromId && tension.partner === partnerId) {
+          agentDelta += tension.relationDelta
+        }
+      }
+      const delta = auto + agentDelta
+      if (delta === 0) continue
+      const bounded = clamp(delta, -TRADE_RELATION_ENVELOPE, TRADE_RELATION_ENVELOPE)
+      const current = country.diplo.relations[partnerId] ?? 0
+      let next = current + bounded
+      // The floor binds the automatic effects only; an explicit agent tension may
+      // still drive the pair all the way to -100 (plan §2.7).
+      if (agentDelta === 0) next = Math.max(next, TRADE_RELATION_FLOOR)
+      country.diplo.relations[partnerId] = clamp(next, -100, 100)
+    }
+  }
+  world.tradeTensions = world.tradeTensions.filter(
+    tension => dateDistance(world.date, tension.date) < TRADE_TENSION_RETENTION_MONTHS,
+  )
+}
+
 function driftRelations(world: WorldState): void {
   for (const country of Object.values(world.countries)) {
     for (const other of Object.values(world.countries)) {
@@ -1588,7 +1769,9 @@ export function advance(
     if (result.ok) {
       log.push({
         date: { ...world.date },
-        kind: 'politics',
+        // Diplomacy moves (including embargo/unembargo/tension) read as
+        // diplomacy in the chronicle; everything else is politics (plan §6).
+        kind: decision.action === 'diplomacy' ? 'diplomacy' : 'politics',
         countryId: decision.countryId,
         text: result.text,
       })
@@ -1599,6 +1782,9 @@ export function advance(
   for (let index = 0; index < total; index += 1) {
     world.date = advanceDate(world.date)
     world.tick += 1
+    // Embargoes age at the start of the month, before clearing, so an embargo
+    // that expires this month no longer blocks it (plan §3).
+    expireEmbargoes(world, log)
     const countries = Object.values(world.countries)
     // Phase A: snapshot every country's domestic production and demand before
     // any of them is settled, so import/export decisions are order-independent.
@@ -1606,7 +1792,7 @@ export function advance(
     for (const country of countries) markets[country.id] = inspectEconomy(country)
     // Phase B: clear each tradable good globally, then cap imports by soft
     // capacity (plan §2.3) before anything is derived from the flows.
-    const balance = clearTrade(countries, markets)
+    const balance = clearTrade(countries, markets, tradeBlocker(world))
     const capacities = applyCapacity(countries, balance, world.tick)
     // Payment capacity (plan §10) is a second, independent limiter: a country
     // cannot fund imports past its export revenue, private capital and a small
@@ -1636,6 +1822,7 @@ export function advance(
       )
     }
     driftRelations(world)
+    applyTradeRelations(world, log)
     resolveWars(world, rng, log)
     pending.push(...tickEvents(world, rng, log))
   }
@@ -1988,6 +2175,109 @@ export function applyDecision(
             [],
           )
           return { ok: true, text: `${tag} 与${target.name}停战` }
+        }
+        case 'embargo': {
+          if (target.id === country.id) return { ok: false, text: `${tag} 不能对自己禁运` }
+          const goodParam = params.good === undefined ? undefined : String(params.good)
+          const good = goodParam === undefined ? undefined : asGood(goodParam)
+          if (goodParam !== undefined && good === undefined) {
+            return { ok: false, text: `${tag} 未知商品 ${goodParam}` }
+          }
+          const goods: GoodId[] | 'all' = good === undefined ? 'all' : [good]
+          const months =
+            params.months === undefined
+              ? undefined
+              : clamp(Math.floor(num(params.months, 1)), 1, EMBARGO_MONTHS_MAX)
+          const reason = params.reason === undefined ? undefined : String(params.reason)
+          const key = goods === 'all' ? 'all' : goods.join(',')
+          const existing = country.embargoes.find(one =>
+            one.target === target.id &&
+            (one.goods === 'all' ? 'all' : one.goods.join(',')) === key,
+          )
+          if (existing !== undefined) {
+            existing.since = { ...world.date }
+            existing.months = months
+            existing.reason = reason
+          } else {
+            country.embargoes.push({
+              target: target.id,
+              goods,
+              since: { ...world.date },
+              months,
+              reason,
+            })
+          }
+          // The file's `insult` convention: the sender cools more than the target.
+          country.diplo.relations[target.id] = clamp(current - 15, -100, 100)
+          target.diplo.relations[country.id] = clamp(
+            (target.diplo.relations[country.id] ?? 0) - 12,
+            -100,
+            100,
+          )
+          const scope =
+            goods === 'all' ? '全面' : `对${goods.map(one => GOODS[one].name).join('、')}`
+          return {
+            ok: true,
+            text: `${tag} 对${target.name}实施${scope}禁运${months === undefined ? '（永久）' : `（${months} 个月）`}（${relationLine(country, target)}）`,
+          }
+        }
+        case 'unembargo': {
+          if (target.id === country.id) return { ok: false, text: `${tag} 不能对自己解除禁运` }
+          const goodParam = params.good === undefined ? undefined : String(params.good)
+          const good = goodParam === undefined ? undefined : asGood(goodParam)
+          if (goodParam !== undefined && good === undefined) {
+            return { ok: false, text: `${tag} 未知商品 ${goodParam}` }
+          }
+          const before = country.embargoes.length
+          country.embargoes = country.embargoes.filter(one => {
+            if (one.target !== target.id) return true
+            if (good === undefined) return false
+            return !(one.goods === 'all' || one.goods.includes(good))
+          })
+          const lifted = before - country.embargoes.length
+          // Gift-style symmetry: both sides warm by the same amount (plan §3).
+          country.diplo.relations[target.id] = clamp(current + 5, -100, 100)
+          target.diplo.relations[country.id] = clamp(
+            (target.diplo.relations[country.id] ?? 0) + 5,
+            -100,
+            100,
+          )
+          return {
+            ok: true,
+            text:
+              lifted > 0
+                ? `${tag} 解除对${target.name}的禁运（${lifted} 项），关系回暖（${relationLine(country, target)}）`
+                : `${tag} 与${target.name}本无禁运，关系回暖（${relationLine(country, target)}）`,
+          }
+        }
+        case 'tension': {
+          const good = asGood(String(params.good ?? ''))
+          if (good === undefined || !SENSITIVE_GOODS.includes(good)) {
+            return {
+              ok: false,
+              text: `${tag} 贸易张力只允许敏感商品：${SENSITIVE_GOODS.join('、')}`,
+            }
+          }
+          const delta = num(params.relationDelta, num(params.amount, 0))
+          if (!Number.isFinite(delta) || Math.abs(delta) > TRADE_RELATION_ENVELOPE) {
+            return {
+              ok: false,
+              text: `${tag} 贸易张力变化必须在 ±${TRADE_RELATION_ENVELOPE} 之内`,
+            }
+          }
+          // Record the intent only; the monthly §2.7 step applies it next month.
+          world.tradeTensions.push({
+            date: { ...world.date },
+            from: country.id,
+            partner: target.id,
+            good,
+            relationDelta: delta,
+            reason: String(params.reason ?? '贸易摩擦'),
+          })
+          return {
+            ok: true,
+            text: `${tag} 就${GOODS[good].name}贸易向${target.name}施加张力 ${delta >= 0 ? '+' : ''}${delta}（下月生效）`,
+          }
         }
         default:
           return { ok: false, text: `${tag} 未知外交动作 ${move}` }

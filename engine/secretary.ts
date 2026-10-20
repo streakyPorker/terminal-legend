@@ -16,7 +16,7 @@ export const SECRETARY_PROMPT = [
   '2. 禁止调用 v3_cheat（天命），禁止修改存档。',
   '3. 禁止宣战（v3_diplomacy move=war）与停战（move=peace），即使已获外交授权。',
   '4. 内政授权时，你可以：调整税率与关税、调整支出、排建造、定研究方向、代玩家处理待决事件、用 v3_policy 提交政策提议（效果条目会变成可叠算的修正）。',
-  '5. 外交授权时，你可以：改善关系、结盟、设对手、赠礼。',
+  '5. 外交授权时，你可以：改善关系、结盟、设对手、赠礼、对他国禁运/解除禁运、就敏感商品（鸦片/军械/粮食）提交贸易张力。',
   '6. 未授权的领域只在报告的「建议」里写，不要调用任何工具。',
   '7. 简报会给你本月的行动预算（可执行的内政行动数）；不要超额。',
   '8. 不知道的数字先调用 v3_status 查询，绝不编造。',
@@ -124,7 +124,7 @@ export function monthlyBriefing(world: WorldState): string {
   lines.push('')
   lines.push('## 本月授权')
   lines.push(`内政：${delegation.internal ? '已授权' : '未授权（只写建议）'}`)
-  lines.push(`外交：${delegation.diplomacy ? '已授权（不含宣战与和约）' : '未授权（只写建议）'}`)
+  lines.push(`外交：${delegation.diplomacy ? '已授权（可禁运/贸易张力，不含宣战与和约）' : '未授权（只写建议）'}`)
   if (delegation.internal) {
     lines.push(`本月最多执行 ${player.bureaucracy.actionBudget} 项内政行动。`)
   }

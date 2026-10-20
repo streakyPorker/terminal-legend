@@ -429,9 +429,17 @@ describe('M4/M5 council and managed runs', () => {
     const run = await startCampaign($ as any)
     const started = await run({ command: 'v3', args: 'run 2' })
     expect(started.text).toContain('托管已开始')
-    await new Promise(resolve => setTimeout(resolve, 250))
-    const status = await run({ command: 'v3', args: 'status' })
-    expect(status.text).toContain('1836年3月')
+    // The background host advances on its own schedule, so poll for the target
+    // date instead of sleeping a fixed 250ms: per-month work grew with the trade
+    // slices (T1a clearing, T1b settlement, T2 relations), which made the fixed
+    // sleep flaky. The assertion is unchanged.
+    let status = ''
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+      status = (await run({ command: 'v3', args: 'status' })).text
+      if (status.includes('1836年3月')) break
+    }
+    expect(status).toContain('1836年3月')
   })
 
 

@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { PolicyProposal, TabId, UiState, WorldState } from '../types'
 import { MODIFIER_STATS } from '../engine/modifiers'
-import { BUILDINGS, COUNTRY_SEEDS, initialUi, makeRngForWorld } from '../engine/data'
+import { BUILDINGS, COUNTRY_SEEDS, GOOD_IDS, initialUi, makeRngForWorld } from '../engine/data'
 import { decideForAi, describeWorldForNarrator } from '../engine/ai'
 import {
   advance,
@@ -798,17 +798,50 @@ const TOOL_SPECS: {
   {
     name: 'v3_diplomacy',
     description:
-      '终末传奇：执行外交行动。move 取值：improve（改善关系）、insult（交恶）、alliance（结盟）、rival（设为对手）、gift（赠礼）、war（宣战）、peace（停战）。target 是国家代码，例如 GBR、RUS、QING。',
+      '终末传奇：执行外交行动。move 取值：improve（改善关系）、insult（交恶）、alliance（结盟）、rival（设为对手）、gift（赠礼）、war（宣战）、peace（停战）、embargo（禁运，可选定商品与月数）、unembargo（解除禁运）、tension（就敏感商品施加贸易张力）。target 是国家代码，例如 GBR、RUS、QING。',
     inputSchema: {
       type: 'object',
       properties: {
         target: { type: 'string', description: '目标国家代码，如 GBR。' },
         move: {
           type: 'string',
-          enum: ['improve', 'insult', 'alliance', 'rival', 'gift', 'war', 'peace'],
+          enum: [
+            'improve',
+            'insult',
+            'alliance',
+            'rival',
+            'gift',
+            'war',
+            'peace',
+            'embargo',
+            'unembargo',
+            'tension',
+          ],
         },
-        amount: { type: 'number', minimum: 1, maximum: 30 },
-        reason: { type: 'string', description: '宣战理由，可选。' },
+        amount: {
+          type: 'number',
+          minimum: -10,
+          maximum: 30,
+          description: 'improve/gift 的幅度；tension 时也可用作关系张力（-10..10）。',
+        },
+        good: {
+          type: 'string',
+          enum: [...GOOD_IDS],
+          description: 'embargo/unembargo/tension 的商品；tension 仅限 opium/arms/grain。',
+        },
+        months: {
+          type: 'number',
+          minimum: 1,
+          maximum: 60,
+          description: 'embargo 的持续月数，缺省为永久。',
+        },
+        relationDelta: {
+          type: 'number',
+          minimum: -10,
+          maximum: 10,
+          description: 'tension 的关系张力（-10..10）。',
+        },
+        reason: { type: 'string', description: '宣战/禁运/张力的理由，可选。' },
       },
       required: ['target', 'move'],
       additionalProperties: false,
@@ -1455,6 +1488,9 @@ export const register: Register = (on, options) => {
         move,
       }
       if (typeof args.amount === 'number') params.amount = args.amount
+      if (typeof args.good === 'string') params.good = args.good
+      if (typeof args.months === 'number') params.months = args.months
+      if (typeof args.relationDelta === 'number') params.relationDelta = args.relationDelta
       if (typeof args.reason === 'string') params.reason = args.reason
       const result = applyDecision(
         world,

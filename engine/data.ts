@@ -1167,6 +1167,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
       region: seedRow.region,
       trade: emptyTradeState(),
       opium: { ...seedRow.opium },
+      embargoes: [],
       econ: {
         gdp: seedRow.gdp,
         treasury: seedRow.treasury,
@@ -1271,6 +1272,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         text: '1836 年 1 月：维也纳体系的余晖仍在，蒸汽与火药正在改写世界。',
       },
     ],
+    tradeTensions: [],
     resumeOnStart: true,
     ai: {
       model: 'haiku',

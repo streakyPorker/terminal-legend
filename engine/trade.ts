@@ -1,4 +1,4 @@
-import type { Country, GoodId, ResourceId, Resources, TradeFlow } from '../types'
+import type { Country, Embargo, GoodId, ResourceId, Resources, TradeFlow } from '../types'
 import { GOODS, GOOD_IDS, REGION_COST } from './data'
 
 export { REGION_COST }
@@ -52,6 +52,22 @@ function relationOf(importer: Country, exporterId: string): number {
   return importer.diplo.relations[exporterId] ?? 0
 }
 
+/** True when one country's embargo list covers `targetId` for `good` (plan §3). */
+export function embargoed(embargoes: Embargo[], targetId: string, good: GoodId): boolean {
+  return embargoes.some(
+    embargo =>
+      embargo.target === targetId &&
+      (embargo.goods === 'all' || embargo.goods.includes(good)),
+  )
+}
+
+/**
+ * Whether a candidate (importer, exporter, good) trade is blocked. Supplied by
+ * the caller so clearing stays pure: embargoes and wars live in `WorldState`,
+ * which `clearTrade` does not otherwise need.
+ */
+export type TradeBlocker = (importerId: string, exporterId: string, good: GoodId) => boolean
+
 /**
  * Landed cost of one good delivered from `from` to `to` (plan §1.2): the
  * exporter's domestic price marked up by the importer's tariff, region
@@ -99,6 +115,7 @@ function clearGood(
   countries: Country[],
   markets: Record<string, MarketSnapshot>,
   flows: TradeFlow[],
+  isBlocked?: TradeBlocker,
 ): void {
   const offer = new Map<string, number>()
   const bid = new Map<string, number>()
@@ -119,6 +136,8 @@ function clearGood(
       if (exporter.id === importer.id) continue
       if (!offer.has(exporter.id)) continue
       if (relationOf(importer, exporter.id) < RELATION_CUTOFF) continue
+      // An embargo or a war severs the pair regardless of price (plan §3).
+      if (isBlocked !== undefined && isBlocked(importer.id, exporter.id, good)) continue
       candidates.push({ importer, exporter, landed: landedPrice(exporter, importer, good) })
     }
     candidates.sort(
@@ -214,9 +233,10 @@ function deriveBalance(countries: Country[], flows: TradeFlow[]): TradeBalance {
 export function clearTrade(
   countries: Country[],
   markets: Record<string, MarketSnapshot>,
+  isBlocked?: TradeBlocker,
 ): TradeBalance {
   const flows: TradeFlow[] = []
-  for (const good of TRADABLE_GOODS) clearGood(good, countries, markets, flows)
+  for (const good of TRADABLE_GOODS) clearGood(good, countries, markets, flows, isBlocked)
   return deriveBalance(countries, flows)
 }
 

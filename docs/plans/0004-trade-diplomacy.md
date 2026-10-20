@@ -228,7 +228,26 @@ effectiveEndowment = clamp(endowment + importBonus, 0, 100)
 ### 2.7 关系效应
 
 - **自动基础**：双边贸易占一国贸易的比重越高，关系每月向正向漂移，最多 `+2`。
-- **敏感商品基础张力**：进口鸦片/军械/粮食时，与出口国关系每月 `-0.5`（粮食可改为 0 或正向，实施时按 60 个月基线调）。
+- **敏感商品基础张力**（已按 §11.2 校准，不再是固定 `-0.5`）：进口鸦片/军械/粮食的拖拽
+  随「敏感进口占比」缩放，并与伙伴贸易份额的暖意共用同一份额：
+
+  ```
+  delta(from → partner) =
+      TRADE_WARMTH_MAX × (1 − sensitiveShare) × partnerShare
+    − SENSITIVE_DRAG × sensitiveShare
+    + Σ(agent tradeTension deltas)
+  ```
+
+  其中 `partnerShare = 双边贸易额 / 本国贸易总额`、`sensitiveShare = 自该伙伴的敏感商品
+  （鸦片/军械/粮食）进口额 / 本国进口总额`（分母为 0 时取 0）。伙伴贸易份额带来每月最多
+  `TRADE_WARMTH_MAX = 2` 的暖意，但敏感部分的暖意被 `(1 − sensitiveShare)` 抵消，并按
+  `SENSITIVE_DRAG` 反向下拉；两者与 agent 张力求和后夹在 `±10`（`TRADE_RELATION_ENVELOPE`）。
+  固定 `-0.5` 草案在 60 个月基线上被校准掉：GBR 是大清的独家伙伴，其份额暖意饱和到
+  +2/月、淹没固定惩罚，§4.1 的关系门槛（中英关系 ≤ −10）永远无法达成（见 §11.2）。
+- **贸易拖拽底线**（`TRADE_RELATION_FLOOR = −45`）：自动的「暖意 − 拖拽」不得把一对国家
+  压到 −45 以下；跨过贸易切断线 `−50` 只由外交动作（`tradeTension`/禁运/宣战）达成。
+  没有它会形成「拖过 −50 → 切断 → 回归抬升 → 复交只剩鸦片（sensitiveShare→1）→ 再被
+  打下」的极限环（见 §11.2）。agent `tradeTension` 不受此底线约束，其下限仍为 −100。
 - **agent `tradeTension`**：AI 批量或玩家主模型可提交：
 
 ```ts
@@ -380,7 +399,8 @@ type SituationProposal = {
 - `opium` 基础价、`outputFactor`/`demandFactor`、鸦片进口触发阈值。
 - 区域运输系数、`accessFactor`、`relationRisk`。
 - `capacityGold` 公式与系数。
-- 自动关系漂移上限、敏感商品基础张力。
+- `TRADE_WARMTH_MAX`（伙伴份额暖意上限，固定 2）、`SENSITIVE_DRAG`（敏感进口拖拽，
+  §11.2 已定 7）、`TRADE_RELATION_FLOOR`（自动拖拽底线，§11.2 已定 −45）。
 - 4 个结果包的具体数值与月数。
 - 战争目标效果的数值与月数。
 
@@ -427,6 +447,43 @@ m73-84 imp: 4.12 4.10 4.08 4.06 4.03 4.03 4.00 3.96 3.94 3.93 3.92 4.09
 
 **确定性**：同 seed（9100）两次 84 月运行逐国 `trade`/`econ` 完全一致；所有排序仍
 带 tie-break（`clearGood` 的 landed→importer.id→exporter.id）；无 `Math.random`。
+
+### 11.2 校准日志 · T2 关系拖拽与底线（2026-10-20，seed 9100，QING，84 月，无决策）
+
+**旋钮**：`SENSITIVE_DRAG`、`TRADE_RELATION_FLOOR`（`engine/sim.ts`）；`TRADE_WARMTH_MAX = 2` 固定。
+
+**验收**：84 月基线上 QING→GBR 关系在 m37–84（1839.01–1842.12）**每月 ≤ −10** 且留有余量，
+使 §4.1 的鸦片危机可触发；鸦片贸易在整个窗口**存在**（否则 §4.1 的数量/份额门槛不成立）；
+无敏感贸易的伙伴仍能升温；且两种 RNG 用法都满足。
+
+**发现 1 · 拖拽过强会形成极限环**：`SENSITIVE_DRAG = 5` 时关系在 m71 跌破
+`RELATION_CUTOFF = −50`（贸易硬切断），此后「切断 → 无贸易 → 关系回归抬升 → 复交时只剩
+鸦片（`sensitiveShare → 1`）→ 再被打下」自我循环：48 个月里有 10 个月鸦片为零、开关切换
+11 次，**1840–42 的鸦片贸易实际死亡**。
+**修复**：新增 `TRADE_RELATION_FLOOR = −45`——自动效果（暖意 − 拖拽）不得把一对国家压到
+−45 以下，跨过 −50 只留给外交动作（`tradeTension`/禁运/宣战）。底线不约束 agent tension。
+
+**发现 2 · 拖拽过弱会贴着阈值**：`DRAG = 5` 时窗口峰值只有 −8.96（每月新建 rng）/ −11.05
+（复用同一 rng），正压在 §4.1 的 −10 门槛上，不可靠。故上调拖拽。
+
+**扫描**（`TRADE_RELATION_FLOOR = −45` 生效；窗口 m37–84 峰值；两种 rng 用法）：
+
+| `SENSITIVE_DRAG` | 每月新建 rng max | 复用同一 rng max | 窗口 min | 鸦片为零月 | 结论 |
+| --- | --- | --- | --- | --- | --- |
+| 5 | −8.96 | −11.05 | −45.00 | 0 | 压在 −10 线上，不可靠 |
+| **7** | **−19.34** | **−26.33** | **−45.00** | **0** | **两条门槛均满足，余量 ≥ 6 点** |
+
+选定 **`SENSITIVE_DRAG = 7`**、**`TRADE_RELATION_FLOOR = −45`**。
+
+**为何末值停在 −45 而非继续下探**：`Fix B` 让大清进口账单随债务收缩，m60 后鸦片近乎唯一
+进口，`sensitiveShare → 1`、自动 delta 趋于 `−SENSITIVE_DRAG`；此时底线 −45 生效，关系停在
+−45，贸易不再被切断，鸦片流量因此全程维持（这正是 §4.1 需要的状态）。
+
+**基准扰动说明**：`advance` 的随机事件流依赖世界状态，贸易改动会让后期轨迹整体分岔，
+故本表同时给出「每月新建 `makeRngForWorld`」与「复用同一 rng」两种用法的结果——两者都须达标。
+
+**确定性**：同 seed 同决策两次 84 月运行逐国 `trade`/`econ`/`relations` 完全一致；所有排序
+带 tie-break；无 `Math.random`。
 
 ## 12. Critic 修正记录（2026-10-20）
 

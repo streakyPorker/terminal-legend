@@ -3,7 +3,7 @@ import type { Country, GameDate, WorldState } from '../types'
 import { BUILDING_IDS, GOODS, GOOD_IDS, SPENDING, techName } from './data'
 
 import type { Rng } from './rng'
-import { randomDecision, type Decision } from './sim'
+import { SENSITIVE_GOODS, randomDecision, type Decision } from './sim'
 
 export type AiReport = {
   decisions: Decision[]
@@ -20,8 +20,11 @@ const SYSTEM = `你是 19 世纪大战略游戏的世界决策引擎。你为每
 - build 的 building 只能是：farms, mines, factories, railroads, ports, universities, barracks, offices；params.count 为 1..20 的数字。官署提供行政能力与官僚上限。
 - tax/tariff 用 params.rate（0..60）；spending 用 params.category（army/navy/bureaucracy/education/welfare/construction）与 params.amount（0..50）；数值必须是 JSON 数字，不能写成字符串。
 - invest 调整投资信心：params.amount 取 -3..3，结果被限制在该国基准上下 10 点内。
-- diplomacy 需要 params.target（国家代码）与 params.move（improve, insult, alliance, rival, gift, war, peace）。
+- diplomacy 需要 params.target（国家代码）与 params.move（improve, insult, alliance, rival, gift, war, peace, embargo, unembargo, tension）。
+  - embargo/unembargo 可选 params.good（商品代码，缺省=全部）与 params.months（1..60，缺省=永久）。
+  - tension 需要 params.good（只能取 opium/arms/grain）与 params.relationDelta（-10..10），表示对 target 的关系张力。
 - law 的 name 只能是：教育改革, 福利改革, 自由贸易, 保护关税, 征兵制, 宗教宽容。
+- 贸易简报给出各国贸易收支、Top-3 伙伴、鸦片进口、关税收入与资源进口；禁运与战争会切断对应贸易，若被禁运应寻找替代伙伴。
 - 每月为每个 AI 国家给出一次决策；行动要服从领袖的人格、当前财政与国内稳定；不要凭空创造数值。
 - GDP 是月度支出法流量（消费+投资+政府），价格与资源乘数会影响产能。`
 
@@ -42,6 +45,24 @@ function topRelations(country: Country, world: WorldState): string {
     .slice(0, 5)
     .map(row => `${row.id}${row.value >= 0 ? '+' : ''}${row.value}`)
     .join(' ')
+}
+
+/** Top-3 trade partners by this month's bilateral value (plan §6: not Top-6). */
+function topPartners(country: Country): string {
+  const value = new Map<string, number>()
+  for (const flow of country.trade.exports) value.set(flow.to, (value.get(flow.to) ?? 0) + flow.value)
+  for (const flow of country.trade.imports) value.set(flow.from, (value.get(flow.from) ?? 0) + flow.value)
+  const rows = [...value.entries()].sort(
+    ([a, av], [b, bv]) => bv - av || (a < b ? -1 : a > b ? 1 : 0),
+  )
+  return rows.slice(0, 3).map(([id, amount]) => `${id}(${n1(amount)})`).join(' ') || '无'
+}
+
+/** This month's opium imports, the number the crisis trigger reads (plan §4.1). */
+function opiumImports(country: Country): number {
+  let total = 0
+  for (const flow of country.trade.imports) if (flow.good === 'opium') total += flow.quantity
+  return total
 }
 
 function countryLine(country: Country, world: WorldState): string {
@@ -68,6 +89,9 @@ function countryLine(country: Country, world: WorldState): string {
     `失业:${n1(country.econ.unemployment)}%`,
     `劳动份额:${Math.round(country.econ.laborShare * 100)}%`,
     `资源:农${country.econ.resources.farmland}/林${country.econ.resources.timber}/煤${country.econ.resources.coal}/铁${country.econ.resources.iron}`,
+    `贸易:出口${n1(country.econ.lastExportRevenue)}/进口${n1(country.econ.lastImportBill)}/净${n1(country.econ.lastTradeBalance)}/关税${n1(country.econ.lastTariffRevenue)}`,
+    `伙伴Top3:${topPartners(country)}`,
+    `鸦片进口:${n1(opiumImports(country))}资源进口:煤${n1(country.econ.resourceImports.coal)}/铁${n1(country.econ.resourceImports.iron)}/木${n1(country.econ.resourceImports.timber)}`,
     `合法性:${Math.round(country.government.legitimacy)}`,
     `激进:${Math.round(country.pops.radicals)}`,
     `生活:${Math.round(country.pops.sol)}`,
@@ -168,6 +192,9 @@ const DIPLOMACY_MOVES = new Set([
   'gift',
   'war',
   'peace',
+  'embargo',
+  'unembargo',
+  'tension',
 ])
 
 /** Rejects malformed model output before it can shadow the fallback. */
@@ -202,12 +229,27 @@ function validParams(
       return finite(params.amount, 1, 20)
     case 'diplomacy': {
       const target = String(params.target ?? '')
-      return (
-        world.countries[target] !== undefined &&
-        target !== countryId &&
-        DIPLOMACY_MOVES.has(String(params.move ?? '')) &&
-        finite(params.amount, 1, 30)
-      )
+      const move = String(params.move ?? '')
+      if (world.countries[target] === undefined || target === countryId) return false
+      if (!DIPLOMACY_MOVES.has(move)) return false
+      const knownGood = (value: unknown): boolean => {
+        const id = String(value ?? '')
+        return (GOOD_IDS as readonly string[]).includes(id)
+      }
+      if (move === 'tension') {
+        const good = String(params.good ?? '')
+        if (!(SENSITIVE_GOODS as readonly string[]).includes(good)) return false
+        const delta = Number(params.relationDelta ?? params.amount)
+        return Number.isFinite(delta) && Math.abs(delta) <= 10
+      }
+      if (move === 'embargo') {
+        if (params.good !== undefined && !knownGood(params.good)) return false
+        return finite(params.months, 1, 60)
+      }
+      if (move === 'unembargo') {
+        return params.good === undefined || knownGood(params.good)
+      }
+      return finite(params.amount, 1, 30)
     }
     case 'invest':
       return finite(params.amount, -3, 3)

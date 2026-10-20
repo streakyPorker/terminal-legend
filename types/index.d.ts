@@ -42,6 +42,39 @@ export type TradeFlow = {
   value: number
 }
 
+/**
+ * A trade embargo one country has placed on another (plan 0004 §1.3/§3).
+ * `goods: 'all'` blocks every tradable good; an array blocks only those goods.
+ */
+export type Embargo = {
+  /** The embargoed country id. */
+  target: string
+  goods: GoodId[] | 'all'
+  since: GameDate
+  /**
+   * Remaining countdown in months; decremented once per monthly tick and the
+   * embargo is lifted when it reaches zero. Absent means permanent (plan §3).
+   */
+  months?: number
+  reason?: string
+}
+
+/**
+ * One auditable trade-tension entry (plan 0004 §2.7). Written when an agent
+ * submits a `tension` diplomacy move; `world.tradeTensions` keeps the last 24
+ * months so the diplomacy UI can show who applied what and why.
+ */
+export type TradeTension = {
+  date: GameDate
+  /** The country that submitted the tension (the one whose relation changes). */
+  from: string
+  /** The partner country the tension is directed at. */
+  partner: string
+  good: GoodId
+  relationDelta: number
+  reason: string
+}
+
 /** A country's bilateral trade for the current month plus a running history. */
 export type TradeState = {
   /** Flows where this country is the exporter; only the latest month is kept. */
@@ -388,6 +421,8 @@ export type Country = {
   trade: TradeState
   /** Per-country opium production and demand factors (plan 0004 §1.1). */
   opium: { outputFactor: number; demandFactor: number }
+  /** Active trade embargoes this country has placed on others (plan 0004 §1.3/§3). */
+  embargoes: Embargo[]
   /** Active buffs and debuffs; see engine/modifiers.ts. */
   modifiers: Modifier[]
 }
@@ -510,6 +545,8 @@ export type WorldState = {
   wars: War[]
   events: GameEvent[]
   log: LogEntry[]
+  /** Auditable trade tensions, newest last; only the last 24 months are kept (plan 0004 §2.7). */
+  tradeTensions: TradeTension[]
   /** Auto-load this world when a session starts in the project. */
   resumeOnStart: boolean
   ai: AiState
