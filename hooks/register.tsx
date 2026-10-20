@@ -8,8 +8,10 @@ import {
   applyDecision,
   applyEventOption,
   applyPolicy,
+  capacityCost,
   clamp,
   clone,
+  constructionLoad,
   councilInterrupt,
   newWorld,
   randomDecision,
@@ -122,6 +124,13 @@ function statusText(world: WorldState): string {
   const player = world.countries[world.playerId]
   if (player !== undefined) {
     const queue = player.econ.constructionQueue
+    const load = constructionLoad(player)
+    const stateQueue = queue.filter(
+      project => (project.owner ?? 'state') !== 'private',
+    )
+    const privateQueue = queue.filter(
+      project => (project.owner ?? 'state') === 'private',
+    )
     const atWar = world.wars.some(
       war =>
         war.attackers.includes(player.id) || war.defenders.includes(player.id),
@@ -150,7 +159,7 @@ function statusText(world: WorldState): string {
       debtPressureLine,
       `财政收入：税入 ${fmtNumber(ledger.income.taxes)} + 关税（进+出） ${fmtNumber(ledger.income.tariffs)} + 港口 ${fmtNumber(ledger.income.ports)} + 基金收益 ${fmtNumber(ledger.income.sovereignIncome)} + 赔款收入 ${fmtNumber(ledger.income.reparations)} = ${fmtMoney(ledger.income.total)}/月（税入占 GDP ${taxShare}%）`,
       `财政支出：陆军 ${fmtNumber(ledger.expense.army)} + 海军 ${fmtNumber(ledger.expense.navy)} + 行政 ${fmtNumber(ledger.expense.administration)} + 教育 ${fmtNumber(ledger.expense.education)} + 福利 ${fmtNumber(ledger.expense.welfare)} + 债息 ${fmtNumber(ledger.expense.debtInterest)} + 市场损耗 ${fmtNumber(ledger.expense.marketLoss)} + 设施维护 ${fmtNumber(ledger.expense.upkeep)} + 赔款支出 ${fmtNumber(ledger.expense.reparations)} + 国有建设 ${fmtNumber(ledger.expense.construction)} = ${fmtMoney(ledger.expense.total)}/月`,
-      `国库净额：收入 − 支出 = ${fmtSigned(ledger.net)} 金/月；私人部门贸易逆差 ${fmtMoney(ledger.tradeGap)}（由私人资本/私人外债 ${fmtMoney(ledger.privateDebt)} 承担，不影响国库）；净资产实际变动 ${fmtSigned(ledger.net)} 金/月；GDP 是产出，与国库收支不是同一本账`,
+      `国库净额：收入 − 支出 = ${fmtSigned(ledger.net)} 金/月；私人部门贸易逆差 ${fmtMoney(ledger.tradeGap)}（由私人资本/私人外债 ${fmtMoney(ledger.privateDebt)} 承担，不影响国库）${ledger.rentalIncome > 0 ? `；私人租用闲置建造力 +${fmtMoney(ledger.rentalIncome)}` : ''}；净资产实际变动 ${fmtSigned(ledger.net + ledger.rentalIncome)} 金/月；GDP 是产出，与国库收支不是同一本账`,
       `赔款日程：${
         schedules.length === 0
           ? '无'
@@ -165,13 +174,24 @@ function statusText(world: WorldState): string {
       }`,
       `私人资本 ${fmtNumber(Math.max(0, player.econ.privateCapital))} · 私人外债 ${fmtMoney(ledger.privateDebt)} · 投资信心 ${player.econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(player.econ.investmentConfidence)} · 闲置利润 ${fmtNumber(player.econ.idleProfits)} · 劳动原始利用率 ${(player.econ.laborRawUtilization * 100).toFixed(1)}%（需求 ${fmtPop(player.econ.laborDemand)} / 劳动力 ${fmtPop(player.econ.laborForce)}）`,
       `资源禀赋：农田 ${player.econ.resources.farmland} · 林地 ${player.econ.resources.timber} · 煤矿 ${player.econ.resources.coal} · 铁矿 ${player.econ.resources.iron}`,
-      `建造队列：${
-        queue.length === 0
+      `建造能力 ${fmtNumber(load.capacity)} 点/月（国有需求 ${fmtNumber(load.requested)}，已分配 ${fmtNumber(load.allocated)}，闲置 ${fmtNumber(load.remaining)}）`,
+      `国有建造队列：${
+        stateQueue.length === 0
           ? '空'
-          : queue
+          : stateQueue
               .map(
                 project =>
-                  `${project.owner === 'private' ? '[私人]' : '[国有]'}${BUILDINGS[project.building].name}×${project.count}（剩余 ${project.monthsLeft} 月，进度 ${Math.round(project.progress * 100)}%）`,
+                  `${BUILDINGS[project.building].name}×${project.count}（剩余 ${project.monthsLeft} 月，进度 ${Math.round(project.progress * 100)}%，建造点 ${fmtNumber(load.byProject[project.id] ?? 0)}/${fmtNumber(capacityCost(project))}）`,
+              )
+              .join('；')
+      }`,
+      `私人建造：${
+        privateQueue.length === 0
+          ? '无（不占用国有建造力）'
+          : privateQueue
+              .map(
+                project =>
+                  `${BUILDINGS[project.building].name}×${project.count}（剩余 ${project.monthsLeft} 月，进度 ${Math.round(project.progress * 100)}%，私人出资）`,
               )
               .join('；')
       }`,
@@ -781,6 +801,7 @@ const TOOL_SPECS: {
             'universities',
             'barracks',
             'offices',
+            'workshops',
           ],
         },
         count: { type: 'integer', minimum: -20, maximum: 20 },
@@ -825,6 +846,7 @@ const TOOL_SPECS: {
             'universities',
             'barracks',
             'offices',
+            'workshops',
           ],
           description: 'build 时必填。',
         },

@@ -169,6 +169,7 @@ export const INVESTMENT_DEMAND: Record<BuildingId, Partial<Record<GoodId, number
   universities: { furniture: 0.12, wood: 0.05 },
   barracks: { wood: 0.1, furniture: 0.05 },
   offices: { furniture: 0.1, wood: 0.05 },
+  workshops: { wood: 0.3, iron: 0.2, furniture: 0.05 },
 }
 
 /** Gross output per building per month before tech, infrastructure and resources. */
@@ -189,6 +190,7 @@ export const BUILDING_OUTPUT: Record<BuildingId, Partial<Record<GoodId, number>>
   universities: {},
   barracks: { arms: 0.05 },
   offices: {},
+  workshops: {},
 }
 
 export const BUILDINGS: Record<BuildingId, { name: string; cost: number; note: string }> = {
@@ -200,6 +202,7 @@ export const BUILDINGS: Record<BuildingId, { name: string; cost: number; note: s
   universities: { name: '大学', cost: 5, note: '科技点数、识字率与行政能力' },
   barracks: { name: '兵营', cost: 2.5, note: '军械产出' },
   offices: { name: '官署', cost: 3, note: '行政能力与官僚效能上限' },
+  workshops: { name: '营造所', cost: 3, note: '消耗木材、粮食与铁，产出建造点' },
 }
 
 /** Months a project of each kind takes, before bureaucratic delay. */
@@ -212,6 +215,7 @@ export const BUILDING_TIME: Record<BuildingId, number> = {
   universities: 5,
   barracks: 2,
   offices: 3,
+  workshops: 3,
 }
 
 export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[]
@@ -295,6 +299,7 @@ const buildings = (
   universities: number,
   barracks: number,
   offices: number,
+  workshops: number,
 ): Record<BuildingId, number> => ({
   farms,
   mines,
@@ -304,6 +309,7 @@ const buildings = (
   universities,
   barracks,
   offices,
+  workshops,
 })
 
 const spending = (
@@ -427,7 +433,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 12,
     tariff: 8,
     spending: spending(6, 0.8, 4, 1, 0.5, 1.5),
-    buildings: buildings(3000, 35, 20, 0, 14, 4, 40, 4),
+    buildings: buildings(3000, 35, 20, 0, 14, 4, 40, 4, 12),
     transportInfrastructure: 25,
     marketAccess: 0.45,
     unemployment: 6,
@@ -484,7 +490,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 10,
     tariff: 5,
     spending: spending(4, 6, 2.5, 1.2, 1.5, 2),
-    buildings: buildings(110, 90, 160, 25, 60, 18, 20, 14),
+    buildings: buildings(110, 90, 160, 25, 60, 18, 20, 14, 24),
     transportInfrastructure: 85,
     marketAccess: 0.9,
     unemployment: 8,
@@ -541,7 +547,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 12,
     tariff: 12,
     spending: spending(5, 3, 2.5, 1, 1.2, 1.8),
-    buildings: buildings(260, 55, 95, 8, 30, 12, 30, 10),
+    buildings: buildings(260, 55, 95, 8, 30, 12, 30, 10, 16),
     transportInfrastructure: 60,
     marketAccess: 0.75,
     unemployment: 7,
@@ -598,7 +604,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 11,
     tariff: 8,
     spending: spending(4.5, 0.5, 1.8, 1.1, 0.8, 1.5),
-    buildings: buildings(180, 70, 60, 6, 10, 11, 22, 8),
+    buildings: buildings(180, 70, 60, 6, 10, 11, 22, 8, 10),
     transportInfrastructure: 55,
     marketAccess: 0.7,
     unemployment: 5,
@@ -655,7 +661,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 14,
     tariff: 15,
     spending: spending(6, 1.2, 3, 0.3, 0.4, 1),
-    buildings: buildings(900, 70, 35, 2, 12, 6, 50, 6),
+    buildings: buildings(900, 70, 35, 2, 12, 6, 50, 6, 8),
     transportInfrastructure: 20,
     marketAccess: 0.5,
     unemployment: 4,
@@ -712,7 +718,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 13,
     tariff: 10,
     spending: spending(4, 0.6, 2.2, 0.6, 0.7, 1),
-    buildings: buildings(420, 60, 45, 4, 5, 8, 30, 7),
+    buildings: buildings(420, 60, 45, 4, 5, 8, 30, 7, 10),
     transportInfrastructure: 45,
     marketAccess: 0.65,
     unemployment: 6,
@@ -769,7 +775,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 8,
     tariff: 20,
     spending: spending(1.5, 1.2, 1.2, 0.8, 0.5, 1.5),
-    buildings: buildings(300, 55, 55, 6, 25, 10, 12, 8),
+    buildings: buildings(300, 55, 55, 6, 25, 10, 12, 8, 8),
     transportInfrastructure: 50,
     marketAccess: 0.7,
     unemployment: 5,
@@ -826,7 +832,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 14,
     tariff: 5,
     spending: spending(2.5, 0.6, 1.5, 0.5, 0.3, 0.8),
-    buildings: buildings(380, 22, 12, 0, 10, 4, 15, 4),
+    buildings: buildings(380, 22, 12, 0, 10, 4, 15, 4, 3),
     transportInfrastructure: 22,
     marketAccess: 0.4,
     unemployment: 3,
@@ -883,7 +889,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 15,
     tariff: 12,
     spending: spending(3, 0.8, 2, 0.3, 0.3, 0.6),
-    buildings: buildings(420, 25, 14, 0, 12, 3, 22, 4),
+    buildings: buildings(420, 25, 14, 0, 12, 3, 22, 4, 4),
     transportInfrastructure: 18,
     marketAccess: 0.45,
     unemployment: 8,
@@ -940,7 +946,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     taxRate: 14,
     tariff: 12,
     spending: spending(2, 0.8, 1.5, 0.4, 0.4, 0.6),
-    buildings: buildings(220, 30, 20, 2, 14, 6, 14, 4),
+    buildings: buildings(220, 30, 20, 2, 14, 6, 14, 4, 4),
     transportInfrastructure: 35,
     marketAccess: 0.55,
     unemployment: 10,
@@ -1201,6 +1207,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         laborRawUtilization: 0,
         lastConstructionSpend: 0,
         lastStateConstructionSpend: 0,
+        lastConstructionRent: 0,
         lastPrivateConstructionSpend: 0,
         reparationsPaid: 0,
         reparationsReceived: 0,

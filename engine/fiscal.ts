@@ -124,6 +124,8 @@ export type FiscalLedger = {
   tradeGap: number
   /** Private external debt = max(0, −privateCapital). Not national debt. */
   privateDebt: number
+  /** Rent received from private builders using idle state construction points. */
+  rentalIncome: number
   /** Derived stocks and the rates they earned/paid this month. */
   debt: number
   fund: number
@@ -325,6 +327,7 @@ export function fiscalLedger(
     net: econ.income - econ.expense,
     tradeGap: econ.lastTradeDebt ?? 0,
     privateDebt: Math.max(0, -econ.privateCapital),
+    rentalIncome: Math.max(0, econ.lastConstructionRent ?? 0),
     debt: nationalDebt(country),
     fund: sovereignFund(country),
     debtRate: debtRate(country, context),

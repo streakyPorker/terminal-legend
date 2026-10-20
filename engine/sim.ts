@@ -179,7 +179,26 @@ export function resourceFactors(country: Country): Record<GoodId, number> {
   return out
 }
 
+/**
+ * Additive v7 fields: a world loaded before the construction sector existed
+ * has no `workshops` count or rent field. Fill them once in place so the
+ * running game (not just a reloaded save) gets a working construction sector.
+ */
+function ensureConstructionFields(country: Country): void {
+  const buildings = country.econ.buildings as Record<string, number>
+  if (typeof buildings.workshops !== 'number') {
+    buildings.workshops = Math.min(
+      24,
+      Math.max(1, Math.round((buildings.factories ?? 0) / 2)),
+    )
+  }
+  if (typeof country.econ.lastConstructionRent !== 'number') {
+    country.econ.lastConstructionRent = 0
+  }
+}
+
 function computeProduction(country: Country): Record<GoodId, number> {
+  ensureConstructionFields(country)
   const tech = techMultiplier(country)
   const marketAccess = applyModifiers(country, 'marketAccess', country.econ.marketAccess)
   const access = 0.55 + marketAccess * 0.9
@@ -251,6 +270,118 @@ function computeProduction(country: Country): Record<GoodId, number> {
   return out
 }
 
+/** Construction points one workshop produces per month before input limits. */
+export const WORKSHOP_CAPACITY_OUTPUT = 4
+
+/** Goods one workshop consumes per month to run at full capacity. */
+export const WORKSHOP_INPUTS: Partial<Record<GoodId, number>> = {
+  wood: 1,
+  grain: 0.6,
+  iron: 0.3,
+}
+
+/** Construction points a project needs each month, per building in the slot. */
+export const CAPACITY_COST: Record<BuildingId, number> = {
+  farms: 0.5,
+  mines: 1,
+  factories: 2,
+  railroads: 4,
+  ports: 1.5,
+  universities: 2,
+  barracks: 1,
+  offices: 1,
+  workshops: 1.5,
+}
+
+export const capacityCost = (project: ConstructionProject): number =>
+  (CAPACITY_COST[project.building] ?? 1) * project.count
+
+/**
+ * Private builders can do half a slot's monthly work with their own
+ * organisation; the other half can rent idle state construction points, which
+ * pays the treasury. State slots always have first claim on the points.
+ */
+export const PRIVATE_OWN_CAPACITY_SHARE = 0.5
+/** Gold the state charges per rented construction point. */
+export const CONSTRUCTION_RENT_PER_POINT = 0.3
+
+const importedQuantity = (country: Country, good: GoodId): number =>
+  country.trade.imports
+    .filter(flow => flow.good === good)
+    .reduce((sum, flow) => sum + flow.quantity, 0)
+
+/**
+ * Construction points a country produces this month. Workshops are the source;
+ * their output is capped by the availability of wood, grain and iron, so a
+ * country that cannot supply the inputs builds slower (ADR 0010).
+ */
+export function constructionCapacity(country: Country): number {
+  ensureConstructionFields(country)
+  const workshops = country.econ.buildings.workshops ?? 0
+  if (workshops <= 0) return 0
+  const access = 0.55 + applyModifiers(country, 'marketAccess', country.econ.marketAccess) * 0.9
+  const transport = applyModifiers(
+    country,
+    'transportInfrastructure',
+    country.econ.transportInfrastructure,
+  )
+  const infra = 0.6 + transport / 160
+  const gross =
+    effectiveCount(workshops) *
+    WORKSHOP_CAPACITY_OUTPUT *
+    techMultiplier(country) *
+    infra *
+    access
+  const production = computeProduction(country)
+  let inputRatio = 1
+  for (const [good, perWorkshop] of Object.entries(WORKSHOP_INPUTS) as [
+    GoodId,
+    number,
+  ][]) {
+    const need = workshops * perWorkshop
+    if (need <= 0) continue
+    const available = production[good] + importedQuantity(country, good)
+    inputRatio = Math.min(inputRatio, available / need)
+  }
+  return Math.max(0, gross * clamp(inputRatio, 0, 1))
+}
+
+export type ConstructionLoad = {
+  /** Points produced this month. */
+  capacity: number
+  /** Points the whole queue would use if it ran at full speed. */
+  requested: number
+  /** Points actually allocated in queue order. */
+  allocated: number
+  /** capacity − allocated. */
+  remaining: number
+  /** Per-project allocation, in queue order. */
+  byProject: Record<string, number>
+}
+
+/**
+ * Walks the *state* queue in order and allocates state construction points
+ * until they run out. Private projects are funded by private capital and never
+ * consume the state's workshops (ADR 0010), so they are excluded here.
+ */
+export function constructionLoad(country: Country): ConstructionLoad {
+  const capacity = constructionCapacity(country)
+  let remaining = capacity
+  let requested = 0
+  let allocated = 0
+  const byProject: Record<string, number> = {}
+  for (const project of country.econ.constructionQueue) {
+    if ((project.owner ?? 'state') === 'private') continue
+    const need = capacityCost(project)
+    requested += need
+    const take = Math.min(remaining, need)
+    remaining -= take
+    allocated += take
+    byProject[project.id] = take
+  }
+  return { capacity, requested, allocated, remaining, byProject }
+}
+
 type DemandBreakdown = {
   demand: Record<GoodId, number>
   /** Final-use quantities by block; GDP values them only up to supply. */
@@ -278,6 +409,7 @@ export function effectiveSavingsRate(country: Country): number {
 }
 
 function computeDemand(country: Country): DemandBreakdown {
+  ensureConstructionFields(country)
   const popFactor = Math.max(0.1, country.pops.total / 1000)
   const prices = country.econ.prices
   const b = country.econ.buildings
@@ -343,6 +475,13 @@ function computeDemand(country: Country): DemandBreakdown {
   // industrial economies on opposite sides of the grain trade instead of
   // every country holding a permanent grain mountain.
   out.grain += demand('grain', b.factories * 1.0)
+  // Workshops turn wood, grain and iron into construction points.
+  for (const [good, perWorkshop] of Object.entries(WORKSHOP_INPUTS) as [
+    GoodId,
+    number,
+  ][]) {
+    if (perWorkshop > 0) out[good] += demand(good, b.workshops * perWorkshop)
+  }
   out.coal += demand('coal', popFactor * 1.2 + b.factories * 0.35)
   out.iron += demand('iron', popFactor * 0.8 + b.factories * 0.4 + b.railroads * 0.5)
   out.fabric += demand('fabric', b.factories * 0.45 + popFactor * 0.5)
@@ -595,8 +734,12 @@ function pushHistory(list: number[], value: number): void {
 
 /** Adds built structures and their side effects. */
 export function completeBuilding(country: Country, building: BuildingId, count: number): void {
+  ensureConstructionFields(country)
   // Negative counts remove buildings (天命); never go below zero.
-  country.econ.buildings[building] = Math.max(0, country.econ.buildings[building] + count)
+  country.econ.buildings[building] = Math.max(
+    0,
+    (country.econ.buildings[building] ?? 0) + count,
+  )
   if (building === 'railroads') {
     country.econ.transportInfrastructure = clamp(
       country.econ.transportInfrastructure + count * 3,
@@ -637,44 +780,52 @@ function settleConstruction(
   rng: Rng,
   log: LogEntry[],
 ): number {
+  ensureConstructionFields(country)
   const queue = country.econ.constructionQueue
   if (queue.length === 0) {
     country.econ.lastConstructionSpend = 0
     country.econ.lastStateConstructionSpend = 0
     country.econ.lastPrivateConstructionSpend = 0
+    country.econ.lastConstructionRent = 0
     return 0
   }
   let stateBudget = country.econ.spending.construction * 0.8
   let privateBudget = Math.max(0, country.econ.privateCapital)
+  // State slots have first claim on the points; private slots use what is idle.
+  let capacityLeft = constructionCapacity(country)
   // Deficit-financed construction: a small negative balance is normal debt,
   // not a stop sign. Only the 3× GDP restructuring floor removes the cash.
   const debtFloor = -country.econ.gdp * 3
-  const remaining: ConstructionProject[] = []
+  const kept = new Set<string>()
   let stateSpent = 0
   let privateSpent = 0
+  let rentalIncome = 0
   // Private builders are a little more efficient than the state's, but the
   // bureaucracy still limits how fast their money turns into progress.
   const privateEfficiency = clamp(0.75 + country.bureaucracy.score / 400, 0.75, 1)
 
-  // Complete the oldest/near-finish projects first so a small budget does not
-  // starve the whole queue forever.
-  const ordered = [...queue].sort((a, b) => a.monthsLeft - b.monthsLeft)
-  for (const project of ordered) {
-    const owner = project.owner ?? 'state'
-    // Fund a full month's bill where the budget allows; bureaucratic leakage
-    // then decides how much of it becomes progress. (Capping the spend at the
-    // remaining progress would approach 1 asymptotically and never finish.)
+  const runProject = (
+    project: ConstructionProject,
+    capacityTake: number,
+    capacityShare: number,
+    isPrivate: boolean,
+  ): void => {
+    const owner = isPrivate ? 'private' : 'state'
+    const goldNeed = project.monthlyCost * capacityShare
     const spend =
-      owner === 'private'
-        ? Math.min(privateBudget, project.monthlyCost)
-        : Math.min(
-            stateBudget,
-            project.monthlyCost,
-            Math.max(0, country.econ.treasury - debtFloor),
-          )
+      capacityTake <= 0
+        ? 0
+        : isPrivate
+          ? Math.min(privateBudget, goldNeed)
+          : Math.min(
+              stateBudget,
+              goldNeed,
+              Math.max(0, country.econ.treasury - debtFloor),
+            )
     project.lastSpend = spend
+    project.lastCapacity = capacityTake
     if (spend > 0) {
-      if (owner === 'private') {
+      if (isPrivate) {
         privateBudget -= spend
         privateSpent += spend
       } else {
@@ -682,30 +833,29 @@ function settleConstruction(
         stateSpent += spend
         country.econ.treasury -= spend
       }
-      const efficiency =
-        owner === 'private'
-          ? applyModifiers(country, 'constructionSpeed', privateEfficiency)
-          : applyModifiers(
-              country,
-              'constructionSpeed',
-              country.bureaucracy.fundEfficiency *
-                (1 - debtPressure(country).constructionPenalty),
-            )
-      const effective = spend * efficiency
-      project.progress = Math.min(
-        1,
-        project.progress + effective / Math.max(0.0001, project.monthlyCost),
-      )
     }
-
+    const goldShare =
+      project.monthlyCost > 0 ? spend / project.monthlyCost : 1
+    if (capacityTake > 0 && spend > 0) {
+      const efficiency = isPrivate
+        ? applyModifiers(country, 'constructionSpeed', privateEfficiency)
+        : applyModifiers(
+            country,
+            'constructionSpeed',
+            country.bureaucracy.fundEfficiency *
+              (1 - debtPressure(country).constructionPenalty),
+          )
+      const effective = Math.min(capacityShare, goldShare) * efficiency
+      project.progress = Math.min(1, project.progress + effective)
+    }
     if (project.progress >= 1) {
       project.monthsLeft -= 1
       project.progress = 0
       if (project.monthsLeft <= 0) {
         if (rng.chance(country.bureaucracy.delayChance)) {
           project.monthsLeft = 1
-          remaining.push(project)
-          continue
+          kept.add(project.id)
+          return
         }
         completeBuilding(country, project.building, project.count)
         log.push({
@@ -717,17 +867,54 @@ function settleConstruction(
               ? `[${country.flag}] ${country.name}的私人资本建成 ${project.count} 座${BUILDINGS[project.building].name}`
               : `[${country.flag}] ${country.name}建成 ${project.count} 座${BUILDINGS[project.building].name}`,
         })
-        continue
+        return
       }
     }
-    remaining.push(project)
+    kept.add(project.id)
   }
 
-  country.econ.constructionQueue = remaining
+  // Pass 1: state slots, strictly in queue order, take points until exhausted.
+  for (const project of queue) {
+    if ((project.owner ?? 'state') === 'private') continue
+    const need = capacityCost(project)
+    const capacityTake = Math.min(capacityLeft, need)
+    capacityLeft -= capacityTake
+    runProject(
+      project,
+      capacityTake,
+      need > 0 ? capacityTake / need : 1,
+      false,
+    )
+  }
+
+  // Pass 2: private slots do half the work with their own organisation and may
+  // rent idle state points for the rest; rent is private gold paid to the state.
+  for (const project of queue) {
+    if ((project.owner ?? 'state') !== 'private') continue
+    const need = capacityCost(project)
+    const own = need * PRIVATE_OWN_CAPACITY_SHARE
+    const affordableRent =
+      CONSTRUCTION_RENT_PER_POINT > 0
+        ? privateBudget / CONSTRUCTION_RENT_PER_POINT
+        : Infinity
+    const rented = Math.min(capacityLeft, Math.max(0, need - own), affordableRent)
+    capacityLeft -= rented
+    const rent = rented * CONSTRUCTION_RENT_PER_POINT
+    if (rent > 0) {
+      privateBudget -= rent
+      country.econ.treasury += rent
+      rentalIncome += rent
+    }
+    const capacityTake = own + rented
+    runProject(project, capacityTake, need > 0 ? capacityTake / need : 1, true)
+  }
+
+  country.econ.constructionQueue = queue.filter(project => kept.has(project.id))
   country.econ.privateCapital = privateBudget
   country.econ.lastConstructionSpend = stateSpent + privateSpent
   country.econ.lastStateConstructionSpend = stateSpent
   country.econ.lastPrivateConstructionSpend = privateSpent
+  country.econ.lastConstructionRent = rentalIncome
   // Unused appropriations are not spent at all: the appropriation is a monthly
   // cap, not a charge. This keeps the displayed budget equal to the treasury.
   return stateSpent
@@ -2938,7 +3125,14 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
     country.econ.constructionQueue.length < 6 &&
     rng.chance(0.45)
   ) {
-    const options = ['factories', 'farms', 'mines', 'railroads', 'universities'] as const
+    const options = [
+      'factories',
+      'farms',
+      'mines',
+      'railroads',
+      'universities',
+      'workshops',
+    ] as const
     const building = rng.pick(options)
     return {
       countryId: country.id,

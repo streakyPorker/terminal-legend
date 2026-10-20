@@ -1,0 +1,137 @@
+import { describe, expect, test } from 'claude-code/testing'
+import { makeRngForWorld } from '../engine/data'
+import { parseWorld } from '../engine/save'
+import {
+  advance,
+  capacityCost,
+  constructionCapacity,
+  constructionLoad,
+  newWorld,
+} from '../engine/sim'
+import type { ConstructionProject, Country, WorldState } from '../types'
+
+const countryOf = (world: WorldState, id: string): Country => {
+  const country = world.countries[id]
+  if (country === undefined) throw new Error(`missing ${id}`)
+  return country
+}
+
+const project = (
+  input: Partial<ConstructionProject> & {
+    id: string
+    building: ConstructionProject['building']
+    count: number
+    owner: 'state' | 'private'
+  },
+  date: WorldState['date'],
+): ConstructionProject => ({
+  monthsLeft: 4,
+  monthlyCost: 2,
+  lastSpend: 0,
+  progress: 0,
+  startedAt: { ...date },
+  ...input,
+})
+
+describe('construction capacity (ADR 0010)', () => {
+  test('workshops produce points; inputs can cap them', async () => {
+    const world = newWorld(9300, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 0
+    expect(constructionCapacity(qing)).toBe(0)
+    qing.econ.buildings.workshops = 4
+    const four = constructionCapacity(qing)
+    expect(four).toBeGreaterThan(0)
+    qing.econ.buildings.workshops = 8
+    const eight = constructionCapacity(qing)
+    expect(eight).toBeGreaterThan(four)
+    // A country with no wood/grain/iron cannot run its workshops.
+    qing.econ.resources.timber = 0
+    qing.econ.resources.farmland = 0
+    qing.econ.resources.iron = 0
+    qing.econ.buildings.farms = 0
+    qing.econ.buildings.mines = 0
+    expect(constructionCapacity(qing)).toBeLessThan(eight)
+  })
+
+  test('the state queue drains points strictly in order', async () => {
+    const world = newWorld(9301, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 2
+    qing.econ.constructionQueue = []
+    const first = project(
+      { id: 'first', building: 'factories', count: 3, owner: 'state' },
+      world.date,
+    )
+    const second = project(
+      { id: 'second', building: 'mines', count: 3, owner: 'state' },
+      world.date,
+    )
+    qing.econ.constructionQueue.push(first, second)
+    const load = constructionLoad(qing)
+    expect(load.requested).toBeGreaterThan(load.capacity)
+    expect(load.byProject.first).toBeGreaterThan(0)
+    // The first slot is capped at its own need; the second gets only the
+    // leftover points, if the month's capacity exceeded that need.
+    expect(load.byProject.second ?? 0).toBeLessThan(load.byProject.first ?? 0)
+
+    advance(world, 1, [], makeRngForWorld(world))
+    const kept = qing.econ.constructionQueue
+    const firstProgress = kept.find(one => one.id === 'first')?.progress ?? 0
+    const secondProgress = kept.find(one => one.id === 'second')?.progress ?? 0
+    expect(firstProgress).toBeGreaterThan(0)
+    // The first slot gets the lion's share; the second only sees leftover
+    // points if the month's capacity happened to exceed the first slot's need.
+    expect(secondProgress).toBeLessThan(firstProgress)
+    expect(secondProgress).toBeLessThan(0.2)
+  })
+
+  test('private builders rent idle state points and pay the treasury', async () => {
+    const world = newWorld(9302, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 4
+    qing.econ.constructionQueue = []
+    qing.econ.privateCapital = 100
+    const before = qing.econ.treasury
+    qing.econ.constructionQueue.push(
+      project(
+        { id: 'private', building: 'factories', count: 2, owner: 'private' },
+        world.date,
+      ),
+    )
+    // A private slot alone leaves half the points idle; it rents the rest.
+    const load = constructionLoad(qing)
+    expect(load.allocated).toBe(0) // constructionLoad counts state slots only
+    advance(world, 1, [], makeRngForWorld(world))
+    expect(qing.econ.lastConstructionRent).toBeGreaterThan(0)
+    expect(qing.econ.treasury).toBeGreaterThan(before)
+    expect(qing.econ.constructionQueue.length).toBeGreaterThan(0)
+  })
+
+  test('an old v7 save without the new fields is normalized on load', async () => {
+    const world = newWorld(9303, 'QING')
+    const raw = JSON.parse(JSON.stringify(world)) as any
+    delete raw.countries.QING.econ.buildings.workshops
+    delete raw.countries.QING.econ.lastConstructionRent
+    raw.countries.QING.econ.constructionQueue = [
+      {
+        id: 'old',
+        building: 'factories',
+        count: 1,
+        owner: 'state',
+        monthsLeft: 2,
+        monthlyCost: 1,
+        lastSpend: 0,
+        progress: 0,
+        startedAt: raw.date,
+      },
+    ]
+    const parsed = parseWorld(raw)
+    expect(parsed).toBeDefined()
+    if (parsed === undefined) return
+    const qing = countryOf(parsed, 'QING')
+    expect(qing.econ.buildings.workshops).toBeGreaterThan(0)
+    expect(qing.econ.lastConstructionRent).toBe(0)
+    expect(qing.econ.constructionQueue[0]?.lastCapacity).toBe(0)
+  })
+})

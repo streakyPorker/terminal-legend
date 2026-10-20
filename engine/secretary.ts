@@ -2,6 +2,7 @@ import type { WorldState } from '../types'
 import { BUILDINGS } from './data'
 import { fiscalLedger } from './fiscal'
 import { MODIFIER_STAT_NAMES, describeModifier } from './modifiers'
+import { constructionLoad } from './sim'
 
 /**
  * System prompt for the secretary subagent. The delegation itself changes
@@ -88,6 +89,10 @@ export function monthlyBriefing(world: WorldState): string {
   )
   lines.push(
     `私人经济：私人资本 ${player.econ.privateCapital.toFixed(1)} 金，投资信心 ${player.econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(player.econ.investmentConfidence)}（基准 ${player.politicalEconomy.investmentConfidence >= 0 ? '+' : ''}${player.politicalEconomy.investmentConfidence}），闲置利润 ${player.econ.idleProfits.toFixed(1)}，劳动需求 ${player.econ.laborDemand.toFixed(1)} 万 / 劳动力 ${player.econ.laborForce.toFixed(1)} 万（原始利用率 ${pct(player.econ.laborRawUtilization)}）`,
+  )
+  const load = constructionLoad(player)
+  lines.push(
+    `建造能力：${load.capacity.toFixed(1)} 点/月（国有需求 ${load.requested.toFixed(1)}，已分配 ${load.allocated.toFixed(1)}，闲置 ${load.remaining.toFixed(1)}）；国有项目优先，私人项目自建 50%，可租用国有闲置点。`,
   )
   lines.push(
     `资源禀赋：农田 ${player.econ.resources.farmland}，林地 ${player.econ.resources.timber}，煤矿 ${player.econ.resources.coal}，铁矿 ${player.econ.resources.iron}`,

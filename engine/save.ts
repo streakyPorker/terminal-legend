@@ -1,5 +1,6 @@
 import type { EngineInterface } from 'claude-code'
 import type { WorldState } from '../types'
+import { BUILDING_IDS } from './data'
 
 /** Current world shape; older in-memory worlds are discarded like old saves. */
 export const CURRENT_WORLD_VERSION = 7
@@ -36,6 +37,34 @@ export async function saveGame(
  * Accepts only the current world shape. Older saves are deliberately not
  * supported (ADR 0005: no compatibility layer during early development).
  */
+/**
+ * Fills fields added after v7 was first written. The construction-sector
+ * building is additive, so an old v7 save can keep playing: every country
+ * without workshops gets one per two factories (capped at 24), and the
+ * construction-rent / per-project capacity fields default to 0.
+ */
+function normalizeWorld(world: WorldState): WorldState {
+  for (const country of Object.values(world.countries)) {
+    const buildings = country.econ.buildings as Record<string, number>
+    if (typeof buildings.workshops !== 'number') {
+      buildings.workshops = Math.min(
+        24,
+        Math.max(1, Math.round((buildings.factories ?? 0) / 2)),
+      )
+    }
+    for (const id of BUILDING_IDS) {
+      if (typeof buildings[id] !== 'number') buildings[id] = 0
+    }
+    if (typeof country.econ.lastConstructionRent !== 'number') {
+      country.econ.lastConstructionRent = 0
+    }
+    for (const project of country.econ.constructionQueue) {
+      if (typeof project.lastCapacity !== 'number') project.lastCapacity = 0
+    }
+  }
+  return world
+}
+
 export function parseWorld(raw: unknown): WorldState | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined
   const world = raw as WorldState
@@ -44,7 +73,7 @@ export function parseWorld(raw: unknown): WorldState | undefined {
   if (typeof world.date !== 'object' || world.date === null) return undefined
   if (typeof world.countries !== 'object' || world.countries === null) return undefined
   if (typeof world.resumeOnStart !== 'boolean') return undefined
-  return world
+  return normalizeWorld(world)
 }
 
 export async function loadGame(

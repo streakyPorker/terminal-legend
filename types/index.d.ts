@@ -110,6 +110,7 @@ export type BuildingId =
   | 'universities'
   | 'barracks'
   | 'offices'
+  | 'workshops'
 
 export type SpendingCategory =
   | 'army'
@@ -293,6 +294,8 @@ export type ConstructionProject = {
   monthlyCost: number
   /** Gold actually paid into the project last month (0..monthlyCost). */
   lastSpend: number
+  /** Construction points allocated to this project last month. */
+  lastCapacity?: number
   /** 0..1, funded share of the current month. */
   progress: number
   startedAt: GameDate
@@ -350,6 +353,8 @@ export type Economy = {
   lastConstructionSpend: number
   lastStateConstructionSpend: number
   lastPrivateConstructionSpend: number
+  /** Rent paid by private builders for idle state construction points. */
+  lastConstructionRent: number
   /** Installment reparations paid this month, folded into expense. */
   reparationsPaid: number
   /** Installment reparations received this month, folded into income. */

@@ -13,7 +13,11 @@ import {
   techCost,
   techName,
 } from '../engine/data'
-import { inspectEconomy } from '../engine/sim'
+import {
+  capacityCost,
+  constructionLoad,
+  inspectEconomy,
+} from '../engine/sim'
 import { fiscalLedger, nationalDebt } from '../engine/fiscal'
 import { MODIFIER_STAT_NAMES, describeModifier } from '../engine/modifiers'
 import {
@@ -383,6 +387,13 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
   if (player === undefined) return <Text dimColor>无进行中的游戏。</Text>
   const snapshot = inspectEconomy(player)
   const econ = player.econ
+  const load = constructionLoad(player)
+  const stateQueue = econ.constructionQueue.filter(
+    project => (project.owner ?? 'state') !== 'private',
+  )
+  const privateQueue = econ.constructionQueue.filter(
+    project => (project.owner ?? 'state') === 'private',
+  )
   const atWar = props.world.wars.some(
     war => war.attackers.includes(player.id) || war.defenders.includes(player.id),
   )
@@ -499,21 +510,53 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
-        <Heading ui={props.ui} text="建造队列" hint={econ.constructionQueue.length === 0 ? '（空闲）' : `${econ.constructionQueue.length} 个项目 · 队列不可取消`} />
-        {econ.constructionQueue.length === 0 ? (
-          <Text dimColor>用「建造」下令，项目按工期与建设预算逐月推进。</Text>
+        <Heading
+          ui={props.ui}
+          text="国有建造队列"
+          hint={
+            stateQueue.length === 0
+              ? '（空闲）'
+              : `${stateQueue.length} 个项目 · 建造力 ${fmtNumber(load.capacity)}/月`
+          }
+        />
+        <Text dimColor>
+          建造能力 {fmtNumber(load.capacity)} 点/月 · 国有需求 {fmtNumber(load.requested)} · 已分配 {fmtNumber(load.allocated)} · 剩余 {fmtNumber(load.remaining)}
+          {player.econ.lastConstructionRent > 0 ? ` · 私人租用 +${fmtMoney(player.econ.lastConstructionRent)}` : ''}
+        </Text>
+        {stateQueue.length === 0 ? (
+          <Text dimColor>用「建造」下令；项目按队列顺序消耗建造点。</Text>
         ) : (
-          econ.constructionQueue.map(project => (
+          stateQueue.map(project => (
             <Box flexDirection="row" columnGap={1}>
-              <Text color={project.owner === 'private' ? 'magenta' : undefined}>
-                {padEnd(project.owner === 'private' ? '私人' : '国有', 4)}
-              </Text>
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
               <Text dimColor>
-                剩余 {project.monthsLeft} 月 · 每月 {project.monthlyCost.toFixed(1)}金
-                {project.owner === 'private' ? ' · 私人出资' : ''}
+                剩余 {project.monthsLeft} 月 · 建造点 {fmtNumber(load.byProject[project.id] ?? 0)}/{fmtNumber(capacityCost(project))} · 每月 {project.monthlyCost.toFixed(1)}金
               </Text>
+            </Box>
+          ))
+        )}
+      </Box>
+
+      <Box flexDirection="column" marginTop={1}>
+        <Heading
+          ui={props.ui}
+          text="私人建造"
+          hint={
+            privateQueue.length === 0
+              ? '（无）'
+              : `${privateQueue.length} 个项目 · 私人资本 ${fmtNumber(Math.max(0, econ.privateCapital))}`
+          }
+        />
+        {privateQueue.length === 0 ? (
+          <Text dimColor>私人资本会自行投建，不占用国有建造点。</Text>
+        ) : (
+          privateQueue.map(project => (
+            <Box flexDirection="row" columnGap={1}>
+              <Text color="magenta">{padEnd('私人', 4)}</Text>
+              <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
+              <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
+              <Text dimColor>剩余 {project.monthsLeft} 月 · 每月 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
             </Box>
           ))
         )}
@@ -998,6 +1041,13 @@ function CouncilPanel(props: {
   if (player === undefined) return <Text dimColor>无进行中的游戏。</Text>
   const delegation = props.world.secretary.delegation
   const bureaucracy = player.bureaucracy
+  const load = constructionLoad(player)
+  const stateQueue = player.econ.constructionQueue.filter(
+    project => (project.owner ?? 'state') !== 'private',
+  )
+  const privateQueue = player.econ.constructionQueue.filter(
+    project => (project.owner ?? 'state') === 'private',
+  )
   const reportLines = props.council.report.split('\n').filter(line => line !== '')
   const months = [1, 3, 6, 12]
 
@@ -1113,23 +1163,53 @@ function CouncilPanel(props: {
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
-        <Heading ui={props.ui} text="建造队列" hint={player.econ.constructionQueue.length === 0 ? '（空闲）' : '队列不可取消'} />
-        {player.econ.constructionQueue.length === 0 ? (
-          <Text dimColor>没有在建项目。</Text>
+        <Heading
+          ui={props.ui}
+          text="国有建造队列"
+          hint={
+            stateQueue.length === 0
+              ? '（空闲）'
+              : `${stateQueue.length} 个项目 · 建造力 ${fmtNumber(load.capacity)}/月`
+          }
+        />
+        <Text dimColor>
+          建造能力 {fmtNumber(load.capacity)} 点/月 · 国有需求 {fmtNumber(load.requested)} · 已分配 {fmtNumber(load.allocated)} · 剩余 {fmtNumber(load.remaining)}
+          {player.econ.lastConstructionRent > 0 ? ` · 私人租用 +${fmtMoney(player.econ.lastConstructionRent)}` : ''}
+        </Text>
+        {stateQueue.length === 0 ? (
+          <Text dimColor>没有国有在建项目。</Text>
         ) : (
-          player.econ.constructionQueue.map(project => (
+          stateQueue.map(project => (
             <Box flexDirection="row" columnGap={1}>
-              <Text color={project.owner === 'private' ? 'magenta' : undefined}>
-                {padEnd(project.owner === 'private' ? '私人' : '国有', 4)}
-              </Text>
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
               <Text dimColor>
-                剩余 {project.monthsLeft} 月 · 每月 {project.monthlyCost.toFixed(1)}金 ·{' '}
-                {project.owner === 'private'
-                  ? '私人出资'
-                  : `资金效率 ${fmtPercent(bureaucracy.fundEfficiency)}`}
+                剩余 {project.monthsLeft} 月 · 建造点 {fmtNumber(load.byProject[project.id] ?? 0)}/{fmtNumber(capacityCost(project))} · 每月 {project.monthlyCost.toFixed(1)}金
               </Text>
+            </Box>
+          ))
+        )}
+      </Box>
+
+      <Box flexDirection="column" marginTop={1}>
+        <Heading
+          ui={props.ui}
+          text="私人建造"
+          hint={
+            privateQueue.length === 0
+              ? '（无）'
+              : `${privateQueue.length} 个项目 · 私人资本 ${fmtNumber(Math.max(0, player.econ.privateCapital))}`
+          }
+        />
+        {privateQueue.length === 0 ? (
+          <Text dimColor>私人资本会自行投建，不占用国有建造点。</Text>
+        ) : (
+          privateQueue.map(project => (
+            <Box flexDirection="row" columnGap={1}>
+              <Text color="magenta">{padEnd('私人', 4)}</Text>
+              <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
+              <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
+              <Text dimColor>剩余 {project.monthsLeft} 月 · 每月 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
             </Box>
           ))
         )}

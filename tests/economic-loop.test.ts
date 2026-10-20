@@ -277,10 +277,14 @@ describe('E1 demand shock loop', () => {
     advance(boosted, 12, [], makeRngForWorld(boosted))
     expect(boostedQing.econ.gdp).toBeGreaterThan(controlQing.econ.gdp * 1.05)
     expect(boostedQing.econ.profits).toBeGreaterThan(controlQing.econ.profits)
-    expect(
-      boostedQing.econ.buildings.factories + boostedQing.econ.buildings.mines,
-    ).toBeGreaterThanOrEqual(
-      controlQing.econ.buildings.factories + controlQing.econ.buildings.mines,
+    // Construction capacity and inputs can bind, so a demand boost no longer
+    // guarantees a strictly larger capital stock; it must not shrink it much.
+    const capacityBuildings = (country: typeof controlQing): number =>
+      country.econ.buildings.factories +
+      country.econ.buildings.mines +
+      country.econ.buildings.workshops
+    expect(capacityBuildings(boostedQing)).toBeGreaterThanOrEqual(
+      capacityBuildings(controlQing) * 0.95,
     )
 
     // The modifier has expired by now; the economy cools toward the control.
@@ -355,10 +359,15 @@ describe('Round 1 regressions', () => {
     const before = fra.econ.treasury
     advance(world, 1, [], makeRngForWorld(world))
     const delta = fra.econ.treasury - before
-    // The private sector carries its own trade gap (ADR 0008); the treasury
-    // cash identity is simply income − expense.
+    // The private sector carries its own trade gap (ADR 0008); rent from
+    // private builders using idle state points is a separate transfer (ADR 0010).
     expect(
-      Math.abs(fra.econ.income - fra.econ.expense - delta),
+      Math.abs(
+        fra.econ.income -
+          fra.econ.expense +
+          fra.econ.lastConstructionRent -
+          delta,
+      ),
     ).toBeLessThan(0.05)
   })
 
