@@ -835,7 +835,8 @@ export function computeEconomy(
       revenue.tariffs +
       revenue.ports +
       revenue.sovereignIncome +
-      revenue.reparations,
+      revenue.reparations +
+      revenue.other,
   )
   const outlay = expenseParts(country, gdp, context)
   const expense = applyModifiers(
@@ -1166,7 +1167,6 @@ function settleConstruction(
     const rent = rented * CONSTRUCTION_RENT_PER_POINT
     if (rent > 0) {
       privateBudget -= rent
-      country.econ.treasury += rent
       rentalIncome += rent
     }
     const capacityTake = own + rented
@@ -1189,7 +1189,6 @@ function settleConstruction(
     const idleRent = idleRented * CONSTRUCTION_RENT_PER_POINT
     if (idleRent > 0) {
       privateBudget -= idleRent
-      country.econ.treasury += idleRent
       rentalIncome += idleRent
     }
   }

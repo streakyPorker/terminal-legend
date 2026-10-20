@@ -593,6 +593,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
           ['港口', ledger.income.ports],
           ['基金收益', ledger.income.sovereignIncome],
           ['赔款收入', ledger.income.reparations],
+          ['其他（建造力出租）', ledger.income.other],
         ] as const).map(([name, value]) => (
           <Box flexDirection="row" columnGap={1}>
             <Text wrap="truncate">{padEnd(name, 6)}</Text>

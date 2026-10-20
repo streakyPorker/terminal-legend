@@ -92,6 +92,8 @@ export type IncomeParts = {
   sovereignIncome: number
   /** Installment reparations received this month. */
   reparations: number
+  /** Other receipts, e.g. renting idle construction points to the private sector. */
+  other: number
 }
 
 /** Raw monthly expense by category, before the `expense` modifier. */
@@ -228,6 +230,9 @@ export function incomeParts(
     ports: country.econ.buildings.ports * 0.02 * debtCut,
     sovereignIncome: sovereignFund(country) * fundRate(country, context),
     reparations: (country.econ.reparationsReceived ?? 0) * debtCut,
+    // Construction-capacity rent is collected this month and booked as income
+    // next month, when the ledger settles it into the treasury.
+    other: (country.econ.lastConstructionRent ?? 0) * debtCut,
   }
 }
 
@@ -269,7 +274,11 @@ export function fiscalLedger(
   const econ = country.econ
   const rawIncome = incomeParts(country, econ.gdp, econ.lastTariffRevenue, context)
   const rawIncomeNoInterest =
-    rawIncome.taxes + rawIncome.tariffs + rawIncome.ports + rawIncome.reparations
+    rawIncome.taxes +
+    rawIncome.tariffs +
+    rawIncome.ports +
+    rawIncome.reparations +
+    rawIncome.other
   // The settlement stored the interest actually applied on the opening
   // balance; using it here keeps a month that crossed zero from displaying
   // the other side's interest.
@@ -309,6 +318,7 @@ export function fiscalLedger(
       ports: rawIncome.ports * incomeFactor,
       sovereignIncome: fundIncome,
       reparations: rawIncome.reparations * incomeFactor,
+      other: rawIncome.other * incomeFactor,
       total: econ.income,
     },
     expense: {

@@ -361,15 +361,11 @@ describe('Round 1 regressions', () => {
     const before = fra.econ.treasury
     advance(world, 1, [], makeRngForWorld(world))
     const delta = fra.econ.treasury - before
-    // The private sector carries its own trade gap (ADR 0008); rent from
-    // private builders using idle state points is a separate transfer (ADR 0010).
+    // The private sector carries its own trade gap (ADR 0008). Construction
+    // rent is booked as "other" income in the following month, so this month's
+    // treasury change is simply income − expense.
     expect(
-      Math.abs(
-        fra.econ.income -
-          fra.econ.expense +
-          fra.econ.lastConstructionRent -
-          delta,
-      ),
+      Math.abs(fra.econ.income - fra.econ.expense - delta),
     ).toBeLessThan(0.05)
   })
 
