@@ -28,6 +28,11 @@
 | 秘书权限 | 外交授权下**可提交危机提案**；宣战/和约仍由玩家决定 |
 | 贸易 UI | **并入经济页 + 外交页**，不新增页签 |
 | 世界版本 | 贸易 **v6**；科技树下一期 **v7** |
+| 贸易账户（critic P0-1） | **家庭/企业对外账户**：进口从家庭可支配收入/企业利润支付，出口进利润/私人资本；国库只收关税与国营贸易毛利 |
+| NX 口径（critic P0-2） | **进口进入有效供给，出口从国内供给扣除**；GDP 用基期价，金币/关税用当期价；两阶段月度结算 |
+| 鸦片校准（critic P0-3） | 大清**必须是净进口国**：降低大清 `outputFactor`、提高人口需求；触发用进口量/消费占比，不用绝对金额 |
+| 战争赔款（critic P0-5） | **实际转移给胜方**；战争目标效果**替换**现有通用威望/合法性效果，不叠加、不销毁金币 |
+| 实施顺序（critic P0-6） | **T1a 数量/核算 → T1b 金币/关税/容量 → T2 → T4 → T3**；T3 复用已测试的战争目标 |
 
 ## 1. 新增商品与数据模型
 
@@ -40,8 +45,8 @@
 opiumDemand = popFactor × opiumDemandFactor × (0.5 + supernumerary / 10)
 ```
 
-- 每国 `opium: { outputFactor, demandFactor }`：
-  - 大清：`outputFactor 1.0`、`demandFactor 0.15`
+- 每国 `opium: { outputFactor, demandFactor }`（草案，按 1836–1839 基线校准）：
+  - 大清：`outputFactor 0.15`、`demandFactor 0.20`（人口多但本土产量低，必须净进口）
   - 英国：`outputFactor 3.0`（代表英属印度）、`demandFactor 0.02`
   - 奥斯曼：`outputFactor 0.5`、`demandFactor 0.05`
   - 其他国家：`outputFactor 0.1`、`demandFactor 0.03`
@@ -50,6 +55,8 @@ opiumDemand = popFactor × opiumDemandFactor × (0.5 + supernumerary / 10)
 ```
 opiumProduction = farms^0.98 × 0.004 × tech × infra × access × outputFactor
 ```
+
+- 目标：大清每月净进口 **2–5 单位**；低于此区间则危机条件无法成立，高于此区间则白银外流过猛。每轮调参记录在本文件 §11。
 
 - 新增修正入口 `opiumOutput`、`opiumDemand`；禁烟政策挂 `opiumDemand` 负修正。
 - 后期：军用/药用需求作为额外需求块，不改变本切片的贸易结构。
@@ -87,7 +94,7 @@ export type TradeFlow = {
   quantity: number
   unitPrice: number     // 出口国国内价
   landedPrice: number   // 进口国到岸价
-  tariff: number        // 进口国政府收到的关税
+  tariffPaid: number    // 进口国政府收到的关税
   value: number         // quantity × unitPrice
 }
 
@@ -111,6 +118,8 @@ export type Embargo = {
   target: string
   goods: GoodId[] | 'all'
   since: GameDate
+  /** 缺省永久；到期自动解除。 */
+  months?: number
   reason?: string
 }
 ```
@@ -126,20 +135,47 @@ export type Embargo = {
 
 ## 2. 双边贸易
 
-### 2.1 月度顺序
+### 2.1 两阶段月度结算
 
-1. 计算国内产出与需求（复用 0003 的 C/I/G 与中间需求）。
-2. 国内优先：`domesticUsed = min(supply, demand)`。
-3. 进口缺口：`importNeed = max(0, demand - supply)`。
-4. 出口盈余：`exportSurplus = max(0, supply - demand)`。
-5. 进口国按到岸成本排序候选出口国，取 Top-6；出口国按进口国支付能力/到岸价排序。
-6. 成交、扣金币、收关税、记贸易流。
-7. 资源进口折算为可用资源加成。
-8. 关系漂移与 `tradeTension` 落账。
-9. `NX = exportValue - importValue`，进入 GDP 的 `components.nx`。
-10. 更新贸易汇总历史。
+贸易与国内需求互相依赖，必须分两阶段，不能边算边进口：
 
-### 2.2 软容量
+**阶段 A：国内快照**
+1. 计算各国国内产出（production）。
+2. 用上月工资、利润、贸易余额计算本月消费需求；加上中间/投资/政府需求。
+3. 国内优先：`domesticUsed = min(supply, demand)`。
+4. 进口缺口 `importNeed = max(0, demand - supply)`；出口盈余 `exportSurplus = max(0, supply - demand)`。
+
+**阶段 B：全局贸易清算**
+5. 按 §2.2 的 offer/bid 算法做全局匹配，得到每国每商品的进口/出口流量。
+6. 计算关税、金币支付、软容量削减；写入 `TradeFlow`。
+
+**阶段 C：用有效供给重算**
+7. `effectiveSupply[g] = production[g] + imports[g] - exports[g]`。
+8. 用 `effectiveSupply` 重算 C/I/G 的填充比例、价格目标与稀缺度。
+9. `NX = Σ(exportValue × basePrice) − Σ(importValue × basePrice)`，进入 GDP 的 `components.nx`；GDP 用基期价。
+
+**阶段 D：收入与关系**
+10. 关税进国库；贸易收支进家庭/企业对外账户（下月可支配收入与利润）。
+11. 资源进口折算为可用资源加成（只影响下月，不写回禀赋）。
+12. 关系漂移与 `tradeTension` 落账；更新贸易汇总历史。
+
+- 本月贸易结果只影响**下月**需求与产出；同一月内不迭代，避免循环。
+- 所有排序必须有 tie-break（进口国 id、出口国 id、商品 id），保证确定性。
+
+### 2.2 清算算法（critic P0-4）
+
+对每种可贸易商品独立清算：
+
+1. **报价（offer）**：每个出口国的 `exportSurplus`。
+2. **出价（bid）**：每个进口国的 `importNeed`，以及候选出口国列表（Top-6）。
+3. 候选按到岸成本升序；低于关系 -50、战争、禁运的伙伴剔除。
+4. 所有 (进口国, 出口国) 对按 `landedPrice` 升序、再按 `importer.id`、`exporter.id` 排序。
+5. 逐笔成交 `quantity = min(bid.remaining, offer.remaining)`；同时扣减双方余量。
+6. Top-6 只限制候选，不限制成交笔数；每国每商品的进口来源最多 6 个。
+7. 全部成交后，按 §2.3 的软容量检查进口总额；超出容量时对所有进口**等比例削减**，未满足需求保留。
+8. 不跨月欠单；没有“先结算国家”的先手，所有国家在同一商品上同时匹配。
+
+### 2.3 软容量
 
 ```
 capacityGold = 50 + ports × 8 + marketAccess × 200 + transportInfrastructure × 1
@@ -149,34 +185,46 @@ capacityGold = 50 + ports × 8 + marketAccess × 200 + transportInfrastructure �
 - 正常年份容量远高于贸易额；战争/封锁/禁运会先削减容量，再削减流量。
 - 不设商品级配额；容量是宽松上限，不是精细分配器。
 
-### 2.3 金币结算
+### 2.4 金币结算（家庭/企业对外账户）
 
-- 进口国支付 `landedPrice × quantity`；出口国收到 `unitPrice × quantity`；差额（关税 + 运输摩擦）中，关税进进口国国库，运输摩擦消失。
-- 进口国国库不足：先付可用国库，差额进债务。
-- 出口国收到的金币进国库；出口不产生额外税。
-- 现有抽象 `tradeVolume × tariff × 0.12` 关税项删除，改为实际 `tariffRevenue`。
+Critic P0-1：不能让出口价值同时进 GDP 和国库。贸易走家庭/企业对外账户：
 
-### 2.4 NX 与 GDP
+- **进口支付**：进口国企业/家庭支付 `unitPrice × quantity + tariff`。
+  - 先从家庭可支配收入（工资 + 利润的消费部分）扣；不足时从 `privateCapital` 扣；仍不足的差额进 `econ.debt`（外债），并记录 `tradeDeficit`。
+  - 进口支付**不直接扣国库**；国库只在关税项收款。
+- **出口收入**：出口国收到 `unitPrice × quantity`，进入企业利润（下一月可支配收入）或 `privateCapital`（按利润分配规则）。
+- **关税**：进口国国库收到 `tariff × quantity`；替换现有抽象 `tradeVolume × 关税 × 0.12`。
+- **运输摩擦**：只进入 `landedPrice` 的排序，不作为金币流；实际支付 = 出口价 + 关税。避免“运输摩擦销毁金币”造成的通缩漏损。
+- **国营贸易毛利**：可选，按 `ports × 0.01` 进国库；第一版先不做，避免与关税重复。
+- 新增 Economy 字段：`lastImportBill`、`lastExportRevenue`、`lastTariffRevenue`、`lastTradeBalance`（出口 − 进口，下一月进入家庭可支配收入/利润）。
+- HUD/AI 简报显示“贸易收支”，不再把出口算进国库。
+- 债务重组后，进口能力受 GDP/信用约束：违约后 12 个月内进口容量减半，且新外债上限为 GDP×0.2。
 
-- `components.nx = exportValue - importValue`。
-- `gdp = C + I + G + NX`（报告口径仍按基期价；`gdp` 修正只缩放报告，不进入工资/利润）。
+### 2.5 NX 与 GDP
+
+- `components.nx = Σ(exportValue × basePrice) − Σ(importValue × basePrice)`。
+- C/I/G 用 `effectiveSupply = production + imports − exports` 重算；进口消费品进入 C、进口投资品进入 I、进口政府用品进入 G；出口从国内供给扣除。
+- `gdp = C + I + G + NX`（报告口径按基期价；`gdp` 修正只缩放报告，不进入工资/利润）。
+- 金币/关税按当期价结算；GDP 与 NX 按基期价，二者不混用。
 - NX 可以为负；负 NX 直接压低 GDP 与税基。
 - 贸易平衡不再强制为 0；60 个月测试要求数值有限、可解释。
 
-### 2.5 资源进口
+### 2.6 资源进口
 
 - 每月记录 `resourceImports: Record<ResourceId, number>`。
-- 进口煤/铁/木材/粮食折算为“可用资源加成”：
+- 进口煤/铁/木材按**进口占总可用量的比例**折算，避免小产国进口 1 单位就吃满加成：
 
 ```
-importBonus = clamp(importedQuantity / max(1, domesticProduction) × 50, 0, 50)
+importShare = imports / max(1, domesticProduction + imports)
+importBonus = clamp(importShare × 20, 0, 15)   // 最多 +15 禀赋点
 effectiveEndowment = clamp(endowment + importBonus, 0, 100)
 ```
 
-- `resourceMultiplier` 使用 `effectiveEndowment`；战争/禁运切断进口时乘数回落。
+- `effectiveEndowment` 只是**当月派生值**，不写回 `econ.resources` 基值；战争/禁运切断进口时乘数自然回落。
+- 粮食进口不折算成农田禀赋，直接增加当月粮食有效供给（进入 §2.1 的 `effectiveSupply`）。
 - 贸易未接入前的 v5 存档不再兼容，无需旧逻辑。
 
-### 2.6 关系效应
+### 2.7 关系效应
 
 - **自动基础**：双边贸易占一国贸易的比重越高，关系每月向正向漂移，最多 `+2`。
 - **敏感商品基础张力**：进口鸦片/军械/粮食时，与出口国关系每月 `-0.5`（粮食可改为 0 或正向，实施时按 60 个月基线调）。
@@ -192,12 +240,13 @@ effectiveEndowment = clamp(endowment + importBonus, 0, 100)
 ## 3. 禁运与战争
 
 - 新增外交动作 `embargo` / `unembargo`：
-  - `embargo`：`target` + 可选 `good`（缺省为全部商品）。
-  - 立即切断对应贸易；关系 -15；写入 `embargoes`。
+  - `embargo`：`target` + 可选 `good`（缺省为全部商品）+ 可选 `months`（缺省永久）。
+  - 立即切断对应贸易；关系 -15；写入 `embargoes`，带 `until` 或在 `months` 到期时自动解除并记日志。
   - `unembargo`：解除并关系 +5。
 - 战争自动切断交战双方贸易；盟友是否参战沿用现有 `alliances`。
 - 封锁（blockade）不在本切片；留到事件树/海军切片。
 - 禁运会改变资源进口与价格，从而影响产出和民生。
+- 关系低于 -50 时贸易硬切断，但**外交/基础关系漂移仍然生效**，避免贸易归零后永远无法恢复；`unembargo`、赠礼、改善关系都能把关系拉回阈值以上。
 
 ## 4. 外交局势：鸦片危机
 
@@ -206,7 +255,7 @@ effectiveEndowment = clamp(endowment + importBonus, 0, 100)
 - 日期窗口：**1839.01–1842.12**。
 - 条件（同时满足）：
   - 大清与英国不在战争中；
-  - 大清从英国进口鸦片，且最近一月鸦片进口值 ≥ 阈值（草案 10 金）；
+  - 大清从英国进口鸦片 ≥ 2 单位/月，或英国鸦片占大清鸦片消费 ≥ 20%（用数量/份额，不用绝对金额）；
   - 中英关系 ≤ -10；
   - 该局势尚未触发过。
 - 触发后写入 `world.situations`，御前/外交页出现「局势」卡片；月度会议不因此阻塞。
@@ -228,13 +277,17 @@ type SituationProposal = {
 ```
 
 - 引擎校验效果信封（stat、数值、月数），非法条目拒绝并走确定性兜底。
+- **提案只作仲裁上下文，不直接落账**；只有 §4.3 的结果包效果生效，避免“提案效果 + 结果包效果”重复结算。
+- `stance` 固定枚举：`crackdown`（禁烟）、`compromise`（妥协）、`war`（开战）、`aid`（求援/调停）、`neutral`（观望）；叙事文本另存 `narrative`。
+- 玩家入口：新增 `v3_situation`（`submit` / `abstain`），或复用 `v3_event`；秘书在外交授权下可提交，但宣战/和约仍由玩家决定。
+- 局势开启后 **3 个月**未收齐提案，自动按已收到的提案 + 确定性兜底结算，不让会议永久挂起。
 
 ### 4.3 四个结果包
 
 | id | 标题 | 效果 | 战争 |
 | --- | --- | --- | --- |
-| `qing-crackdown` | 禁烟成功 | 大清合法性 +6、权威 +8、威望 +8；英国威望 -5、关系 -15；大清对英鸦片禁运 24 个月 | 无 |
-| `compromise` | 妥协通商 | 大清关税 -8、市场接入 +0.10、合法性 -4、激进 +5；英国收入 +5% 24 个月、关系 +10 | 无 |
+| `qing-crackdown` | 禁烟成功 | 大清合法性 +6、权威 +8、威望 +8；英国威望 -5、关系 -15；大清对英鸦片禁运 **24 个月**（`Embargo.months = 24`） | 无 |
+| `compromise` | 妥协通商 | 大清关税 -8（24 个月修正）、市场接入 +0.10（24 个月）、合法性 -4、激进 +5；英国收入 +5% 24 个月、关系 +10 | 无 |
 | `war-open-market` | 战争：开放市场 | 英国以 `openMarket` 为目标对大清宣战；双方关系 -40 | 有 |
 | `war-reparations` | 战争：赔款 | 英国以 `reparations` 为目标对大清宣战；双方关系 -40 | 有 |
 
@@ -270,12 +323,16 @@ type SituationProposal = {
 
 - `War` 记录 `goal` 与 `goalOwner`；白和/超时（60 个月）不触发目标效果。
 - 宣战工具参数新增 `goal`；AI 宣战必须给目标，缺省 `reparations`。
-- 赔款与债务复用现有财政逻辑；开放市场/势力范围用限时修正与 `sphere` 数组。
+- **赔款实际转移**：败方支付的金币进入胜方国库，不足部分进败方债务；不再“扣了败方但不给胜方”，金币守恒。
+- **目标效果替换通用效果**：现有 `endWar` 的 +12/-15 威望、+6 激进被目标效果取代；只保留战争疲劳恢复、关系下降等非目标逻辑，避免羞辱目标叠加成 +27 威望。
+- 开放市场/势力范围用限时修正与 `sphere` 数组；所有限时效果写 `months`，到期由 `tickModifiers` 处理。
 
 ## 6. AI 与秘书
 
-- AI 批量新增可返回的外交动作：`embargo`、`unembargo`、`tension`（通过 `diplomacy` action 的 `move`/`good`/`amount`/`reason`）。
-- AI 月度提示补充：贸易收支、Top-6 伙伴、鸦片依赖、关税收入、资源进口、局势状态。
+- AI 批量新增可返回的外交动作：`embargo`、`unembargo`、`tension`（通过 `diplomacy` action 的 `move`/`good`/`amount`/`months`/`reason`）。
+- **工具 schema 同步**：`v3_diplomacy` 的 move 枚举加 `embargo`/`unembargo`/`tension`，新增 `good`、`months` 参数；`engine/ai.ts` 的 `DIPLOMACY_MOVES` 与 `validParams` 同步校验。
+- `tradeTension` 只允许白名单商品（鸦片/军械/粮食），每对每月总变化夹在 ±10；AI 月度批量每月一次（`world.ai.intervalTicks = 1`，缺省也改为 1），不跨月累积额度。
+- AI 月度提示补充：贸易收支、**Top-3** 伙伴、鸦片依赖、关税收入、资源进口、局势状态；不要给每国列 6 个伙伴，避免提示词膨胀。
 - AI 兜底：债务 >GDP 时加税；被禁运时寻找替代伙伴；危机中按人格选择立场。
 - 秘书：外交授权下可提交危机提案、禁运/解除禁运、trade tension；宣战/和约仍由玩家决定；越权照旧审计。
 
@@ -288,27 +345,29 @@ type SituationProposal = {
 
 ## 8. 测试与验收
 
-1. **T1 贸易流**：短缺国从最便宜伙伴进口；金币、关税、NX、容量守恒；60 个月数值有限。
-2. **T2 敏感商品**：白名单外拒绝；`tradeTension` ±10 信封；禁运切断流量并改变资源进口。
-3. **T3 鸦片危机**：窗口/条件触发；4 个结果包均可由 mock 仲裁选中；确定性兜底；提案与结果可复现。
-4. **T4 战争目标**：四种目标宣战→停战→效果落账；白和无目标效果。
-5. **确定性**：同种子同决策 60 个月后贸易/NX/关系一致。
-6. **渲染**：经济页/外交页/御前局势在 terminal/desktop 可绘制。
+1. **T1a 数量/核算**：短缺国从最便宜伙伴进口；`effectiveSupply` 进入 C/I/G；NX 按基期价；C+I+G+NX 与 `gdpComponents` 对账；60 个月数值有限。
+2. **T1b 金币/关税/容量**：进口/出口/关税/债务金币守恒（运输摩擦不进金币流）；软容量等比例削减；资源进口不写回禀赋。
+3. **T2 敏感商品**：白名单外拒绝；`tradeTension` ±10 信封；禁运切断流量并改变资源进口；禁运到期自动解除。
+4. **T3 鸦片危机**：窗口/条件触发；4 个结果包均可由 mock 仲裁选中；提案只作上下文、不重复落账；确定性兜底；提案与结果可复现。
+5. **T4 战争目标**：四种目标宣战→停战→效果落账；赔款实际转移；目标效果不叠加通用威望/合法性；白和无目标效果。
+6. **确定性**：同种子同决策 60 个月后贸易/NX/关系一致；所有排序有 tie-break。
+7. **渲染**：经济页/外交页/御前局势在 terminal/desktop 可绘制。
 
 ## 9. 里程碑
 
 | 里程碑 | 内容 | 完成标准 |
 | --- | --- | --- |
-| T1 | 鸦片商品、区域、Top-6 双边流、金币/关税/NX、容量、资源进口 | 60 个月贸易收支平衡且可解释 |
-| T2 | 敏感商品自动漂移 + `tradeTension` + 禁运 | 鸦片类贸易使关系恶化且可审计 |
-| T3 | 局势/提案/4 结果包/仲裁 + 鸦片危机 | 一条可玩危机闭环 |
-| T4 | 四种战争目标与和约 | 宣战→胜利→条款落账；白和正确 |
+| T1a | 鸦片商品、区域、Top-6 双边数量清算、`effectiveSupply`、NX 核算 | 60 个月数量/价格/NX 可解释；C+I+G+NX 对账 |
+| T1b | 金币/关税/债务/软容量/资源进口；家庭/企业对外账户 | 金币守恒；逆差进债务；资源进口不写回禀赋 |
+| T2 | 敏感商品自动漂移 + `tradeTension` + 禁运/到期 | 鸦片类贸易使关系恶化且可审计 |
+| T4 | 四种战争目标与和约；赔款实际转移 | 宣战→胜利→条款落账；白和正确；不叠加通用效果 |
+| T3 | 局势/提案/4 结果包/仲裁 + 鸦片危机 | 一条可玩危机闭环；T3 复用已测试的 T4 |
 
 ## 10. 风险
 
 | 风险 | 缓解 |
 | --- | --- |
-| 贸易流计算量（10 国 × 11 商品 × 6 伙伴） | 每月一次；只存最近一月；Top-6 截断 |
+| 贸易流计算量（10 国 × 12 可贸易商品 × 6 伙伴） | 每月一次；只存最近一月；Top-6 截断 |
 | 金币结算导致国库/债务爆炸 | 宽松容量 + 进口按支付能力削减 + 债务重组（已实现） |
 | 鸦片逆差过强/过弱 | 先跑 60 个月基线，再调 `opiumDemandFactor` 与产出 |
 | 仲裁不可复现 | 只允许 4 个 id；记录提案与选择；确定性兜底 |
@@ -323,3 +382,20 @@ type SituationProposal = {
 - 自动关系漂移上限、敏感商品基础张力。
 - 4 个结果包的具体数值与月数。
 - 战争目标效果的数值与月数。
+
+## 12. Critic 修正记录（2026-10-20）
+
+本轮设计审查的 P0 已在本文件解决：
+
+| P0 | 解决方式 |
+| --- | --- |
+| 金币流与 GDP/收入重复计算 | 家庭/企业对外账户；国库只收关税；贸易收支只在下月进入可支配收入/利润（§2.4） |
+| 进口不进入供给、NX 口径断裂 | 两阶段结算 + `effectiveSupply` 重算 C/I/G/价格；GDP 基期价、金币当期价（§2.1/§2.5） |
+| 鸦片参数使大清净出口 | 大清 `outputFactor 0.15`、`demandFactor 0.20`；触发按数量/份额；目标净进口 2–5 单位（§1.1/§4.1） |
+| 贸易清算算法未定义 | 全局 offer/bid 匹配、Top-6 候选、确定性 tie-break、容量等比例削减（§2.2） |
+| 提案效果与结果包重复 | 提案只作仲裁上下文，只有结果包落账；`v3_situation` + 3 个月超时（§4.2） |
+| T3 前向依赖 T4 | 实施顺序改为 T1a → T1b → T2 → T4 → T3（§9） |
+
+P1 修正：资源进口按份额折算、外债上限与违约后进口压缩、运输摩擦只进定价不进金币流、赔款实际转移、目标效果替换通用效果、禁运 `months` 到期、关系 -50 后仍可外交恢复、工具/AI schema 同步、AI 提示只列 Top-3。
+
+仍可在实施时调参的项见 §11。
