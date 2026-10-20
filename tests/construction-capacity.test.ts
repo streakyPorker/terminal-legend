@@ -89,6 +89,7 @@ describe('construction capacity (ADR 0010)', () => {
     qing.econ.constructionQueue = []
     qing.econ.privateCapital = 100
     const before = qing.econ.treasury
+    const factoriesBefore = qing.econ.buildings.factories
     qing.econ.constructionQueue.push(
       project(
         { id: 'private', building: 'factories', count: 2, owner: 'private' },
@@ -101,7 +102,8 @@ describe('construction capacity (ADR 0010)', () => {
     advance(world, 1, [], makeRngForWorld(world))
     expect(qing.econ.lastConstructionRent).toBeGreaterThan(0)
     expect(qing.econ.treasury).toBeGreaterThan(before)
-    expect(qing.econ.constructionQueue.length).toBeGreaterThan(0)
+    // A fully funded private slot finishes in the month; check the stock.
+    expect(qing.econ.buildings.factories).toBeGreaterThan(factoriesBefore)
   })
 
   test('an old v7 save without the new fields is normalized on load', async () => {

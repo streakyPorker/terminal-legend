@@ -42,7 +42,8 @@ maxSlotCapacity(building) = 15 × CAPACITY_COST[building]
 ### 2. 满额 1 个月完成
 
 - 新建项目的 `monthsLeft = 1`，`monthlyCost = BUILDINGS[building].cost × count`。
-- 建造点拿满（`capacityShare = 1`）且金币付足（`goldShare = 1`）时，项目当月完成。
+- 建造点拿满（`capacityShare = 1`）且金币付足（`goldShare = 1`）时，项目当月完成；
+  **满额槽位不再掷官僚延迟**，只有部分拨款/部分点数的槽位才可能被拖延一个月。
 - 建造点或金币不足时，`progress += min(capacityShare, goldShare) × 效率`，跨月累积；
   不再用 `BUILDING_TIME` 分摊工期。
 - 私人项目同样按 1 个月满额完成；私人资本支付全额造价。

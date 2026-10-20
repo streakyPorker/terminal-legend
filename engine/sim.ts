@@ -908,7 +908,11 @@ function settleConstruction(
       project.monthsLeft -= 1
       project.progress = 0
       if (project.monthsLeft <= 0) {
-        if (rng.chance(country.bureaucracy.delayChance)) {
+        // A slot that received its full points and full payment finishes on
+        // schedule; only a partial slot can suffer the bureaucratic delay.
+        const fullyFunded =
+          capacityShare >= 1 - 1e-9 && goldShare >= 1 - 1e-9
+        if (!fullyFunded && rng.chance(country.bureaucracy.delayChance)) {
           project.monthsLeft = 1
           kept.add(project.id)
           return
