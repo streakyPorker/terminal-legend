@@ -12,6 +12,7 @@ import {
   clamp,
   clone,
   CONSTRUCTION_COST_PER_POINT,
+  CONSTRUCTION_RENT_PER_POINT,
   constructionLoad,
   constructionSchedule,
   councilInterrupt,
@@ -163,7 +164,7 @@ function statusText(world: WorldState): string {
       debtPressureLine,
       `财政收入：税入 ${fmtNumber(ledger.income.taxes)} + 关税（进+出） ${fmtNumber(ledger.income.tariffs)} + 港口 ${fmtNumber(ledger.income.ports)} + 基金收益 ${fmtNumber(ledger.income.sovereignIncome)} + 赔款收入 ${fmtNumber(ledger.income.reparations)} = ${fmtMoney(ledger.income.total)}/月（税入占 GDP ${taxShare}%）`,
       `财政支出：陆军 ${fmtNumber(ledger.expense.army)} + 海军 ${fmtNumber(ledger.expense.navy)} + 行政 ${fmtNumber(ledger.expense.administration)} + 教育 ${fmtNumber(ledger.expense.education)} + 福利 ${fmtNumber(ledger.expense.welfare)} + 债息 ${fmtNumber(ledger.expense.debtInterest)} + 市场损耗 ${fmtNumber(ledger.expense.marketLoss)} + 设施维护 ${fmtNumber(ledger.expense.upkeep)} + 赔款支出 ${fmtNumber(ledger.expense.reparations)} + 国有建设 ${fmtNumber(ledger.expense.construction)} = ${fmtMoney(ledger.expense.total)}/月`,
-      `国库净额：收入 − 支出 = ${fmtSigned(ledger.net)} 金/月；私人部门贸易逆差 ${fmtMoney(ledger.tradeGap)}（由私人资本/私人外债 ${fmtMoney(ledger.privateDebt)} 承担，不影响国库）${ledger.rentalIncome > 0 ? `；私人租用闲置建造力 +${fmtMoney(ledger.rentalIncome)}` : ''}；净资产实际变动 ${fmtSigned(ledger.net + ledger.rentalIncome)} 金/月；GDP 是产出，与国库收支不是同一本账`,
+      `国库净额：收入 − 支出 = ${fmtSigned(ledger.net)} 金/月；私人部门贸易逆差 ${fmtMoney(ledger.tradeGap)}（由私人资本/私人外债 ${fmtMoney(ledger.privateDebt)} 承担，不影响国库）${ledger.rentalIncome > 0 ? `；上月私人租用闲置建造力 +${fmtMoney(ledger.rentalIncome)}` : ''}；净资产实际变动 ${fmtSigned(ledger.net + ledger.rentalIncome)} 金/月；GDP 是产出，与国库收支不是同一本账`,
       `赔款日程：${
         schedules.length === 0
           ? '无'
@@ -189,13 +190,13 @@ function statusText(world: WorldState): string {
               )
               .join('；')
       }`,
-      `私人建造：${
+      `私人建造流转：自有 ${fmtNumber(load.privateOwn)} 点/月 + 国有流转 ${fmtNumber(load.privateRented + load.privateMarket)} 点/月（项目租用 ${fmtNumber(load.privateRented)}，市场 ${fmtNumber(load.privateMarket)}，租金 ${fmtMoney((load.privateRented + load.privateMarket) * CONSTRUCTION_RENT_PER_POINT)}）；${
         privateQueue.length === 0
-          ? '无（不占用国有建造力）'
+          ? '无在建项目'
           : privateQueue
               .map(
                 project =>
-                  `${BUILDINGS[project.building].name}×${project.count}（工程量 ${fmtNumber(projectWorkload(project) * (1 - project.progress))}/${fmtNumber(projectWorkload(project))} 点，进度 ${Math.round(project.progress * 100)}%，私人出资）`,
+                  `${BUILDINGS[project.building].name}×${project.count}（工程量 ${fmtNumber(projectWorkload(project) * (1 - project.progress))}/${fmtNumber(projectWorkload(project))} 点，进度 ${Math.round(project.progress * 100)}%，自有 ${fmtNumber(load.privateByProject[project.id]?.own ?? 0)}，租用 ${fmtNumber(load.privateByProject[project.id]?.rented ?? 0)} 点/月）`,
               )
               .join('；')
       }`,

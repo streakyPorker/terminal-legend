@@ -100,7 +100,10 @@ describe('construction capacity (ADR 0010)', () => {
     )
     // A private slot alone leaves half the points idle; it rents the rest.
     const load = constructionLoad(qing)
-    expect(load.allocated).toBe(0) // constructionLoad counts state slots only
+    expect(load.allocated).toBe(0) // state points allocated to state slots
+    expect(load.privateOwn).toBeGreaterThan(0)
+    expect(load.privateRented).toBeGreaterThan(0)
+    expect(load.privateMarket).toBeGreaterThanOrEqual(0)
     advance(world, 1, [], makeRngForWorld(world))
     expect(qing.econ.lastConstructionRent).toBeGreaterThan(0)
     expect(qing.econ.treasury).toBeGreaterThan(before)

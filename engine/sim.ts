@@ -512,6 +512,14 @@ export type ConstructionLoad = {
   remaining: number
   /** Per-project allocation, in queue order. */
   byProject: Record<string, number>
+  /** Private builders' own 50% capacity (not taken from the state). */
+  privateOwn: number
+  /** State points rented by private projects. */
+  privateRented: number
+  /** Idle state points rented to the private market after the project passes. */
+  privateMarket: number
+  /** Per private project: own share and rented state points. */
+  privateByProject: Record<string, { own: number; rented: number }>
 }
 
 /**
@@ -539,7 +547,56 @@ export function constructionLoad(country: Country): ConstructionLoad {
     allocated += take
     byProject[project.id] = take
   }
-  return { capacity, requested, allocated, remaining, byProject }
+  // Projection of the private pass: own 50%, rent idle state points, pay gold
+  // and rent from the same private pool, then rent the final idle points.
+  let privateBudget = Math.max(0, country.econ.privateCapital)
+  let privateOwn = 0
+  let privateRented = 0
+  const privateByProject: Record<string, { own: number; rented: number }> = {}
+  for (const project of country.econ.constructionQueue) {
+    if ((project.owner ?? 'state') !== 'private') continue
+    const need = capacityCost(project)
+    const workload = projectWorkload(project)
+    const slotNeed = Math.min(
+      need,
+      maxSlotCapacity(project.building),
+      workload * Math.max(0, 1 - project.progress),
+    )
+    const own = slotNeed * PRIVATE_OWN_CAPACITY_SHARE
+    const affordableRent =
+      CONSTRUCTION_RENT_PER_POINT > 0
+        ? privateBudget / CONSTRUCTION_RENT_PER_POINT
+        : Infinity
+    const rented = Math.min(
+      remaining,
+      Math.max(0, slotNeed - own),
+      affordableRent,
+    )
+    remaining -= rented
+    privateBudget -= rented * CONSTRUCTION_RENT_PER_POINT
+    const inputShare = need > 0 ? (own + rented) / need : 1
+    privateBudget -= Math.min(privateBudget, project.monthlyCost * inputShare)
+    privateOwn += own
+    privateRented += rented
+    privateByProject[project.id] = { own, rented }
+  }
+  const affordableMarket =
+    CONSTRUCTION_RENT_PER_POINT > 0
+      ? privateBudget / CONSTRUCTION_RENT_PER_POINT
+      : 0
+  const privateMarket = Math.min(remaining, Math.max(0, affordableMarket))
+  remaining -= privateMarket
+  return {
+    capacity,
+    requested,
+    allocated,
+    remaining,
+    byProject,
+    privateOwn,
+    privateRented,
+    privateMarket,
+    privateByProject,
+  }
 }
 
 type DemandBreakdown = {

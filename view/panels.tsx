@@ -16,6 +16,7 @@ import {
 import {
   capacityCost,
   CONSTRUCTION_COST_PER_POINT,
+  CONSTRUCTION_RENT_PER_POINT,
   constructionLoad,
   constructionSchedule,
   inspectEconomy,
@@ -552,6 +553,9 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
               : `${privateQueue.length} 个项目 · 私人资本 ${fmtNumber(Math.max(0, econ.privateCapital))}`
           }
         />
+        <Text dimColor>
+          流转建造力：自有 {fmtNumber(load.privateOwn)} 点/月 · 租用国有 {fmtNumber(load.privateRented)} 点/月 · 市场 {fmtNumber(load.privateMarket)} 点/月 · 租金 {fmtMoney((load.privateRented + load.privateMarket) * CONSTRUCTION_RENT_PER_POINT)}
+        </Text>
         {privateQueue.length === 0 ? (
           <Text dimColor>私人资本会自行投建，不占用国有建造点。</Text>
         ) : (
@@ -560,7 +564,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
               <Text color="magenta">{padEnd('私人', 4)}</Text>
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
-              <Text dimColor>工程量 {fmtNumber(projectWorkload(project) * (1 - project.progress))}/{fmtNumber(projectWorkload(project))} 点 · 进度 {Math.round(project.progress * 100)}% · 每月造价 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
+              <Text dimColor>工程量 {fmtNumber(projectWorkload(project) * (1 - project.progress))}/{fmtNumber(projectWorkload(project))} 点 · 进度 {Math.round(project.progress * 100)}% · 自有 {fmtNumber(load.privateByProject[project.id]?.own ?? 0)} · 租用 {fmtNumber(load.privateByProject[project.id]?.rented ?? 0)} 点/月 · 每月造价 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
             </Box>
           ))
         )}
@@ -1206,6 +1210,9 @@ function CouncilPanel(props: {
               : `${privateQueue.length} 个项目 · 私人资本 ${fmtNumber(Math.max(0, player.econ.privateCapital))}`
           }
         />
+        <Text dimColor>
+          流转建造力：自有 {fmtNumber(load.privateOwn)} 点/月 · 租用国有 {fmtNumber(load.privateRented)} 点/月 · 市场 {fmtNumber(load.privateMarket)} 点/月 · 租金 {fmtMoney((load.privateRented + load.privateMarket) * CONSTRUCTION_RENT_PER_POINT)}
+        </Text>
         {privateQueue.length === 0 ? (
           <Text dimColor>私人资本会自行投建，不占用国有建造点。</Text>
         ) : (
@@ -1214,7 +1221,7 @@ function CouncilPanel(props: {
               <Text color="magenta">{padEnd('私人', 4)}</Text>
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
-              <Text dimColor>工程量 {fmtNumber(projectWorkload(project) * (1 - project.progress))}/{fmtNumber(projectWorkload(project))} 点 · 进度 {Math.round(project.progress * 100)}% · 每月造价 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
+              <Text dimColor>工程量 {fmtNumber(projectWorkload(project) * (1 - project.progress))}/{fmtNumber(projectWorkload(project))} 点 · 进度 {Math.round(project.progress * 100)}% · 自有 {fmtNumber(load.privateByProject[project.id]?.own ?? 0)} · 租用 {fmtNumber(load.privateByProject[project.id]?.rented ?? 0)} 点/月 · 每月造价 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
             </Box>
           ))
         )}
