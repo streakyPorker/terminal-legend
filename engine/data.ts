@@ -1211,6 +1211,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         lastConstructionSpend: 0,
         lastStateConstructionSpend: 0,
         lastConstructionRent: 0,
+        lastIncomeOther: 0,
         lastConstructionDemand: {},
         lastPrivateConstructionSpend: 0,
         reparationsPaid: 0,

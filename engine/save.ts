@@ -59,6 +59,9 @@ function normalizeWorld(world: WorldState): WorldState {
     if (typeof country.econ.lastConstructionRent !== 'number') {
       country.econ.lastConstructionRent = 0
     }
+    if (typeof country.econ.lastIncomeOther !== 'number') {
+      country.econ.lastIncomeOther = 0
+    }
     if (
       typeof country.econ.lastConstructionDemand !== 'object' ||
       country.econ.lastConstructionDemand === null

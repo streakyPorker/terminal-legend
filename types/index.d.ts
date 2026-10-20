@@ -363,6 +363,13 @@ export type Economy = {
   /** Rent paid by private builders for idle state construction points. */
   lastConstructionRent: number
   /**
+   * The "other" income actually folded into last month's income total
+   * (construction rent, booked with a one-month lag). The ledger reads this
+   * instead of recomputing from `lastConstructionRent`, which by then already
+   * holds this month's rent and would distort the composition (PT-028).
+   */
+  lastIncomeOther: number
+  /**
    * Investment-goods demand from last month's actual construction spend,
    * by good. Persists after a project completes so one-month slots still
    * appear in the next month's investment block.

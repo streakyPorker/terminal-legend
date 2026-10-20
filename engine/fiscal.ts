@@ -285,12 +285,18 @@ export function fiscalLedger(
 ): FiscalLedger {
   const econ = country.econ
   const rawIncome = incomeParts(country, econ.gdp, econ.lastTariffRevenue, context)
+  // Rent is booked with a one-month lag: `lastConstructionRent` already holds
+  // this month's rent by the time the ledger reads it, so use the "other"
+  // amount that actually entered last month's income (PT-028).
+  const rawOther = Number.isFinite(econ.lastIncomeOther)
+    ? econ.lastIncomeOther
+    : rawIncome.other
   const rawIncomeNoInterest =
     rawIncome.taxes +
     rawIncome.tariffs +
     rawIncome.ports +
     rawIncome.reparations +
-    rawIncome.other
+    rawOther
   // The settlement stored the interest actually applied on the opening
   // balance; using it here keeps a month that crossed zero from displaying
   // the other side's interest.
@@ -331,7 +337,7 @@ export function fiscalLedger(
       ports: rawIncome.ports * incomeFactor,
       sovereignIncome: fundIncome,
       reparations: rawIncome.reparations * incomeFactor,
-      other: rawIncome.other * incomeFactor,
+      other: rawOther * incomeFactor,
       total: econ.income,
     },
     expense: {

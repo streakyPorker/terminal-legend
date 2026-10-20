@@ -19,6 +19,7 @@ const settle = (country: Country): void => {
   const snap = computeEconomy(country)
   country.econ.income = snap.income
   country.econ.expense = snap.expense
+  country.econ.lastIncomeOther = snap.revenue.other
   const rawIncome = sumParts(snap.revenue)
   const rawExpense = sumParts(snap.outlay)
   country.econ.lastFundIncome =
@@ -65,6 +66,29 @@ describe('fiscal ledger', () => {
     expect(ledger.privateDebt).toBe(Math.max(0, -qing.econ.privateCapital))
     expect(ledger.income.sovereignIncome).toBe(qing.econ.lastFundIncome)
     expect(ledger.expense.debtInterest).toBe(qing.econ.lastDebtInterest)
+  })
+
+  test('the rent line uses the income booked last month, not this month rent', async () => {
+    const world = newWorld(13, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    // Free state capacity and a funded private sector generate rent.
+    qing.econ.constructionQueue = []
+    qing.econ.privateCapital = 200
+    advance(world, 2, [], makeRngForWorld(world))
+    const ledger = fiscalLedger(qing)
+    expect(ledger.income.other).toBeGreaterThan(0)
+    expect(Number.isFinite(qing.econ.lastIncomeOther)).toBe(true)
+    // The composition still adds up to the stored income total.
+    const sum =
+      ledger.income.taxes +
+      ledger.income.tariffs +
+      ledger.income.ports +
+      ledger.income.sovereignIncome +
+      ledger.income.reparations +
+      ledger.income.other
+    expect(Math.abs(sum - qing.econ.income)).toBeLessThan(1e-9)
   })
 
   test('the tax take is a share of GDP, not the whole output', async () => {

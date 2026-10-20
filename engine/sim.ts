@@ -195,6 +195,9 @@ function ensureConstructionFields(country: Country): void {
   if (typeof country.econ.lastConstructionRent !== 'number') {
     country.econ.lastConstructionRent = 0
   }
+  if (typeof country.econ.lastIncomeOther !== 'number') {
+    country.econ.lastIncomeOther = 0
+  }
   if (
     typeof country.econ.lastConstructionDemand !== 'object' ||
     country.econ.lastConstructionDemand === null
@@ -897,6 +900,7 @@ export function calibrateWorld(world: WorldState): void {
     snap = computeEconomy(country, context)
     country.econ.gdp = snap.gdp
     country.econ.income = snap.income
+    country.econ.lastIncomeOther = snap.revenue.other
     country.econ.expense = snap.expense
     country.econ.goods = snap.production
     country.econ.gdpComponents = snap.components
@@ -1477,6 +1481,7 @@ function simulateCountry(
   country.econ.gdp = snap.gdp
   country.econ.gdpComponents = snap.components
   country.econ.income = snap.income
+  country.econ.lastIncomeOther = snap.revenue.other
   country.econ.expense = snap.expense
   country.econ.goods = snap.production
   country.econ.laborShare = snap.laborShare
