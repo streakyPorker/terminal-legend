@@ -1111,10 +1111,19 @@ function settleConstruction(
       const speed =
         constructionSpeed *
         (isPrivate ? 1 : 1 - debtPressure(country).constructionPenalty)
-      // Work is bounded by both the points invested and what the treasury or
-      // private pool could actually pay for.
-      const effective = workShare * Math.min(1, goldShare) * speed
-      project.progress = Math.min(1, project.progress + effective)
+      const remainingWork =
+        projectWorkload(project) * Math.max(0, 1 - project.progress)
+      if (capacityTake >= remainingWork - 1e-9 && goldShare >= 1 - 1e-9) {
+        // The slot received all the work it still needed. A speed penalty
+        // multiplies progress, which would otherwise leave an asymptotic
+        // "100% but still queued" tail for several months (PT-027).
+        project.progress = 1
+      } else {
+        // Work is bounded by both the points invested and what the treasury or
+        // private pool could actually pay for.
+        const effective = workShare * Math.min(1, goldShare) * speed
+        project.progress = Math.min(1, project.progress + effective)
+      }
     }
     if (project.progress >= 1 - 1e-9) {
       completeBuilding(country, project.building, project.count)

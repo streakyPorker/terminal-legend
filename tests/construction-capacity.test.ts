@@ -143,6 +143,32 @@ describe('construction capacity (ADR 0010)', () => {
   })
 })
 
+describe('construction completion (PT-027)', () => {
+  test('a slot given all its remaining work leaves the queue', async () => {
+    const world = newWorld(9309, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 10
+    qing.econ.constructionQueue = [
+      project(
+        {
+          id: 'tail',
+          building: 'workshops',
+          count: 1,
+          owner: 'state',
+          progress: 0.9999,
+          monthsLeft: 1,
+        },
+        world.date,
+      ),
+    ]
+    // Debt pressure adds a construction-speed penalty; it must not leave the
+    // slot at 100% but still queued (PT-027).
+    qing.econ.treasury = -qing.econ.gdp * 0.5
+    advance(world, 1, [], makeRngForWorld(world))
+    expect(qing.econ.constructionQueue.some(one => one.id === 'tail')).toBe(false)
+  })
+})
+
 describe('construction subsidy (ADR 0015)', () => {
   test('each spending level adds capacity points and costs gold', async () => {
     const world = newWorld(9308, 'QING')
