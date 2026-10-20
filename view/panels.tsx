@@ -16,6 +16,7 @@ import {
 import {
   capacityCost,
   constructionLoad,
+  constructionSchedule,
   inspectEconomy,
 } from '../engine/sim'
 import { fiscalLedger, nationalDebt } from '../engine/fiscal'
@@ -388,6 +389,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
   const snapshot = inspectEconomy(player)
   const econ = player.econ
   const load = constructionLoad(player)
+  const schedule = constructionSchedule(player)
   const stateQueue = econ.constructionQueue.filter(
     project => (project.owner ?? 'state') !== 'private',
   )
@@ -531,7 +533,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
               <Text dimColor>
-                剩余 {project.monthsLeft} 月 · 建造点 {fmtNumber(load.byProject[project.id] ?? 0)}/{fmtNumber(capacityCost(project))} · 满额造价 {project.monthlyCost.toFixed(1)}金
+                预计 {schedule[project.id]?.turns ?? '—'} 回合 · 本月 {Math.round((schedule[project.id]?.currentShare ?? 0) * 100)}% · 建造点 {fmtNumber(load.byProject[project.id] ?? 0)}/{fmtNumber(capacityCost(project))} · 满额造价 {project.monthlyCost.toFixed(1)}金
               </Text>
             </Box>
           ))
@@ -556,7 +558,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
               <Text color="magenta">{padEnd('私人', 4)}</Text>
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
-              <Text dimColor>剩余 {project.monthsLeft} 月 · 满额造价 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
+              <Text dimColor>进度 {Math.round(project.progress * 100)}% · 满额造价 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
             </Box>
           ))
         )}
@@ -1042,6 +1044,7 @@ function CouncilPanel(props: {
   const delegation = props.world.secretary.delegation
   const bureaucracy = player.bureaucracy
   const load = constructionLoad(player)
+  const schedule = constructionSchedule(player)
   const stateQueue = player.econ.constructionQueue.filter(
     project => (project.owner ?? 'state') !== 'private',
   )
@@ -1184,7 +1187,7 @@ function CouncilPanel(props: {
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
               <Text dimColor>
-                剩余 {project.monthsLeft} 月 · 建造点 {fmtNumber(load.byProject[project.id] ?? 0)}/{fmtNumber(capacityCost(project))} · 满额造价 {project.monthlyCost.toFixed(1)}金
+                预计 {schedule[project.id]?.turns ?? '—'} 回合 · 本月 {Math.round((schedule[project.id]?.currentShare ?? 0) * 100)}% · 建造点 {fmtNumber(load.byProject[project.id] ?? 0)}/{fmtNumber(capacityCost(project))} · 满额造价 {project.monthlyCost.toFixed(1)}金
               </Text>
             </Box>
           ))
@@ -1209,7 +1212,7 @@ function CouncilPanel(props: {
               <Text color="magenta">{padEnd('私人', 4)}</Text>
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
-              <Text dimColor>剩余 {project.monthsLeft} 月 · 满额造价 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
+              <Text dimColor>进度 {Math.round(project.progress * 100)}% · 满额造价 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
             </Box>
           ))
         )}

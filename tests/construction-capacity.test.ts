@@ -7,8 +7,10 @@ import {
   applyDecision,
   constructionCapacity,
   constructionLoad,
+  constructionSchedule,
   maxSlotCapacity,
   newWorld,
+  normalizeConstructionQueue,
 } from '../engine/sim'
 import type { ConstructionProject, Country, WorldState } from '../types'
 
@@ -182,5 +184,28 @@ describe('construction slot limits (ADR 0011)', () => {
     expect(kept.lastCapacity ?? 0).toBeLessThanOrEqual(cap)
     expect(kept.progress).toBeGreaterThan(0)
     expect(kept.progress).toBeLessThan(1)
+  })
+})
+
+describe('construction schedule estimate', () => {
+  test('projects completion turns in queue order instead of showing monthsLeft', async () => {
+    const world = newWorld(9306, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 2
+    qing.econ.constructionQueue = []
+    qing.econ.constructionQueue.push(
+      project(
+        { id: 'first', building: 'factories', count: 2, owner: 'state' },
+        world.date,
+      ),
+      project(
+        { id: 'second', building: 'factories', count: 4, owner: 'state' },
+        world.date,
+      ),
+    )
+    normalizeConstructionQueue(qing)
+    const schedule = constructionSchedule(qing)
+    expect(schedule.first?.turns).toBe(1)
+    expect(schedule.second?.turns ?? 0).toBeGreaterThan(1)
   })
 })

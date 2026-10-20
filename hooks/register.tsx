@@ -12,6 +12,7 @@ import {
   clamp,
   clone,
   constructionLoad,
+  constructionSchedule,
   councilInterrupt,
   newWorld,
   randomDecision,
@@ -125,6 +126,7 @@ function statusText(world: WorldState): string {
   if (player !== undefined) {
     const queue = player.econ.constructionQueue
     const load = constructionLoad(player)
+    const schedule = constructionSchedule(player)
     const stateQueue = queue.filter(
       project => (project.owner ?? 'state') !== 'private',
     )
@@ -181,7 +183,7 @@ function statusText(world: WorldState): string {
           : stateQueue
               .map(
                 project =>
-                  `${BUILDINGS[project.building].name}×${project.count}（剩余 ${project.monthsLeft} 月，进度 ${Math.round(project.progress * 100)}%，建造点 ${fmtNumber(load.byProject[project.id] ?? 0)}/${fmtNumber(capacityCost(project))}）`,
+                  `${BUILDINGS[project.building].name}×${project.count}（预计 ${schedule[project.id]?.turns ?? '—'} 回合，本月 ${Math.round((schedule[project.id]?.currentShare ?? 0) * 100)}%，建造点 ${fmtNumber(load.byProject[project.id] ?? 0)}/${fmtNumber(capacityCost(project))}）`,
               )
               .join('；')
       }`,
@@ -191,7 +193,7 @@ function statusText(world: WorldState): string {
           : privateQueue
               .map(
                 project =>
-                  `${BUILDINGS[project.building].name}×${project.count}（剩余 ${project.monthsLeft} 月，进度 ${Math.round(project.progress * 100)}%，私人出资）`,
+                  `${BUILDINGS[project.building].name}×${project.count}（进度 ${Math.round(project.progress * 100)}%，私人出资）`,
               )
               .join('；')
       }`,

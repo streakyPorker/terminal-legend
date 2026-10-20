@@ -361,6 +361,82 @@ export function constructionCapacity(country: Country): number {
   return Math.max(0, gross * clamp(inputRatio, 0, 1))
 }
 
+export type ConstructionSchedule = Record<
+  string,
+  {
+    /** Months from now until completion (1 = the upcoming settlement). */
+    turns: number
+    /** Share of this month's need the slot receives right now. */
+    currentShare: number
+    /** Points still missing from this month's slot need. */
+    remainingPoints: number
+  }
+>
+
+/**
+ * Projects the state queue forward with today's construction capacity and slot
+ * ceilings, including the extra points from workshops that are still being
+ * built. Gold is ignored (the state can deficit-finance); the estimate is a
+ * planning aid, not a promise.
+ */
+export function constructionSchedule(country: Country): ConstructionSchedule {
+  const state = country.econ.constructionQueue.filter(
+    project => (project.owner ?? 'state') !== 'private',
+  )
+  const result: ConstructionSchedule = {}
+  if (state.length === 0) return result
+  const baseCapacity = constructionCapacity(country)
+  const workshops = country.econ.buildings.workshops ?? 0
+  const perWorkshop =
+    workshops > 0 ? baseCapacity / workshops : WORKSHOP_CAPACITY_OUTPUT
+  let capacity = baseCapacity
+  const progress = new Map(state.map(project => [project.id, project.progress]))
+  const monthsLeft = new Map(state.map(project => [project.id, project.monthsLeft]))
+  const active = new Set(state.map(project => project.id))
+
+  let left = capacity
+  for (const project of state) {
+    const need = capacityCost(project)
+    const slotCap = maxSlotCapacity(project.building)
+    const take = Math.min(left, need, slotCap)
+    left -= take
+    result[project.id] = {
+      turns: 60,
+      currentShare: need > 0 ? take / need : 1,
+      remainingPoints: Math.max(0, need - take),
+    }
+  }
+
+  for (let month = 1; month <= 60 && active.size > 0; month += 1) {
+    let monthCapacity = capacity
+    for (const project of state) {
+      if (!active.has(project.id)) continue
+      const need = capacityCost(project)
+      const slotCap = maxSlotCapacity(project.building)
+      const take = Math.min(monthCapacity, need, slotCap)
+      monthCapacity -= take
+      const share = need > 0 ? take / need : 1
+      let projectProgress = (progress.get(project.id) ?? 0) + share
+      let remainingMonths = monthsLeft.get(project.id) ?? 1
+      while (projectProgress >= 1 && remainingMonths > 0) {
+        projectProgress -= 1
+        remainingMonths -= 1
+      }
+      if (remainingMonths <= 0) {
+        result[project.id]!.turns = month
+        active.delete(project.id)
+        if (project.building === 'workshops') {
+          capacity += project.count * perWorkshop
+        }
+      } else {
+        progress.set(project.id, projectProgress)
+        monthsLeft.set(project.id, remainingMonths)
+      }
+    }
+  }
+  return result
+}
+
 export type ConstructionLoad = {
   /** Points produced this month. */
   capacity: number
