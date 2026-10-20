@@ -159,6 +159,7 @@ function constructionSection(country: Country): string[] {
   const subsidy = Math.max(0, country.econ.spending.construction)
   const lines: string[] = [
     `建造力 ${n(load.capacity)} 点/月 = 营造所 ${n(country.econ.buildings.workshops, 0)} 座的产出 + 建设补贴 ${n(subsidy, 0)} 级 × ${n(CONSTRUCTION_SUBSIDY_POINTS_PER_LEVEL)} 点（补贴另花 ${n(subsidy * 0.45)} 金/月）`,
+    `私人资本 ${n(country.econ.privateCapital)} 金，按 0.3 金/点可负担约 ${n(Math.max(0, country.econ.privateCapital) / 0.3, 0)} 点租金；能否租到取决于国有闲置点`,
     `队列剩余工程量 ${n(load.requested)}，已分配 ${n(load.allocated)}，闲置 ${n(load.remaining)}；私人自有 ${n(load.privateOwn)}，租用国有 ${n(load.privateRented)}，市场 ${n(load.privateMarket)}（租金 ${n((load.privateRented + load.privateMarket) * 0.3)} 金/月）`,
   ]
   for (const project of state.slice(0, 12)) {
@@ -181,7 +182,7 @@ function militarySection(world: WorldState, country: Country): string[] {
   )
   return [
     `陆军 ${n(country.military.army)} 万，海军 ${n(country.military.navy)}，士气 ${n(country.military.morale, 0)}，战争疲劳 ${n(country.military.exhaustion, 0)}，人力 ${n(country.military.manpower)}，质量 ${pct(country.military.quality, 0)}`,
-    `军费：陆军 ${n(country.econ.spending.army)} 级 / 海军 ${n(country.econ.spending.navy)} 级（国库支出见 fiscal）`,
+    `军费：陆军 ${n(country.econ.spending.army)} 级 / 海军 ${n(country.econ.spending.navy)} 级；另有按兵力计算的基本维持费（见 fiscal），砍到 0 级也不会消失`,
     `战争：${wars.length === 0 ? '无' : wars.map(war => `${war.name}（分数 ${n(war.warScore, 0)}）`).join('，')}`,
   ]
 }
