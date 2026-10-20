@@ -91,13 +91,17 @@ describe('debt pressure is smooth, not a cliff (ADR 0007)', () => {
     }
     qing.econ.constructionQueue.push(project)
 
+    const minesBefore = qing.econ.buildings.mines
     advance(world, 1, [], makeRngForWorld(world))
 
+    // A fully funded slot now finishes in one month even from a small
+    // negative balance; otherwise it must at least have spent gold.
     const kept = qing.econ.constructionQueue.find(one => one.id === project.id)
-    expect(kept).toBeDefined()
-    if (kept === undefined) return
-    expect(kept.lastSpend).toBeGreaterThan(0)
-    expect(kept.progress).toBeGreaterThan(0)
+    expect(
+      qing.econ.buildings.mines > minesBefore ||
+        (kept?.lastSpend ?? 0) > 0 ||
+        (kept?.progress ?? 0) > 0,
+    ).toBe(true)
   })
 
   test('a threshold rule removed from the catalogue no longer leaves its buff behind', async () => {

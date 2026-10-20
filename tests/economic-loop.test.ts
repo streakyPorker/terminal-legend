@@ -305,6 +305,7 @@ describe('Round 1 regressions', () => {
     for (const country of [plain.countries.QING, queued.countries.QING]) {
       if (country === undefined) continue
       country.econ.spending.construction = 0
+      country.econ.buildings.workshops = 0
     }
     const qing = queued.countries.QING
     expect(qing).toBeDefined()

@@ -164,6 +164,7 @@ describe('M2 construction queue and economy fixes', () => {
     if (prussia === undefined) return
 
     prussia.econ.spending.construction = 0
+    prussia.econ.buildings.workshops = 0
     applyDecision(
       world,
       { countryId: 'PRU', action: 'build', params: { building: 'factories', count: 1 } },

@@ -844,7 +844,6 @@ function settleConstruction(
     country.econ.lastConstructionDemand = {}
     return 0
   }
-  let stateBudget = country.econ.spending.construction * 0.8
   let privateBudget = Math.max(0, country.econ.privateCapital)
   // State slots have first claim on the points; private slots use what is idle.
   let capacityLeft = constructionCapacity(country)
@@ -874,7 +873,6 @@ function settleConstruction(
         : isPrivate
           ? Math.min(privateBudget, goldNeed)
           : Math.min(
-              stateBudget,
               goldNeed,
               Math.max(0, country.econ.treasury - debtFloor),
             )
@@ -885,7 +883,6 @@ function settleConstruction(
         privateBudget -= spend
         privateSpent += spend
       } else {
-        stateBudget -= spend
         stateSpent += spend
         country.econ.treasury -= spend
       }
@@ -3137,19 +3134,6 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
       action: 'invest',
       params: { amount: mood },
       narrative: `${country.name}调整投资信心`,
-    }
-  }
-  // A tiny construction appropriation starves the queue; raise it first.
-  if (
-    country.econ.spending.construction < 2 &&
-    country.econ.treasury > 4 &&
-    rng.chance(0.25)
-  ) {
-    return {
-      countryId: country.id,
-      action: 'spending',
-      params: { category: 'construction', amount: country.econ.spending.construction + 1 },
-      narrative: `${country.name}增加建设拨款`,
     }
   }
   if (

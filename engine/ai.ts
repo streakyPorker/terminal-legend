@@ -87,7 +87,7 @@ function countryLine(country: Country, world: WorldState): string {
     `GDP:${n1(country.econ.gdp)}金/月(消费${n1(country.econ.gdpComponents.c)}/投资${n1(country.econ.gdpComponents.i)}/政府${n1(country.econ.gdpComponents.g)})`,
     `税:${country.econ.taxRate}%关税:${country.econ.tariff}%`,
     `支出:陆${n1(country.econ.spending.army)}/海${n1(country.econ.spending.navy)}/官${n1(country.econ.spending.bureaucracy)}/教${n1(country.econ.spending.education)}/福${n1(country.econ.spending.welfare)}/建${n1(country.econ.spending.construction)}`,
-    `在建:${country.econ.constructionQueue.length}(月付${n1(country.econ.lastStateConstructionSpend)}/预算${n1(country.econ.spending.construction * 0.8)})`,
+    `在建:${country.econ.constructionQueue.length}(上月实付${n1(country.econ.lastStateConstructionSpend)})`,
     `建筑:农场${country.econ.buildings.farms}/矿${country.econ.buildings.mines}/工厂${country.econ.buildings.factories}/铁路${country.econ.buildings.railroads}/官署${country.econ.buildings.offices}`,
     `权威:${Math.round(country.government.authority)}人力:${n1(country.military.manpower)}`,
     `私人资本:${n1(country.econ.privateCapital)}金`,

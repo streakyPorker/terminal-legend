@@ -46,6 +46,9 @@ maxSlotCapacity(building) = 15 × CAPACITY_COST[building]
 - 建造点或金币不足时，`progress += min(capacityShare, goldShare) × 效率`，跨月累积；
   不再用 `BUILDING_TIME` 分摊工期。
 - 私人项目同样按 1 个月满额完成；私人资本支付全额造价。
+- **国有项目的金币不再受建设拨款上限约束**：满额造价直接从国库扣除，允许赤字融资到
+  3× GDP 重组底线；`spending.construction` 变为历史拨款显示，不再限制进度（后续可移除或
+  改造成“现金/赤字拆分”）。私人项目仍受私人资本约束。
 - 结算时把本月实际建设支出对应的投资品需求写入 `lastConstructionDemand`；即使项目当月完工，
   下个月的 GDP 投资块仍能计入这笔需求，不再出现“1 个月项目完工后 I 归零”的缺口。
 
