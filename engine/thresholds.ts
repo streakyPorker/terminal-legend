@@ -171,20 +171,6 @@ export const THRESHOLD_RULES: ThresholdRule[] = [
     ],
   },
   {
-    id: 'bankrupt',
-    label: '财政崩溃',
-    description: '净资产为负且国债达到 50',
-    mode: 'while',
-    conditions: [
-      { stat: 'treasury', op: '<=', value: 0 },
-      { stat: 'debt', op: '>=', value: 50 },
-    ],
-    modifiers: [
-      { stat: 'income', stack: 'percent', value: -10 },
-      { stat: 'legitimacy', stack: 'flat', value: -3 },
-    ],
-  },
-  {
     id: 'industrial-takeoff',
     label: '工业起飞',
     description: '工厂达到 100 座',

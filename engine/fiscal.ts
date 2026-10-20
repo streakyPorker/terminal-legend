@@ -120,8 +120,10 @@ export type FiscalLedger = {
   }
   /** income − expense. */
   net: number
-  /** Unfinanced trade gap deducted from net assets (not an expense). */
+  /** Private-sector external gap; carried by private capital/debt, not the treasury. */
   tradeGap: number
+  /** Private external debt = max(0, −privateCapital). Not national debt. */
+  privateDebt: number
   /** Derived stocks and the rates they earned/paid this month. */
   debt: number
   fund: number
@@ -322,6 +324,7 @@ export function fiscalLedger(
     },
     net: econ.income - econ.expense,
     tradeGap: econ.lastTradeDebt ?? 0,
+    privateDebt: Math.max(0, -econ.privateCapital),
     debt: nationalDebt(country),
     fund: sovereignFund(country),
     debtRate: debtRate(country, context),

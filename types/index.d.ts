@@ -34,11 +34,13 @@ export type TradeFlow = {
   quantity: number
   /** The exporter's domestic price this month. */
   unitPrice: number
-  /** The importer's landed price (unitPrice plus tariff, transport, risk). */
+  /** The importer's landed price (export duty + import duty + transport + risk). */
   landedPrice: number
-  /** Tariff the importing state collected: value × tariff/100 (plan 0004 §2.4). */
+  /** Import duty the importing state collected (border value × tariff). */
   tariffPaid: number
-  /** quantity × unitPrice, the exporter's book value. */
+  /** Export duty the exporting state collected (domestic value × tariff). */
+  exportDuty: number
+  /** quantity × unitPrice, the exporter's domestic book value. */
   value: number
 }
 

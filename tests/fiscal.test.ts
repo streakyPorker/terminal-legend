@@ -60,6 +60,7 @@ describe('fiscal ledger', () => {
     expect(ledger.expense.total).toBe(qing.econ.expense)
     expect(ledger.net).toBe(qing.econ.income - qing.econ.expense)
     expect(ledger.tradeGap).toBe(qing.econ.lastTradeDebt)
+    expect(ledger.privateDebt).toBe(Math.max(0, -qing.econ.privateCapital))
     expect(ledger.income.sovereignIncome).toBe(qing.econ.lastFundIncome)
     expect(ledger.expense.debtInterest).toBe(qing.econ.lastDebtInterest)
   })

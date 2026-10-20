@@ -355,12 +355,10 @@ describe('Round 1 regressions', () => {
     const before = fra.econ.treasury
     advance(world, 1, [], makeRngForWorld(world))
     const delta = fra.econ.treasury - before
-    // The treasury also absorbs the unfinanced trade gap directly, so it is
-    // not part of expense; the cash identity is income − expense − gap.
+    // The private sector carries its own trade gap (ADR 0008); the treasury
+    // cash identity is simply income − expense.
     expect(
-      Math.abs(
-        fra.econ.income - fra.econ.expense - fra.econ.lastTradeDebt - delta,
-      ),
+      Math.abs(fra.econ.income - fra.econ.expense - delta),
     ).toBeLessThan(0.05)
   })
 

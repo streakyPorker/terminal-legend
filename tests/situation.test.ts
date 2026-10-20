@@ -46,6 +46,7 @@ const opiumFlow = (from: string, to: string, quantity: number): TradeFlow => ({
   unitPrice: 2.5,
   landedPrice: 3,
   tariffPaid: 0,
+  exportDuty: 0,
   value: quantity * 2.5,
 })
 

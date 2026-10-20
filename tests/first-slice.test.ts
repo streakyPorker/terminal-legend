@@ -18,6 +18,7 @@ import {
   completeBuilding,
   computeEconomy,
   councilInterrupt,
+  FREE_TRADE_TARIFF_FLOOR,
   inspectEconomy,
   newWorld,
 } from '../engine/sim'
@@ -251,6 +252,32 @@ describe('M2 construction queue and economy fixes', () => {
     expect(passed.ok).toBe(true)
     expect(aus.government.authority).toBeLessThan(100)
     expect(aus.government.authority).toBeGreaterThanOrEqual(85)
+  })
+
+  test('free trade lowers the tariff but keeps its 5% floor', async () => {
+    const world = newWorld(10, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+
+    qing.econ.tariff = 12
+    expect(
+      applyDecision(
+        world,
+        { countryId: 'QING', action: 'law', params: { name: '自由贸易' } },
+        makeRngForWorld(world),
+      ).ok,
+    ).toBe(true)
+    expect(qing.econ.tariff).toBe(FREE_TRADE_TARIFF_FLOOR)
+
+    qing.government.authority = 100
+    qing.econ.tariff = 4
+    applyDecision(
+      world,
+      { countryId: 'QING', action: 'law', params: { name: '自由贸易' } },
+      makeRngForWorld(world),
+    )
+    expect(qing.econ.tariff).toBe(FREE_TRADE_TARIFF_FLOOR)
   })
 
   test('infamy drags relations down', async () => {

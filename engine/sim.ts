@@ -1024,25 +1024,29 @@ function simulateCountry(
   }
 
   // Gold settlement (plan §2.4): the private sector's external net accrues to
-  // or is drawn from private capital; the unfinanced shortfall now draws down
-  // the state's net assets directly (negative = national debt).
+  // or is drawn from private capital. An unfinanced import bill becomes
+  // *private* external debt (negative private capital), never state debt: the
+  // treasury only collects tariffs and never pays the private import bill
+  // (ADR 0008). A private debt stock is repaid first by later export surpluses.
   country.econ.lastTradeDebt = 0
   if (incoming !== undefined) {
     const settlement = incoming.settlement
     if (settlement.externalNet >= 0) {
       country.econ.privateCapital += settlement.externalNet
     } else {
-      country.econ.privateCapital -= settlement.drawnFromCapital
-      country.econ.treasury -= settlement.debtIncrease
-      country.econ.lastTradeDebt = settlement.debtIncrease
-      if (settlement.dropped > 0) {
-        log.push({
-          date: { ...world.date },
-          kind: 'economy',
-          countryId: country.id,
-          text: `[${country.flag}] ${country.name}重组期内新增外债超上限，${settlement.dropped.toFixed(1)} 金未能融资`,
-        })
-      }
+      // The private sector bears what it can draw plus the private external
+      // debt it takes on; `dropped` stays forgiven beyond the restructuring cap.
+      country.econ.privateCapital -=
+        settlement.drawnFromCapital + settlement.debtIncrease
+    }
+    country.econ.lastTradeDebt = settlement.debtIncrease
+    if (settlement.dropped > 0) {
+      log.push({
+        date: { ...world.date },
+        kind: 'economy',
+        countryId: country.id,
+        text: `[${country.flag}] ${country.name}私人外债超过重组上限，${settlement.dropped.toFixed(1)} 金未能融资`,
+      })
     }
   }
 
@@ -2207,6 +2211,13 @@ function relationLine(country: Country, other: Country): string {
   return `[${other.flag}]${other.name} ${value >= 0 ? '+' : ''}${value}`
 }
 
+/**
+ * Free trade lowers the tariff but never below this floor: a state still needs
+ * a customs administration, and a 0% default makes the whole tax look absent
+ * (playtest feedback, ADR 0009). The rate applies to both imports and exports.
+ */
+export const FREE_TRADE_TARIFF_FLOOR = 5
+
 /** Political capital each law consumes (plan §7.6). */
 const LAW_AUTHORITY_COST: Record<string, number> = {
   教育改革: 8,
@@ -2378,7 +2389,11 @@ export function applyDecision(
           return `${tag} 推行福利改革，民怨稍减`
         },
         自由贸易: () => {
-          country.econ.tariff = clamp(country.econ.tariff - 8, 0, 60)
+          country.econ.tariff = clamp(
+            country.econ.tariff - 8,
+            FREE_TRADE_TARIFF_FLOOR,
+            60,
+          )
           country.econ.marketAccess = clamp(country.econ.marketAccess + 0.08, 0, 1)
           addModifier(country, {
             id: 'law:自由贸易:income',
@@ -2388,7 +2403,7 @@ export function applyDecision(
             value: 8,
             source: 'law:自由贸易',
           })
-          return `${tag} 推行自由贸易，市场接入提高`
+          return `${tag} 推行自由贸易，关税降至 ${country.econ.tariff.toFixed(0)}%（下限 ${FREE_TRADE_TARIFF_FLOOR}%），市场接入提高`
         },
         保护关税: () => {
           country.econ.tariff = clamp(country.econ.tariff + 8, 0, 60)

@@ -205,7 +205,7 @@ function Overview(props: { ui: UiKit; world: WorldState; width: number }): any {
           <StatLine ui={props.ui} label="GDP" value={`${fmtGdp(econ.gdp)} ${sparkline(econ.history.gdp, 12)} ${trend(econ.history.gdp)}`} />
           <StatLine ui={props.ui} label="GDP构成" value={`${fmtNumber(econ.gdpComponents.c)} 消费 + ${fmtNumber(econ.gdpComponents.i)} 投资 + ${fmtNumber(econ.gdpComponents.g)} 政府（金/月）`} />
           <StatLine ui={props.ui} label="私人资本" value={`${fmtNumber(econ.privateCapital)} 金 · 投资信心 ${econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(econ.investmentConfidence)} 点`} />
-          <StatLine ui={props.ui} label="税率" value={`${econ.taxRate}%  关税 ${econ.tariff}%`} />
+          <StatLine ui={props.ui} label="税率" value={`${econ.taxRate}%  进出口关税 ${econ.tariff}%`} />
           <StatLine ui={props.ui} label="物价" value={GOOD_IDS.slice(0, 5).map(id => `${GOODS[id].name}${econ.prices[id].toFixed(1)}`).join(' ')} />
           <Meter ui={props.ui} label="生活水平" value={player.pops.sol} max={100} color="cyan" />
           <Meter ui={props.ui} label="合法性" value={player.government.legitimacy} max={100} color={legitimacyColor(player.government.legitimacy)} />
@@ -481,7 +481,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
           鸦片依存 进口 {fmtNumber(opiumImports)} / 需求 {fmtNumber(opiumDemand)}（{opiumDependency}）
         </Text>
         <Text dimColor>
-          关税收入 {fmtMoney(econ.lastTariffRevenue)} · 贸易容量 {fmtNumber(player.trade.capacity)} · 贸易收支 {fmtSigned(econ.lastTradeBalance)}金
+          关税收入（进+出） {fmtMoney(econ.lastTariffRevenue)} · 贸易容量 {fmtNumber(player.trade.capacity)} · 贸易收支 {fmtSigned(econ.lastTradeBalance)}金
         </Text>
         <Text dimColor>{resourceImportLine}</Text>
       </Box>
@@ -538,7 +538,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
         <Text dimColor>财政收入</Text>
         {([
           ['税入', ledger.income.taxes],
-          ['关税', ledger.income.tariffs],
+          ['关税（进+出）', ledger.income.tariffs],
           ['港口', ledger.income.ports],
           ['基金收益', ledger.income.sovereignIncome],
           ['赔款收入', ledger.income.reparations],
@@ -582,9 +582,9 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
           <Text dimColor>　国债月息 {fmtPercent(ledger.debtRate, 2)} · 基金月息 {fmtPercent(ledger.fundRate, 2)}</Text>
         </Text>
         <Text dimColor>
-          贸易缺口 {fmtMoney(ledger.tradeGap)}（未融资部分直接扣减净资产，不计入支出）；净资产实际变动 {fmtSigned(ledger.net - ledger.tradeGap)} 金/月
+          私人部门贸易逆差 {fmtMoney(ledger.tradeGap)}（由私人资本/私人外债 {fmtMoney(ledger.privateDebt)} 承担，不影响国库）；净资产实际变动 {fmtSigned(ledger.net)} 金/月
         </Text>
-        <Text dimColor>GDP {fmtGdp(ledger.gdp)} 是产出（基期价），不是国库收支；国库只经手税入、关税、港口、基金收益与赔款。</Text>
+        <Text dimColor>GDP {fmtGdp(ledger.gdp)} 是产出（基期价），不是国库收支；国库只经手税入、关税（进+出）、港口、基金收益与赔款。</Text>
         {(props.world.indemnities ?? [])
           .filter(
             schedule =>

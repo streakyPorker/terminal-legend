@@ -9,6 +9,7 @@ import {
   deriveResourceImports,
   effectiveResources,
   importCapacity,
+  landedPrice,
   MAX_MONTHLY_DEFICIT_SHARE,
   paymentCapacity,
   RELATION_CUTOFF,
@@ -57,6 +58,8 @@ const flow = (input: {
   quantity: number
   unitPrice: number
   landedPrice?: number
+  tariffPaid?: number
+  exportDuty?: number
 }): TradeFlow => ({
   good: input.good,
   from: input.from,
@@ -64,7 +67,8 @@ const flow = (input: {
   quantity: input.quantity,
   unitPrice: input.unitPrice,
   landedPrice: input.landedPrice ?? input.unitPrice,
-  tariffPaid: 0,
+  tariffPaid: input.tariffPaid ?? 0,
+  exportDuty: input.exportDuty ?? 0,
   value: input.quantity * input.unitPrice,
 })
 
@@ -81,21 +85,27 @@ describe('T1b gold settlement (plan §2.4)', () => {
     advance(world, 12, [], makeRngForWorld(world))
     let globalImports = 0
     let globalExports = 0
+    let globalExportDuty = 0
     let globalTariffs = 0
     let flowTariffs = 0
     for (const country of Object.values(world.countries)) {
       const importBill = country.trade.imports.reduce(
-        (sum, one) => sum + one.quantity * one.unitPrice,
+        (sum, one) => sum + one.value + one.exportDuty,
+        0,
+      )
+      const importDuty = country.trade.imports.reduce(
+        (sum, one) => sum + one.tariffPaid,
         0,
       )
       const exportRevenue = country.trade.exports.reduce(
-        (sum, one) => sum + one.quantity * one.unitPrice,
+        (sum, one) => sum + one.value,
         0,
       )
-      const tariffRevenue = country.trade.imports.reduce(
-        (sum, one) => sum + one.quantity * one.unitPrice * (country.econ.tariff / 100),
+      const exportDuty = country.trade.exports.reduce(
+        (sum, one) => sum + one.exportDuty,
         0,
       )
+      const tariffRevenue = importDuty + exportDuty
       expect(Math.abs(country.econ.lastImportBill - importBill)).toBeLessThan(1e-6)
       expect(Math.abs(country.econ.lastExportRevenue - exportRevenue)).toBeLessThan(1e-6)
       expect(Math.abs(country.econ.lastTariffRevenue - tariffRevenue)).toBeLessThan(1e-6)
@@ -103,15 +113,14 @@ describe('T1b gold settlement (plan §2.4)', () => {
       expect(
         Math.abs(country.econ.lastTradeBalance - (exportRevenue - importBill)),
       ).toBeLessThan(1e-6)
-      for (const one of country.trade.imports) {
-        flowTariffs += one.quantity * one.unitPrice * (country.econ.tariff / 100)
-      }
+      flowTariffs += tariffRevenue
       globalImports += importBill
       globalExports += exportRevenue
+      globalExportDuty += exportDuty
       globalTariffs += tariffRevenue
     }
-    // Σ importBill === Σ exportRevenue, and tariff equals the per-flow formula.
-    expect(Math.abs(globalImports - globalExports)).toBeLessThan(1e-6)
+    // The importer pays the exporter's export duty on top of the domestic value.
+    expect(Math.abs(globalImports - (globalExports + globalExportDuty))).toBeLessThan(1e-6)
     expect(Math.abs(globalTariffs - flowTariffs)).toBeLessThan(1e-6)
   })
 
@@ -123,15 +132,25 @@ describe('T1b gold settlement (plan §2.4)', () => {
     qing.econ.gdp = 1000
     qing.econ.restructuredUntilTick = 0
     const flows = [
-      flow({ good: 'coal', from: 'GBR', to: 'QING', quantity: 10, unitPrice: 5, landedPrice: 8 }),
+      flow({
+        good: 'coal',
+        from: 'GBR',
+        to: 'QING',
+        quantity: 10,
+        unitPrice: 5,
+        landedPrice: 8,
+        exportDuty: 2.5,
+      }),
       flow({ good: 'grain', from: 'QING', to: 'FRA', quantity: 4, unitPrice: 5 }),
     ]
     const settlement = settleTrade(qing, flows, 0)
-    expect(Math.abs(settlement.importBill - 50)).toBeLessThan(1e-6)
+    expect(Math.abs(settlement.importBill - 52.5)).toBeLessThan(1e-6)
     expect(Math.abs(settlement.exportRevenue - 20)).toBeLessThan(1e-6)
-    expect(Math.abs(settlement.tariffRevenue - 5)).toBeLessThan(1e-6)
+    expect(Math.abs(settlement.importDuty - 5.25)).toBeLessThan(1e-6)
+    expect(Math.abs(settlement.exportDuty - 2)).toBeLessThan(1e-6)
+    expect(Math.abs(settlement.tariffRevenue - 7.25)).toBeLessThan(1e-6)
     expect(settlement.drawnFromCapital).toBe(0)
-    expect(Math.abs(settlement.debtIncrease - 35)).toBeLessThan(1e-6)
+    expect(Math.abs(settlement.debtIncrease - 37.75)).toBeLessThan(1e-6)
     // The landed (8) price is a ranking artefact: no gold account reads it.
     expect(Math.abs(settlement.importBill - 80)).toBeGreaterThan(1)
     const identity =
@@ -139,7 +158,7 @@ describe('T1b gold settlement (plan §2.4)', () => {
       settlement.debtIncrease +
       settlement.exportRevenue
     expect(
-      Math.abs(identity - (settlement.importBill + settlement.tariffRevenue)),
+      Math.abs(identity - (settlement.importBill + settlement.importDuty)),
     ).toBeLessThan(1e-6)
   })
 
@@ -151,11 +170,18 @@ describe('T1b gold settlement (plan §2.4)', () => {
     qing.econ.gdp = 5000
     qing.econ.restructuredUntilTick = 0
     const flows = [
-      flow({ good: 'opium', from: 'GBR', to: 'QING', quantity: 20, unitPrice: 4 }),
+      flow({
+        good: 'opium',
+        from: 'GBR',
+        to: 'QING',
+        quantity: 20,
+        unitPrice: 4,
+        exportDuty: 4,
+      }),
     ]
     const settlement = settleTrade(qing, flows, 0)
     expect(Math.abs(settlement.drawnFromCapital - 12)).toBeLessThan(1e-6)
-    expect(Math.abs(settlement.debtIncrease - 68)).toBeLessThan(1e-6)
+    expect(Math.abs(settlement.debtIncrease - 72)).toBeLessThan(1e-6)
   })
 
   test('tariff revenue is the formula and reaches the treasury through income', async () => {
@@ -166,10 +192,15 @@ describe('T1b gold settlement (plan §2.4)', () => {
     expect(Math.abs(lifted - base - 7.5)).toBeLessThan(1e-6)
     advance(world, 6, [], makeRngForWorld(world))
     for (const country of Object.values(world.countries)) {
-      const formula = country.trade.imports.reduce(
-        (sum, one) => sum + one.quantity * one.unitPrice * (country.econ.tariff / 100),
+      const importDuty = country.trade.imports.reduce(
+        (sum, one) => sum + one.tariffPaid,
         0,
       )
+      const exportDuty = country.trade.exports.reduce(
+        (sum, one) => sum + one.exportDuty,
+        0,
+      )
+      const formula = importDuty + exportDuty
       expect(Math.abs(country.econ.lastTariffRevenue - formula)).toBeLessThan(1e-6)
       expect(Math.abs(country.trade.tariffRevenue - formula)).toBeLessThan(1e-6)
       expect(Number.isFinite(country.econ.treasury)).toBe(true)
@@ -191,7 +222,10 @@ describe('T1b soft import capacity (plan §2.3)', () => {
 
   test('a binding capacity scales every import flow by the same factor', async () => {
     const world = newWorld(7006, 'QING')
-    for (const country of Object.values(world.countries)) country.econ.prices.coal = 1
+    for (const country of Object.values(world.countries)) {
+      country.econ.prices.coal = 1
+      country.econ.tariff = 0
+    }
     const markets = marketsFor(world, id => ({
       production: id === 'QING' ? {} : { coal: 100 },
       demand: id === 'QING' ? { coal: 1000 } : {},
@@ -233,11 +267,18 @@ describe('T1b soft import capacity (plan §2.3)', () => {
     qing.econ.tariff = 0
     qing.econ.gdp = 1000
     const flows = [
-      flow({ good: 'opium', from: 'GBR', to: 'QING', quantity: 100, unitPrice: 10 }),
+      flow({
+        good: 'opium',
+        from: 'GBR',
+        to: 'QING',
+        quantity: 100,
+        unitPrice: 10,
+        exportDuty: 50,
+      }),
     ]
     const settlement = settleTrade(qing, flows, 5)
     expect(Math.abs(settlement.debtIncrease - 200)).toBeLessThan(1e-6)
-    expect(Math.abs(settlement.dropped - 800)).toBeLessThan(1e-6)
+    expect(Math.abs(settlement.dropped - 850)).toBeLessThan(1e-6)
     const withDropped =
       settlement.drawnFromCapital +
       settlement.debtIncrease +
@@ -277,7 +318,10 @@ describe('T1b payment capacity (plan §10)', () => {
   test('a binding payment cut scales every import flow by the same factor', async () => {
     const world = newWorld(7014, 'QING')
     const qing = countryOf(world, 'QING')
-    for (const country of Object.values(world.countries)) country.econ.prices.coal = 1
+    for (const country of Object.values(world.countries)) {
+      country.econ.prices.coal = 1
+      country.econ.tariff = 0
+    }
     const markets = marketsFor(world, id => ({
       production: id === 'QING' ? {} : { coal: 100 },
       demand: id === 'QING' ? { coal: 1000 } : {},
@@ -311,7 +355,10 @@ describe('T1b payment capacity (plan §10)', () => {
   test('gold conservation is exact after the soft and the payment cut', async () => {
     const world = newWorld(7015, 'QING')
     const qing = countryOf(world, 'QING')
-    for (const country of Object.values(world.countries)) country.econ.prices.coal = 1
+    for (const country of Object.values(world.countries)) {
+      country.econ.prices.coal = 1
+      country.econ.tariff = 0
+    }
     const markets = marketsFor(world, id => ({
       production: id === 'QING' ? {} : { coal: 100 },
       demand: id === 'QING' ? { coal: 1000 } : {},
@@ -358,22 +405,21 @@ describe('T1b payment capacity (plan §10)', () => {
     }
   })
 
-  test('84 months with the payment cut keep QING national debt bounded', async () => {
+  test('84 months with the payment cut keep QING private external debt bounded', async () => {
     const world = newWorld(9100, 'QING')
     const qing = countryOf(world, 'QING')
-    let peak = nationalDebt(qing)
+    const privateDebt = (): number => Math.max(0, -qing.econ.privateCapital)
+    let peak = privateDebt()
     for (let month = 1; month <= 84; month += 1) {
       advance(world, 1, [], makeRngForWorld(world))
-      peak = Math.max(peak, nationalDebt(qing))
+      peak = Math.max(peak, privateDebt())
     }
-    // Without the cut the same seed climbed past 1200 and kept rising
-    // (measured baseline); with it the trade gap stops feeding the debt.
-    // ADR 0007 deliberately lets a small negative balance accumulate while a
-    // smooth debt-pressure debuff slows the economy; the hard bound is the
-    // 3× GDP restructuring floor, not an arbitrary 1000.
+    // The import gap now lands on private capital, not the state (ADR 0008).
+    // The payment cut stops it from running away; the 3× GDP backstop remains
+    // the outer bound while the private stock can still drift.
     const debtCap = qing.econ.gdp * 3
     expect(peak).toBeLessThan(debtCap)
-    expect(nationalDebt(qing)).toBeLessThan(debtCap)
+    expect(privateDebt()).toBeLessThan(debtCap)
   })
 
   test('the calibrated opium gates hold for every month of the 1839-1842 window', async () => {
@@ -500,7 +546,15 @@ describe('T1b baseline and determinism', () => {
     for (const country of Object.values(world.countries)) {
       for (const one of country.trade.imports) {
         expect(Number.isFinite(one.tariffPaid)).toBe(true)
-        expect(Math.abs(one.tariffPaid - one.quantity * one.unitPrice * (country.econ.tariff / 100))).toBeLessThan(1e-6)
+        expect(Number.isFinite(one.exportDuty)).toBe(true)
+        // Import duty is charged on the border value that already includes the
+        // exporter's export duty.
+        expect(
+          Math.abs(
+            one.tariffPaid -
+              (one.value + one.exportDuty) * (country.econ.tariff / 100),
+          ),
+        ).toBeLessThan(1e-6)
         expect(Math.abs(one.value - one.quantity * one.unitPrice)).toBeLessThan(1e-6)
       }
       // NX is a base-price book value, not a gold account.
@@ -510,5 +564,18 @@ describe('T1b baseline and determinism', () => {
       )
       expect(Number.isFinite(base)).toBe(true)
     }
+  })
+
+  test('landed price includes both the exporter export duty and the importer import duty', async () => {
+    const world = newWorld(7016, 'QING')
+    const qing = countryOf(world, 'QING')
+    const gbr = countryOf(world, 'GBR')
+    gbr.econ.tariff = 0
+    qing.econ.tariff = 0
+    const base = landedPrice(gbr, qing, 'coal')
+    gbr.econ.tariff = 10
+    qing.econ.tariff = 20
+    const withDuties = landedPrice(gbr, qing, 'coal')
+    expect(Math.abs(withDuties - base * 1.1 * 1.2)).toBeLessThan(1e-9)
   })
 })

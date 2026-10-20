@@ -70,8 +70,9 @@ export type TradeBlocker = (importerId: string, exporterId: string, good: GoodId
 
 /**
  * Landed cost of one good delivered from `from` to `to` (plan §1.2): the
- * exporter's domestic price marked up by the importer's tariff, region
- * transport cost, market access, transport infrastructure and relation risk.
+ * exporter's domestic price marked up by its export duty, then the importer's
+ * import duty, region transport cost, market access, transport infrastructure
+ * and relation risk. Both duties are part of the real price the importer pays.
  */
 export function landedPrice(from: Country, to: Country, good: GoodId): number {
   const regionCost = REGION_COST[from.region][to.region]
@@ -80,6 +81,7 @@ export function landedPrice(from: Country, to: Country, good: GoodId): number {
   const relationRisk = 1 + Math.max(0, -relationOf(to, from.id)) / 200
   return (
     from.econ.prices[good] *
+    (1 + from.econ.tariff / 100) *
     (1 + to.econ.tariff / 100) *
     regionCost *
     accessFactor *
@@ -172,6 +174,7 @@ function clearGood(
       unitPrice,
       landedPrice: pair.landed,
       tariffPaid: 0,
+      exportDuty: 0,
       value: quantity * unitPrice,
     })
   }
@@ -210,9 +213,14 @@ function deriveBalance(countries: Country[], flows: TradeFlow[]): TradeBalance {
   for (const flow of flows) {
     const value = flow.quantity * flow.unitPrice
     const base = GOODS[flow.good].basePrice
-    const tariff = index[flow.to]?.econ.tariff ?? 0
+    // Export duty is charged on the exporter's domestic value; import duty is
+    // then charged on the border value that already includes the export duty.
+    const exportTariff = index[flow.from]?.econ.tariff ?? 0
+    const importTariff = index[flow.to]?.econ.tariff ?? 0
+    const borderValue = value * (1 + exportTariff / 100)
     flow.value = value
-    flow.tariffPaid = value * (tariff / 100)
+    flow.exportDuty = value * (exportTariff / 100)
+    flow.tariffPaid = borderValue * (importTariff / 100)
     const imported = balance.importQty[flow.to]
     const exported = balance.exportQty[flow.from]
     if (imported !== undefined) imported[flow.good] += flow.quantity
@@ -279,7 +287,10 @@ export function applyCapacity(
     const flows = byImporter.get(country.id)
     if (flows === undefined) continue
     let bill = 0
-    for (const flow of flows) bill += flow.quantity * flow.unitPrice
+    for (const flow of flows) {
+      // The real private payment is the domestic value plus both duties.
+      bill += flow.value + flow.exportDuty + flow.tariffPaid
+    }
     if (bill > capacity && bill > 0) {
       const factor = capacity / bill
       for (const flow of flows) flow.quantity *= factor
@@ -340,7 +351,10 @@ export function applyPaymentCapacity(
     if (flows === undefined) continue
     const capacity = capacities[country.id] ?? 0
     let bill = 0
-    for (const flow of flows) bill += flow.quantity * flow.unitPrice
+    for (const flow of flows) {
+      // The real private payment is the domestic value plus both duties.
+      bill += flow.value + flow.exportDuty + flow.tariffPaid
+    }
     if (bill > capacity && bill > 0) {
       const factor = capacity / bill
       for (const flow of flows) flow.quantity *= factor
@@ -352,26 +366,36 @@ export function applyPaymentCapacity(
 
 /** Per-country gold settlement derived from the final flow list (plan §2.4). */
 export type TradeSettlement = {
+  /** Border value the importer pays: domestic value + the exporter's duty. */
   importBill: number
+  /** Domestic value the exporter's private sector receives. */
   exportRevenue: number
+  /** Import duty collected by the importing state. */
+  importDuty: number
+  /** Export duty collected by the exporting state. */
+  exportDuty: number
+  /** Total tariff income: importDuty + exportDuty. */
   tariffRevenue: number
   /** exportRevenue − importBill; the reported trade balance. */
   tradeBalance: number
-  /** The private sector's external net: exportRevenue − importBill − tariffRevenue. */
+  /** The private sector's external net: exportRevenue − importBill − importDuty. */
   externalNet: number
   drawnFromCapital: number
+  /** Increase in *private* external debt (never state debt; ADR 0008). */
   debtIncrease: number
-  /** Post-default excess beyond the gdp×0.2 new-debt cap, dropped from debt. */
+  /** Post-default excess beyond the gdp×0.2 new-debt cap, forgiven. */
   dropped: number
 }
 
 /**
  * Settles one country's gold from the final flows (plan §2.4). The importer's
- * private sector pays `qty×unitPrice` to the exporter plus `qty×unitPrice×tariff`
- * to its own treasury; transport friction inside `landedPrice` never appears
- * here. A shortfall draws on `privateCapital` first, then becomes external debt,
- * capped at `gdp×0.2` inside the post-default window. Pure: the caller applies
- * the returned amounts.
+ * private sector pays the border value (domestic value + the exporter's export
+ * duty) plus the importer's own import duty; the exporter's private sector
+ * receives the domestic value and its state receives the export duty. Transport
+ * friction inside `landedPrice` never appears here. A shortfall draws on
+ * `privateCapital` first, then becomes *private* external debt (negative private
+ * capital), capped at `gdp×0.2` inside the post-default window. It never touches
+ * the state treasury (ADR 0008). Pure: the caller applies the returned amounts.
  */
 export function settleTrade(
   country: Country,
@@ -380,17 +404,23 @@ export function settleTrade(
 ): TradeSettlement {
   let importBill = 0
   let exportRevenue = 0
-  let tariffRevenue = 0
+  let importDuty = 0
+  let exportDuty = 0
   for (const flow of flows) {
     const value = flow.quantity * flow.unitPrice
     if (flow.to === country.id) {
-      importBill += value
-      tariffRevenue += value * (country.econ.tariff / 100)
+      const borderValue = value + flow.exportDuty
+      importBill += borderValue
+      importDuty += borderValue * (country.econ.tariff / 100)
     }
-    if (flow.from === country.id) exportRevenue += value
+    if (flow.from === country.id) {
+      exportRevenue += value
+      exportDuty += value * (country.econ.tariff / 100)
+    }
   }
+  const tariffRevenue = importDuty + exportDuty
   const tradeBalance = exportRevenue - importBill
-  const externalNet = exportRevenue - importBill - tariffRevenue
+  const externalNet = exportRevenue - importBill - importDuty
   let drawnFromCapital = 0
   let debtIncrease = 0
   let dropped = 0
@@ -410,6 +440,8 @@ export function settleTrade(
   return {
     importBill,
     exportRevenue,
+    importDuty,
+    exportDuty,
     tariffRevenue,
     tradeBalance,
     externalNet,

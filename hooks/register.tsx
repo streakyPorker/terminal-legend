@@ -148,9 +148,9 @@ function statusText(world: WorldState): string {
       `GDP构成：消费 ${fmtNumber(player.econ.gdpComponents.c)} / 投资 ${fmtNumber(player.econ.gdpComponents.i)} / 政府 ${fmtNumber(player.econ.gdpComponents.g)}；工资 ${fmtNumber(player.econ.wages)}（劳动份额 ${Math.round(player.econ.laborShare * 100)}%）/ 利润 ${fmtNumber(player.econ.profits)}`,
       `国库净资产：${fmtMoney(player.econ.treasury)}（${stock}）`,
       debtPressureLine,
-      `财政收入：税入 ${fmtNumber(ledger.income.taxes)} + 关税 ${fmtNumber(ledger.income.tariffs)} + 港口 ${fmtNumber(ledger.income.ports)} + 基金收益 ${fmtNumber(ledger.income.sovereignIncome)} + 赔款收入 ${fmtNumber(ledger.income.reparations)} = ${fmtMoney(ledger.income.total)}/月（税入占 GDP ${taxShare}%）`,
+      `财政收入：税入 ${fmtNumber(ledger.income.taxes)} + 关税（进+出） ${fmtNumber(ledger.income.tariffs)} + 港口 ${fmtNumber(ledger.income.ports)} + 基金收益 ${fmtNumber(ledger.income.sovereignIncome)} + 赔款收入 ${fmtNumber(ledger.income.reparations)} = ${fmtMoney(ledger.income.total)}/月（税入占 GDP ${taxShare}%）`,
       `财政支出：陆军 ${fmtNumber(ledger.expense.army)} + 海军 ${fmtNumber(ledger.expense.navy)} + 行政 ${fmtNumber(ledger.expense.administration)} + 教育 ${fmtNumber(ledger.expense.education)} + 福利 ${fmtNumber(ledger.expense.welfare)} + 债息 ${fmtNumber(ledger.expense.debtInterest)} + 市场损耗 ${fmtNumber(ledger.expense.marketLoss)} + 设施维护 ${fmtNumber(ledger.expense.upkeep)} + 赔款支出 ${fmtNumber(ledger.expense.reparations)} + 国有建设 ${fmtNumber(ledger.expense.construction)} = ${fmtMoney(ledger.expense.total)}/月`,
-      `国库净额：收入 − 支出 = ${fmtSigned(ledger.net)} 金/月；贸易缺口 ${fmtMoney(ledger.tradeGap)}（单独扣减净资产，不计入支出）；净资产实际变动 ${fmtSigned(ledger.net - ledger.tradeGap)} 金/月；GDP 是产出，与国库收支不是同一本账`,
+      `国库净额：收入 − 支出 = ${fmtSigned(ledger.net)} 金/月；私人部门贸易逆差 ${fmtMoney(ledger.tradeGap)}（由私人资本/私人外债 ${fmtMoney(ledger.privateDebt)} 承担，不影响国库）；净资产实际变动 ${fmtSigned(ledger.net)} 金/月；GDP 是产出，与国库收支不是同一本账`,
       `赔款日程：${
         schedules.length === 0
           ? '无'
@@ -163,7 +163,7 @@ function statusText(world: WorldState): string {
               })
               .join('；')
       }`,
-      `私人资本 ${fmtNumber(player.econ.privateCapital)} · 投资信心 ${player.econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(player.econ.investmentConfidence)} · 闲置利润 ${fmtNumber(player.econ.idleProfits)} · 劳动原始利用率 ${(player.econ.laborRawUtilization * 100).toFixed(1)}%（需求 ${fmtPop(player.econ.laborDemand)} / 劳动力 ${fmtPop(player.econ.laborForce)}）`,
+      `私人资本 ${fmtNumber(Math.max(0, player.econ.privateCapital))} · 私人外债 ${fmtMoney(ledger.privateDebt)} · 投资信心 ${player.econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(player.econ.investmentConfidence)} · 闲置利润 ${fmtNumber(player.econ.idleProfits)} · 劳动原始利用率 ${(player.econ.laborRawUtilization * 100).toFixed(1)}%（需求 ${fmtPop(player.econ.laborDemand)} / 劳动力 ${fmtPop(player.econ.laborForce)}）`,
       `资源禀赋：农田 ${player.econ.resources.farmland} · 林地 ${player.econ.resources.timber} · 煤矿 ${player.econ.resources.coal} · 铁矿 ${player.econ.resources.iron}`,
       `建造队列：${
         queue.length === 0
@@ -805,7 +805,7 @@ const TOOL_SPECS: {
   {
     name: 'v3_action',
     description:
-      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count）、cancel（取消国有项目，需 projectId）、tax（税率，需 rate）、tariff（关税，需 rate）、spending（支出，需 category/amount）、research（研究方向，需 tech）、conscript（征兵，需 amount）、law（法案，需 name）。',
+      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count）、cancel（取消国有项目，需 projectId）、tax（税率，需 rate）、tariff（进出口关税，需 rate）、spending（支出，需 category/amount）、research（研究方向，需 tech）、conscript（征兵，需 amount）、law（法案，需 name）。',
     inputSchema: {
       type: 'object',
       properties: {

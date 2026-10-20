@@ -68,6 +68,7 @@ const flow = (input: {
   unitPrice: input.unitPrice,
   landedPrice: input.unitPrice,
   tariffPaid: 0,
+  exportDuty: 0,
   value: input.quantity * input.unitPrice,
 })
 
