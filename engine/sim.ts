@@ -48,6 +48,7 @@ import {
   techName,
 } from './data'
 import {
+  debtPressure,
   expenseParts,
   incomeParts,
   nationalDebt,
@@ -645,6 +646,9 @@ function settleConstruction(
   }
   let stateBudget = country.econ.spending.construction * 0.8
   let privateBudget = Math.max(0, country.econ.privateCapital)
+  // Deficit-financed construction: a small negative balance is normal debt,
+  // not a stop sign. Only the 3× GDP restructuring floor removes the cash.
+  const debtFloor = -country.econ.gdp * 3
   const remaining: ConstructionProject[] = []
   let stateSpent = 0
   let privateSpent = 0
@@ -663,7 +667,11 @@ function settleConstruction(
     const spend =
       owner === 'private'
         ? Math.min(privateBudget, project.monthlyCost)
-        : Math.min(stateBudget, project.monthlyCost, Math.max(0, country.econ.treasury))
+        : Math.min(
+            stateBudget,
+            project.monthlyCost,
+            Math.max(0, country.econ.treasury - debtFloor),
+          )
     project.lastSpend = spend
     if (spend > 0) {
       if (owner === 'private') {
@@ -677,7 +685,12 @@ function settleConstruction(
       const efficiency =
         owner === 'private'
           ? applyModifiers(country, 'constructionSpeed', privateEfficiency)
-          : applyModifiers(country, 'constructionSpeed', country.bureaucracy.fundEfficiency)
+          : applyModifiers(
+              country,
+              'constructionSpeed',
+              country.bureaucracy.fundEfficiency *
+                (1 - debtPressure(country).constructionPenalty),
+            )
       const effective = spend * efficiency
       project.progress = Math.min(
         1,
@@ -1188,8 +1201,8 @@ function simulateCountry(
       50 +
         govBonus -
         country.pops.radicals * 0.5 +
-        (country.econ.treasury > 0 ? 4 : -6) +
-        (nationalDebt(country) > snap.gdp ? -10 : 0) -
+        (country.econ.treasury > 0 ? 4 : -6) -
+        debtPressure(country).legitimacyPenalty -
         country.military.exhaustion * 0.2 +
         country.econ.spending.welfare * 2,
     ),
@@ -2238,10 +2251,12 @@ export function applyDecision(
           text: `${tag} 建设拨款不足（每月 ${monthlyCost.toFixed(1)} 金，预算 ${constructionBudget.toFixed(1)}），先提高建设支出`,
         }
       }
-      if (country.econ.treasury < monthlyCost) {
+      // Small negative net assets are normal borrowing; only the 3× GDP
+      // restructuring floor blocks a new commitment (ADR 0007).
+      if (country.econ.treasury - monthlyCost < -country.econ.gdp * 3) {
         return {
           ok: false,
-          text: `${tag} 国库不足以启动${BUILDINGS[building].name}（首月需 ${monthlyCost.toFixed(1)}）`,
+          text: `${tag} 债务已接近重组上限，无法再启动${BUILDINGS[building].name}`,
         }
       }
       country.econ.constructionQueue.push({

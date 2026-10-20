@@ -161,6 +161,9 @@ export function statusLine(world: WorldState): string {
     ledger.debt > 0
       ? `国债${fmtMoney(ledger.debt)}`
       : `基金${fmtMoney(ledger.fund)}`,
+    ledger.debtPressure.ratio >= 0.25
+      ? `债务压力${ledger.debtPressure.label}`
+      : '',
     `GDP${fmtGdp(player.econ.gdp)}`,
     `合法性${Math.round(player.government.legitimacy)}`,
     `激进${Math.round(player.pops.radicals)}`,

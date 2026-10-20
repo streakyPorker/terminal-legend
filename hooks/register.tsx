@@ -133,6 +133,11 @@ function statusText(world: WorldState): string {
       ledger.debt > 0
         ? `国债 ${fmtMoney(ledger.debt)}（月息 ${(ledger.debtRate * 100).toFixed(2)}%）`
         : `主权基金 ${fmtMoney(ledger.fund)}（月息 ${(ledger.fundRate * 100).toFixed(2)}%）`
+    const pressure = ledger.debtPressure
+    const debtPressureLine =
+      pressure.ratio < 0.25
+        ? `债务压力：无（债务/GDP ${(pressure.ratio * 100).toFixed(0)}%）`
+        : `债务压力：${pressure.label}（债务/GDP ${(pressure.ratio * 100).toFixed(0)}%，收入 −${(pressure.incomePenalty * 100).toFixed(0)}%，建设速度 −${(pressure.constructionPenalty * 100).toFixed(0)}%，合法性目标 −${pressure.legitimacyPenalty.toFixed(1)}，月息 +${(pressure.interestSpread * 100).toFixed(2)}%）`
     const schedules = (world.indemnities ?? []).filter(
       schedule => schedule.from === player.id || schedule.to === player.id,
     )
@@ -142,6 +147,7 @@ function statusText(world: WorldState): string {
       `交通基础设施 ${Math.round(player.econ.transportInfrastructure)} · 行政能力 ${Math.round(player.econ.administrativeCapacity)} · 失业 ${player.econ.unemployment.toFixed(1)}%`,
       `GDP构成：消费 ${fmtNumber(player.econ.gdpComponents.c)} / 投资 ${fmtNumber(player.econ.gdpComponents.i)} / 政府 ${fmtNumber(player.econ.gdpComponents.g)}；工资 ${fmtNumber(player.econ.wages)}（劳动份额 ${Math.round(player.econ.laborShare * 100)}%）/ 利润 ${fmtNumber(player.econ.profits)}`,
       `国库净资产：${fmtMoney(player.econ.treasury)}（${stock}）`,
+      debtPressureLine,
       `财政收入：税入 ${fmtNumber(ledger.income.taxes)} + 关税 ${fmtNumber(ledger.income.tariffs)} + 港口 ${fmtNumber(ledger.income.ports)} + 基金收益 ${fmtNumber(ledger.income.sovereignIncome)} + 赔款收入 ${fmtNumber(ledger.income.reparations)} = ${fmtMoney(ledger.income.total)}/月（税入占 GDP ${taxShare}%）`,
       `财政支出：陆军 ${fmtNumber(ledger.expense.army)} + 海军 ${fmtNumber(ledger.expense.navy)} + 行政 ${fmtNumber(ledger.expense.administration)} + 教育 ${fmtNumber(ledger.expense.education)} + 福利 ${fmtNumber(ledger.expense.welfare)} + 债息 ${fmtNumber(ledger.expense.debtInterest)} + 市场损耗 ${fmtNumber(ledger.expense.marketLoss)} + 设施维护 ${fmtNumber(ledger.expense.upkeep)} + 赔款支出 ${fmtNumber(ledger.expense.reparations)} + 国有建设 ${fmtNumber(ledger.expense.construction)} = ${fmtMoney(ledger.expense.total)}/月`,
       `国库净额：收入 − 支出 = ${fmtSigned(ledger.net)} 金/月；贸易缺口 ${fmtMoney(ledger.tradeGap)}（单独扣减净资产，不计入支出）；净资产实际变动 ${fmtSigned(ledger.net - ledger.tradeGap)} 金/月；GDP 是产出，与国库收支不是同一本账`,

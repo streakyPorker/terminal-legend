@@ -21,6 +21,61 @@ const DEFAULT_CONTEXT: FiscalContext = { atWar: false, tick: 0 }
 export const nationalDebt = (country: Country): number =>
   Math.max(0, -country.econ.treasury)
 
+/**
+ * Debt pressure is a smooth debuff, not a cliff. Below 25% debt/GDP the
+ * state borrows at the base rate with no extra penalty; above it, income,
+ * construction speed, legitimacy and the borrowing rate deteriorate
+ * continuously until the 3× GDP restructuring floor (plan 0007 / ADR 0007).
+ */
+export const DEBT_PRESSURE_START = 0.25
+export const DEBT_PRESSURE_FULL = 2
+
+export type DebtPressure = {
+  /** National debt ÷ GDP. */
+  ratio: number
+  /** 0 at the start threshold, 2 at (and above) twice GDP. */
+  severity: number
+  /** Fraction of income lost to debt service/crowding out (0..0.20). */
+  incomePenalty: number
+  /** Fraction of state construction speed lost (0..0.40). */
+  constructionPenalty: number
+  /** Points removed from the legitimacy target (0..10). */
+  legitimacyPenalty: number
+  /** Extra monthly interest rate (0..0.008). */
+  interestSpread: number
+  label: string
+}
+
+export function debtPressure(country: Country): DebtPressure {
+  const debt = nationalDebt(country)
+  const gdp = Math.max(1, country.econ.gdp)
+  const ratio = debt / gdp
+  const severity = clamp(
+    (ratio - DEBT_PRESSURE_START) / (DEBT_PRESSURE_FULL - DEBT_PRESSURE_START),
+    0,
+    2,
+  )
+  const label =
+    ratio < DEBT_PRESSURE_START
+      ? '无'
+      : ratio < 0.5
+        ? '轻度'
+        : ratio < 1
+          ? '中度'
+          : ratio < DEBT_PRESSURE_FULL
+            ? '重度'
+            : '危重'
+  return {
+    ratio,
+    severity,
+    incomePenalty: 0.1 * severity,
+    constructionPenalty: 0.2 * severity,
+    legitimacyPenalty: 5 * severity,
+    interestSpread: 0.004 * severity,
+    label,
+  }
+}
+
 /** Sovereign fund: the positive half of net assets. */
 export const sovereignFund = (country: Country): number =>
   Math.max(0, country.econ.treasury)
@@ -72,6 +127,8 @@ export type FiscalLedger = {
   fund: number
   debtRate: number
   fundRate: number
+  /** Smooth debt-pressure debuff (ADR 0007). */
+  debtPressure: DebtPressure
 }
 
 const clamp = (value: number, min: number, max: number): number =>
@@ -110,13 +167,15 @@ export function debtRate(
     context.tick <= country.econ.restructuredUntilTick
       ? 0.004
       : 0
+  const pressure = debtPressure(country).interestSpread
   return clamp(
     0.004 +
       (context.atWar ? 0.002 : 0) +
       weakMandate +
       lowPrestige +
       unrest +
-      restructuring,
+      restructuring +
+      pressure,
     0.002,
     0.02,
   )
@@ -150,17 +209,21 @@ export function incomeParts(
   tariffRevenue: number,
   context: FiscalContext = DEFAULT_CONTEXT,
 ): IncomeParts {
+  // Debt pressure crowds out the state's non-interest income: part of the
+  // tax/tariff/port take is consumed by refinancing and arrears.
+  const debtCut = 1 - debtPressure(country).incomePenalty
   return {
     taxes:
       gdp *
       (country.econ.taxRate / 100) *
       0.45 *
       taxEfficiency(country) *
-      taxCompliance(country),
-    tariffs: tariffRevenue,
-    ports: country.econ.buildings.ports * 0.02,
+      taxCompliance(country) *
+      debtCut,
+    tariffs: tariffRevenue * debtCut,
+    ports: country.econ.buildings.ports * 0.02 * debtCut,
     sovereignIncome: sovereignFund(country) * fundRate(country, context),
-    reparations: country.econ.reparationsReceived ?? 0,
+    reparations: (country.econ.reparationsReceived ?? 0) * debtCut,
   }
 }
 
@@ -263,5 +326,6 @@ export function fiscalLedger(
     fund: sovereignFund(country),
     debtRate: debtRate(country, context),
     fundRate: fundRate(country, context),
+    debtPressure: debtPressure(country),
   }
 }
