@@ -1573,6 +1573,7 @@ export const register: Register = (on, options) => {
         'building',
         'count',
         'rate',
+        'exportRate',
         'category',
         'amount',
         'tech',
