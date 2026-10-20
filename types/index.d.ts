@@ -355,6 +355,12 @@ export type Economy = {
   lastPrivateConstructionSpend: number
   /** Rent paid by private builders for idle state construction points. */
   lastConstructionRent: number
+  /**
+   * Investment-goods demand from last month's actual construction spend,
+   * by good. Persists after a project completes so one-month slots still
+   * appear in the next month's investment block.
+   */
+  lastConstructionDemand: Partial<Record<GoodId, number>>
   /** Installment reparations paid this month, folded into expense. */
   reparationsPaid: number
   /** Installment reparations received this month, folded into income. */

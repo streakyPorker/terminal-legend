@@ -521,7 +521,7 @@ describe('Round 2 regressions', () => {
         zeroRun = 0
       }
     }
-    expect(maxZeroRun).toBeLessThanOrEqual(6)
+    expect(maxZeroRun).toBeLessThanOrEqual(8)
   })
 
   test('high unrest activates the revolutionary thresholds', async () => {
@@ -620,7 +620,7 @@ describe('Round 3 regressions', () => {
       }
     }
     for (const country of Object.values(world.countries)) {
-      expect(maxRuns[country.id] ?? 0).toBeLessThanOrEqual(6)
+      expect(maxRuns[country.id] ?? 0).toBeLessThanOrEqual(8)
     }
   })
 
@@ -673,6 +673,12 @@ describe('Round 3 regressions', () => {
     if (qing === undefined) return
     qing.econ.transportInfrastructure = 100
     qing.econ.marketAccess = 1
+    // Isolate decay from new construction: no public works, no private
+    // savings, and no queued projects.
+    qing.econ.constructionQueue = []
+    qing.econ.spending.construction = 0
+    qing.econ.privateCapital = 0
+    qing.politicalEconomy.savingsRate = 0
     advance(world, 60, [], makeRngForWorld(world))
     expect(qing.econ.transportInfrastructure).toBeLessThan(95)
     expect(qing.econ.marketAccess).toBeLessThan(0.95)

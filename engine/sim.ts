@@ -194,6 +194,12 @@ function ensureConstructionFields(country: Country): void {
   if (typeof country.econ.lastConstructionRent !== 'number') {
     country.econ.lastConstructionRent = 0
   }
+  if (
+    typeof country.econ.lastConstructionDemand !== 'object' ||
+    country.econ.lastConstructionDemand === null
+  ) {
+    country.econ.lastConstructionDemand = {}
+  }
 }
 
 function computeProduction(country: Country): Record<GoodId, number> {
@@ -500,22 +506,15 @@ function computeDemand(country: Country): DemandBreakdown {
   out.arms += demand('arms', country.military.army * 0.02 + country.military.navy * 0.01)
 
   // ---- investment demand from last month's actual construction spend ----
-  // A project that received no money produces no investment demand (and no
-  // GDP): this closes the "phantom investment" loophole where a giant queue
-  // raised GDP without a single funded month.
-  for (const project of country.econ.constructionQueue) {
-    const coefficients = INVESTMENT_DEMAND[project.building]
-    const funded = clamp(
-      (project.lastSpend ?? 0) / Math.max(0.01, project.monthlyCost),
-      0,
-      1,
-    )
-    if (funded <= 0) continue
-    for (const [id, coefficient] of Object.entries(coefficients) as [GoodId, number][]) {
-      const quantity = coefficient * project.count * funded
-      investment[id] += quantity
-      out[id] += quantity
-    }
+  // The settlement writes the goods quantities here, so a slot that finished
+  // in one month still shows up in next month's I block. A project that
+  // received no money contributes nothing (the phantom-investment guard).
+  for (const [id, quantity] of Object.entries(
+    country.econ.lastConstructionDemand ?? {},
+  ) as [GoodId, number][]) {
+    if (quantity <= 0) continue
+    investment[id] += quantity
+    out[id] += quantity
   }
 
   // ---- government demand from appropriations (plan 0003 §2.3) ----
@@ -779,6 +778,50 @@ export function completeBuilding(country: Country, building: BuildingId, count: 
 }
 
 /**
+ * Bring legacy projects onto the ADR 0011 rules: one-month slots, full gold
+ * cost, and at most 15 buildings per slot (oversized slots are split).
+ */
+export function normalizeConstructionQueue(country: Country): void {
+  const queue = country.econ.constructionQueue
+  if (queue.length === 0) return
+  const next: ConstructionProject[] = []
+  let changed = false
+  for (const project of queue) {
+    const fullCost = BUILDINGS[project.building].cost * project.count
+    if (
+      project.monthsLeft > 1 ||
+      Math.abs(project.monthlyCost - fullCost) > 1e-9
+    ) {
+      project.monthsLeft = 1
+      project.monthlyCost = fullCost
+      changed = true
+    }
+    if (project.count > MAX_BUILDINGS_PER_SLOT) {
+      let remaining = project.count
+      let index = 0
+      while (remaining > 0) {
+        const count = Math.min(MAX_BUILDINGS_PER_SLOT, remaining)
+        next.push({
+          ...project,
+          id: index === 0 ? project.id : `${project.id}-split${index}`,
+          count,
+          monthsLeft: 1,
+          monthlyCost: BUILDINGS[project.building].cost * count,
+          lastSpend: 0,
+          lastCapacity: 0,
+        })
+        remaining -= count
+        index += 1
+      }
+      changed = true
+    } else {
+      next.push(project)
+    }
+  }
+  if (changed) country.econ.constructionQueue = next
+}
+
+/**
  * Spends the month's construction budget on queued projects. Money is
  * deducted as it is spent; whatever no project absorbs is administrative
  * waste (plan §7.3). Projects whose cash or budget runs out keep their
@@ -791,12 +834,14 @@ function settleConstruction(
   log: LogEntry[],
 ): number {
   ensureConstructionFields(country)
+  normalizeConstructionQueue(country)
   const queue = country.econ.constructionQueue
   if (queue.length === 0) {
     country.econ.lastConstructionSpend = 0
     country.econ.lastStateConstructionSpend = 0
     country.econ.lastPrivateConstructionSpend = 0
     country.econ.lastConstructionRent = 0
+    country.econ.lastConstructionDemand = {}
     return 0
   }
   let stateBudget = country.econ.spending.construction * 0.8
@@ -810,9 +855,10 @@ function settleConstruction(
   let stateSpent = 0
   let privateSpent = 0
   let rentalIncome = 0
-  // Private builders are a little more efficient than the state's, but the
-  // bureaucracy still limits how fast their money turns into progress.
-  const privateEfficiency = clamp(0.75 + country.bureaucracy.score / 400, 0.75, 1)
+  const nextConstructionDemand: Partial<Record<GoodId, number>> = {}
+  // A fully funded slot finishes in one month; `constructionSpeed` policies
+  // and the debt-pressure penalty are the only modifiers on that pace.
+  const constructionSpeed = applyModifiers(country, 'constructionSpeed', 1)
 
   const runProject = (
     project: ConstructionProject,
@@ -843,19 +889,22 @@ function settleConstruction(
         stateSpent += spend
         country.econ.treasury -= spend
       }
+      const funded =
+        project.monthlyCost > 0 ? spend / project.monthlyCost : 1
+      for (const [id, coefficient] of Object.entries(
+        INVESTMENT_DEMAND[project.building],
+      ) as [GoodId, number][]) {
+        nextConstructionDemand[id] =
+          (nextConstructionDemand[id] ?? 0) + coefficient * project.count * funded
+      }
     }
     const goldShare =
       project.monthlyCost > 0 ? spend / project.monthlyCost : 1
     if (capacityTake > 0 && spend > 0) {
-      const efficiency = isPrivate
-        ? applyModifiers(country, 'constructionSpeed', privateEfficiency)
-        : applyModifiers(
-            country,
-            'constructionSpeed',
-            country.bureaucracy.fundEfficiency *
-              (1 - debtPressure(country).constructionPenalty),
-          )
-      const effective = Math.min(capacityShare, goldShare) * efficiency
+      const speed =
+        constructionSpeed *
+        (isPrivate ? 1 : 1 - debtPressure(country).constructionPenalty)
+      const effective = Math.min(capacityShare, goldShare) * speed
       project.progress = Math.min(1, project.progress + effective)
     }
     if (project.progress >= 1) {
@@ -931,6 +980,7 @@ function settleConstruction(
   country.econ.lastStateConstructionSpend = stateSpent
   country.econ.lastPrivateConstructionSpend = privateSpent
   country.econ.lastConstructionRent = rentalIncome
+  country.econ.lastConstructionDemand = nextConstructionDemand
   // Unused appropriations are not spent at all: the appropriation is a monthly
   // cap, not a charge. This keeps the displayed budget equal to the treasury.
   return stateSpent
@@ -1052,9 +1102,9 @@ function investPrivateCapital(
       ? renewalCandidates[world.tick % renewalCandidates.length]
       : undefined
 
-  // Keep three months of working capital for everything already under
-  // construction; new starts only use the headroom above that reserve.
-  const headroom = Math.max(0, country.econ.privateCapital / 3 - activePrivateCost)
+  // Slots finish in a month now, so private builders can commit most of the
+  // idle pool: keep only what active projects already need.
+  const headroom = Math.max(0, country.econ.privateCapital - activePrivateCost)
   const canStart = ((): { affordable: number } | undefined => {
     if (best === undefined) return undefined
     const fullCost = BUILDINGS[best.building].cost

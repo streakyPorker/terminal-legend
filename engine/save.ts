@@ -1,6 +1,7 @@
 import type { EngineInterface } from 'claude-code'
 import type { WorldState } from '../types'
 import { BUILDING_IDS } from './data'
+import { normalizeConstructionQueue } from './sim'
 
 /** Current world shape; older in-memory worlds are discarded like old saves. */
 export const CURRENT_WORLD_VERSION = 7
@@ -58,9 +59,16 @@ function normalizeWorld(world: WorldState): WorldState {
     if (typeof country.econ.lastConstructionRent !== 'number') {
       country.econ.lastConstructionRent = 0
     }
+    if (
+      typeof country.econ.lastConstructionDemand !== 'object' ||
+      country.econ.lastConstructionDemand === null
+    ) {
+      country.econ.lastConstructionDemand = {}
+    }
     for (const project of country.econ.constructionQueue) {
       if (typeof project.lastCapacity !== 'number') project.lastCapacity = 0
     }
+    normalizeConstructionQueue(country)
   }
   return world
 }
