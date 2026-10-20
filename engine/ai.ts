@@ -2,6 +2,7 @@ import type { EngineInterface } from 'claude-code'
 import type { Country, GameDate, SituationStance, WorldState } from '../types'
 import { BUILDING_IDS, GOODS, GOOD_IDS, SPENDING, WAR_GOAL_NAMES, techName } from './data'
 
+import { nationalDebt, sovereignFund } from './fiscal'
 import type { Rng } from './rng'
 import { SENSITIVE_GOODS, randomDecision, type Decision } from './sim'
 import { SITUATION_STANCES } from './situations'
@@ -69,8 +70,9 @@ function opiumImports(country: Country): number {
 }
 
 function countryLine(country: Country, world: WorldState): string {
-  const surplus =
-    country.econ.income - country.econ.expense - country.econ.lastDebtRepayment
+  const surplus = country.econ.income - country.econ.expense
+  const debt = nationalDebt(country)
+  const fund = sovereignFund(country)
   const war = world.wars.some(
     one => one.attackers.includes(country.id) || one.defenders.includes(country.id),
   )
@@ -79,8 +81,9 @@ function countryLine(country: Country, world: WorldState): string {
     `领袖:${country.leader.name}(${country.leader.traits.join(',')})`,
     `议程:${country.leader.agenda}`,
     `情绪:${Math.round(country.leader.mood)}`,
-    `国库:${n1(country.econ.treasury)}金`,
-    `债务:${n1(country.econ.debt)}金(债务率${n1(country.econ.debt / Math.max(1, country.econ.gdp))})`,
+    `净资产:${n1(country.econ.treasury)}金(${debt > 0 ? `国债${n1(debt)}` : `基金${n1(fund)}`})`,
+    `债务率:${n1(debt / Math.max(1, country.econ.gdp))}`,
+    `赔款:付${n1(country.econ.reparationsPaid)}/收${n1(country.econ.reparationsReceived)}`,
     `GDP:${n1(country.econ.gdp)}金/月(消费${n1(country.econ.gdpComponents.c)}/投资${n1(country.econ.gdpComponents.i)}/政府${n1(country.econ.gdpComponents.g)})`,
     `税:${country.econ.taxRate}%关税:${country.econ.tariff}%`,
     `支出:陆${n1(country.econ.spending.army)}/海${n1(country.econ.spending.navy)}/官${n1(country.econ.spending.bureaucracy)}/教${n1(country.econ.spending.education)}/福${n1(country.econ.spending.welfare)}/建${n1(country.econ.spending.construction)}`,
@@ -401,8 +404,12 @@ export function describeWorldForNarrator(world: WorldState): string {
   if (player === undefined) return '（还没有进行中的游戏）'
   const lines: string[] = []
   lines.push(`日期 ${fmtDate(world.date)}｜玩家 ${player.name}`)
+  const net = player.econ.income - player.econ.expense
+  const debt = nationalDebt(player)
+  const stock =
+    debt > 0 ? `国债 ${n1(debt)}` : `主权基金 ${n1(sovereignFund(player))}`
   lines.push(
-    `国库 ${n1(player.econ.treasury)} 金（${player.econ.income - player.econ.expense - player.econ.lastDebtRepayment >= 0 ? '+' : ''}${n1(player.econ.income - player.econ.expense - player.econ.lastDebtRepayment)} 金/月）｜GDP ${n1(player.econ.gdp)} 金/月（消费 ${n1(player.econ.gdpComponents.c)} / 投资 ${n1(player.econ.gdpComponents.i)} / 政府 ${n1(player.econ.gdpComponents.g)}）｜合法性 ${Math.round(player.government.legitimacy)}｜激进 ${Math.round(player.pops.radicals)}｜生活水平 ${Math.round(player.pops.sol)}`,
+    `国库净资产 ${n1(player.econ.treasury)} 金（${net >= 0 ? '+' : ''}${n1(net)} 金/月，${stock}）｜GDP ${n1(player.econ.gdp)} 金/月（消费 ${n1(player.econ.gdpComponents.c)} / 投资 ${n1(player.econ.gdpComponents.i)} / 政府 ${n1(player.econ.gdpComponents.g)}）｜合法性 ${Math.round(player.government.legitimacy)}｜激进 ${Math.round(player.pops.radicals)}｜生活水平 ${Math.round(player.pops.sol)}`,
   )
   lines.push(
     `人口 ${n1(player.pops.total)} 万｜识字率 ${Math.round(player.pops.literacy * 100)}%｜陆军 ${n1(player.military.army)} 万｜海军 ${n1(player.military.navy)}｜科技 ${player.tech.level}（${techName(player.tech.level)}）｜研究 ${player.tech.researching}`,

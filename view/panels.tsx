@@ -14,7 +14,7 @@ import {
   techName,
 } from '../engine/data'
 import { inspectEconomy } from '../engine/sim'
-import { fiscalLedger } from '../engine/fiscal'
+import { fiscalLedger, nationalDebt } from '../engine/fiscal'
 import { MODIFIER_STAT_NAMES, describeModifier } from '../engine/modifiers'
 import {
   OPIUM_CRISIS_TITLE,
@@ -180,7 +180,11 @@ function Overview(props: { ui: UiKit; world: WorldState; width: number }): any {
   const player = playerOf(props.world)
   if (player === undefined) return <Text dimColor>无进行中的游戏。</Text>
   const econ = player.econ
-  const surplus = econ.income - econ.expense - econ.lastDebtRepayment
+  const atWar = props.world.wars.some(
+    war => war.attackers.includes(player.id) || war.defenders.includes(player.id),
+  )
+  const ledger = fiscalLedger(player, { atWar, tick: props.world.tick })
+  const surplus = ledger.net
   const sideBySide = props.width >= 74
   const majors = Object.values(props.world.countries)
     .filter(country => country.isMajor && !country.isPlayer)
@@ -195,11 +199,12 @@ function Overview(props: { ui: UiKit; world: WorldState; width: number }): any {
       <Box flexDirection={sideBySide ? 'row' : 'column'} columnGap={4}>
         <Box flexDirection="column">
           <Heading ui={props.ui} text="经济" />
-          <StatLine ui={props.ui} label="国库" value={`${fmtMoney(econ.treasury)} (${fmtSigned(surplus)}金/月)`} color={surplus >= 0 ? 'green' : 'red'} />
+          <StatLine ui={props.ui} label="国库净资产" value={`${fmtMoney(econ.treasury)} (${fmtSigned(surplus)}金/月)`} color={surplus >= 0 ? 'green' : 'red'} />
+          <StatLine ui={props.ui} label="收支" value={`收 ${fmtMoney(ledger.income.total)} · 支 ${fmtMoney(ledger.expense.total)}`} />
+          <StatLine ui={props.ui} label={ledger.debt > 0 ? '国债' : '主权基金'} value={`${fmtMoney(ledger.debt > 0 ? ledger.debt : ledger.fund)} · 月息 ${((ledger.debt > 0 ? ledger.debtRate : ledger.fundRate) * 100).toFixed(2)}%`} color={ledger.debt > econ.gdp ? 'red' : ledger.debt > 0 ? 'yellow' : 'green'} />
           <StatLine ui={props.ui} label="GDP" value={`${fmtGdp(econ.gdp)} ${sparkline(econ.history.gdp, 12)} ${trend(econ.history.gdp)}`} />
           <StatLine ui={props.ui} label="GDP构成" value={`${fmtNumber(econ.gdpComponents.c)} 消费 + ${fmtNumber(econ.gdpComponents.i)} 投资 + ${fmtNumber(econ.gdpComponents.g)} 政府（金/月）`} />
           <StatLine ui={props.ui} label="私人资本" value={`${fmtNumber(econ.privateCapital)} 金 · 投资信心 ${econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(econ.investmentConfidence)} 点`} />
-          <StatLine ui={props.ui} label="债务" value={fmtMoney(econ.debt)} color={econ.debt > econ.gdp ? 'red' : undefined} />
           <StatLine ui={props.ui} label="税率" value={`${econ.taxRate}%  关税 ${econ.tariff}%`} />
           <StatLine ui={props.ui} label="物价" value={GOOD_IDS.slice(0, 5).map(id => `${GOODS[id].name}${econ.prices[id].toFixed(1)}`).join(' ')} />
           <Meter ui={props.ui} label="生活水平" value={player.pops.sol} max={100} color="cyan" />
@@ -307,13 +312,13 @@ function RankingsPanel(props: { ui: UiKit; world: WorldState }): any {
   return (
     <Box flexDirection="column">
       <Heading ui={props.ui} text="列强排名" hint={`${countries.length} 国 · 各维度从高到低`} />
-      <Text dimColor>高亮行为你扮演的国家。单位：金（国库/GDP）、万（人口/陆军）、%（比率）。</Text>
+      <Text dimColor>高亮行为你扮演的国家。单位：金（净资产/GDP）、万（人口/陆军）、%（比率）。</Text>
 
       {table('经济', '按 GDP 排序', by(country => country.econ.gdp), [
         { label: 'GDP(金/月)', width: 12, value: country => fmtNumber(country.econ.gdp) },
-        { label: '国库(金)', width: 10, value: country => fmtNumber(country.econ.treasury) },
+        { label: '净资产(金)', width: 10, value: country => fmtNumber(country.econ.treasury) },
         { label: '收入(金/月)', width: 12, value: country => fmtNumber(country.econ.income) },
-        { label: '债务(金)', width: 10, value: country => fmtNumber(country.econ.debt) },
+        { label: '国债(金)', width: 10, value: country => fmtNumber(nationalDebt(country)) },
       ])}
 
       {table('人口与社会', '按人口排序', by(country => country.pops.total), [
@@ -378,7 +383,10 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
   if (player === undefined) return <Text dimColor>无进行中的游戏。</Text>
   const snapshot = inspectEconomy(player)
   const econ = player.econ
-  const ledger = fiscalLedger(player)
+  const atWar = props.world.wars.some(
+    war => war.attackers.includes(player.id) || war.defenders.includes(player.id),
+  )
+  const ledger = fiscalLedger(player, { atWar, tick: props.world.tick })
   const components = econ.gdpComponents
   const widths = [7, 7, 8, 8, 7, 11]
   const tradeWidths = [12, 10, 10, 10]
@@ -525,13 +533,15 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
         <Heading
           ui={props.ui}
           text="国库收支"
-          hint={`本月结算 · 收入 ${fmtMoney(ledger.income.total)} · 支出 ${fmtMoney(ledger.expense.total)} · 还本 ${fmtMoney(ledger.debtRepayment)} · 净 ${fmtSigned(ledger.net)}`}
+          hint={`本月结算 · 收入 ${fmtMoney(ledger.income.total)} · 支出 ${fmtMoney(ledger.expense.total)} · 净 ${fmtSigned(ledger.net)}`}
         />
         <Text dimColor>财政收入</Text>
         {([
           ['税入', ledger.income.taxes],
           ['关税', ledger.income.tariffs],
           ['港口', ledger.income.ports],
+          ['基金收益', ledger.income.sovereignIncome],
+          ['赔款收入', ledger.income.reparations],
         ] as const).map(([name, value]) => (
           <Box flexDirection="row" columnGap={1}>
             <Text wrap="truncate">{padEnd(name, 6)}</Text>
@@ -554,6 +564,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
           ['债息', ledger.expense.debtInterest],
           ['市场损耗', ledger.expense.marketLoss],
           ['设施维护', ledger.expense.upkeep],
+          ['赔款支出', ledger.expense.reparations],
           ['国有建设', ledger.expense.construction],
         ] as const).map(([name, value]) => (
           <Box flexDirection="row" columnGap={1}>
@@ -564,12 +575,33 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
         ))}
         <Text>
           支出合计 <Text color="red">{fmtMoney(ledger.expense.total)}</Text>
-          <Text dimColor>　还本 {fmtMoney(ledger.debtRepayment)}　债务余额 {fmtMoney(econ.debt)}</Text>
+          <Text dimColor>　{ledger.debt > 0 ? `国债 ${fmtMoney(ledger.debt)}` : `主权基金 ${fmtMoney(ledger.fund)}`}</Text>
         </Text>
         <Text>
           国库净额 <Text color={ledger.net >= 0 ? 'green' : 'red'}>{fmtSigned(ledger.net)} 金/月</Text>
+          <Text dimColor>　国债月息 {fmtPercent(ledger.debtRate, 2)} · 基金月息 {fmtPercent(ledger.fundRate, 2)}</Text>
         </Text>
-        <Text dimColor>GDP {fmtGdp(ledger.gdp)} 是产出（基期价），不是国库收支；国库只经手税入、关税与港口。</Text>
+        <Text dimColor>
+          贸易缺口 {fmtMoney(ledger.tradeGap)}（未融资部分直接扣减净资产，不计入支出）；净资产实际变动 {fmtSigned(ledger.net - ledger.tradeGap)} 金/月
+        </Text>
+        <Text dimColor>GDP {fmtGdp(ledger.gdp)} 是产出（基期价），不是国库收支；国库只经手税入、关税、港口、基金收益与赔款。</Text>
+        {(props.world.indemnities ?? [])
+          .filter(
+            schedule =>
+              schedule.from === player.id || schedule.to === player.id,
+          )
+          .map(schedule => {
+            const paying = schedule.from === player.id
+            const otherId = paying ? schedule.to : schedule.from
+            const other = props.world.countries[otherId]?.name ?? otherId
+            return (
+              <Text key={schedule.id} dimColor>
+                赔款{paying ? '支出' : '收入'}：{paying ? '付给' : '收自'}
+                {other} 每月 {fmtMoney(schedule.monthlyAmount)}，剩余{' '}
+                {schedule.monthsLeft} 月（余 {fmtMoney(schedule.remaining)}）
+              </Text>
+            )
+          })}
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
@@ -1195,7 +1227,10 @@ export function Band(props: BandProps): any {
   if (player === undefined) return <Text dimColor>终末传奇：输入 /v3 new 开始一局。</Text>
 
   const econ = player.econ
-  const ledger = fiscalLedger(player)
+  const atWar = props.world.wars.some(
+    war => war.attackers.includes(player.id) || war.defenders.includes(player.id),
+  )
+  const ledger = fiscalLedger(player, { atWar, tick: props.world.tick })
   const surplus = ledger.net
   const pending = pendingOf(props.world)
   const delegation = props.world.secretary.delegation
@@ -1231,13 +1266,16 @@ export function Band(props: BandProps): any {
   rows.push(
     <Box flexDirection="row" columnGap={2} flexWrap="wrap">
       <Text>
-        国库 <Text color={surplus >= 0 ? 'green' : 'red'}>{fmtMoney(econ.treasury)}</Text>
+        国库净资产 <Text color={surplus >= 0 ? 'green' : 'red'}>{fmtMoney(econ.treasury)}</Text>
         <Text dimColor>（{fmtSigned(surplus)}金/月）</Text>
       </Text>
       <Text>
         收支 <Text color="green">{fmtMoney(ledger.income.total)}</Text>
         <Text dimColor> / </Text>
-        <Text color="red">{fmtMoney(ledger.expense.total + ledger.debtRepayment)}</Text>
+        <Text color="red">{fmtMoney(ledger.expense.total)}</Text>
+      </Text>
+      <Text color={ledger.debt > 0 ? 'yellow' : 'green'}>
+        {ledger.debt > 0 ? '国债' : '主权基金'} {fmtMoney(ledger.debt > 0 ? ledger.debt : ledger.fund)}
       </Text>
       <Text>
         国内生产总值 <Text>{fmtGdp(econ.gdp)}</Text>

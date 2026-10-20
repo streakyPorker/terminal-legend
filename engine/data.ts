@@ -354,8 +354,8 @@ type CountrySeed = {
     sol: number
   }
   gdp: number
+  /** Signed net assets: the seed treasury minus the old seed debt. */
   treasury: number
-  debt: number
   taxRate: number
   tariff: number
   spending: Spending
@@ -423,8 +423,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
       sol: 28,
     },
     gdp: 780,
-    treasury: 18,
-    debt: 5,
+    treasury: 13,
     taxRate: 12,
     tariff: 8,
     spending: spending(6, 0.8, 4, 1, 0.5, 1.5),
@@ -481,8 +480,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
       sol: 62,
     },
     gdp: 640,
-    treasury: 42,
-    debt: 30,
+    treasury: 12,
     taxRate: 10,
     tariff: 5,
     spending: spending(4, 6, 2.5, 1.2, 1.5, 2),
@@ -539,8 +537,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
       sol: 52,
     },
     gdp: 470,
-    treasury: 26,
-    debt: 28,
+    treasury: -2,
     taxRate: 12,
     tariff: 12,
     spending: spending(5, 3, 2.5, 1, 1.2, 1.8),
@@ -597,8 +594,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
       sol: 50,
     },
     gdp: 210,
-    treasury: 12,
-    debt: 8,
+    treasury: 4,
     taxRate: 11,
     tariff: 8,
     spending: spending(4.5, 0.5, 1.8, 1.1, 0.8, 1.5),
@@ -655,8 +651,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
       sol: 30,
     },
     gdp: 380,
-    treasury: 16,
-    debt: 10,
+    treasury: 6,
     taxRate: 14,
     tariff: 15,
     spending: spending(6, 1.2, 3, 0.3, 0.4, 1),
@@ -713,8 +708,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
       sol: 42,
     },
     gdp: 270,
-    treasury: 9,
-    debt: 14,
+    treasury: -5,
     taxRate: 13,
     tariff: 10,
     spending: spending(4, 0.6, 2.2, 0.6, 0.7, 1),
@@ -771,8 +765,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
       sol: 55,
     },
     gdp: 330,
-    treasury: 22,
-    debt: 8,
+    treasury: 14,
     taxRate: 8,
     tariff: 20,
     spending: spending(1.5, 1.2, 1.2, 0.8, 0.5, 1.5),
@@ -829,8 +822,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
       sol: 32,
     },
     gdp: 210,
-    treasury: 7,
-    debt: 4,
+    treasury: 3,
     taxRate: 14,
     tariff: 5,
     spending: spending(2.5, 0.6, 1.5, 0.5, 0.3, 0.8),
@@ -887,8 +879,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
       sol: 28,
     },
     gdp: 190,
-    treasury: 5,
-    debt: 12,
+    treasury: -7,
     taxRate: 15,
     tariff: 12,
     spending: spending(3, 0.8, 2, 0.3, 0.3, 0.6),
@@ -945,8 +936,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
       sol: 34,
     },
     gdp: 170,
-    treasury: 4,
-    debt: 15,
+    treasury: -11,
     taxRate: 14,
     tariff: 12,
     spending: spending(2, 0.8, 1.5, 0.4, 0.4, 0.6),
@@ -1180,7 +1170,6 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
       econ: {
         gdp: seedRow.gdp,
         treasury: seedRow.treasury,
-        debt: seedRow.debt,
         income: 0,
         expense: 0,
         taxRate: seedRow.taxRate,
@@ -1213,11 +1202,15 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         lastConstructionSpend: 0,
         lastStateConstructionSpend: 0,
         lastPrivateConstructionSpend: 0,
-        lastDebtRepayment: 0,
+        reparationsPaid: 0,
+        reparationsReceived: 0,
+        lastFundIncome: 0,
+        lastDebtInterest: 0,
         lastImportBill: 0,
         lastExportRevenue: 0,
         lastTariffRevenue: 0,
         lastTradeBalance: 0,
+        lastTradeDebt: 0,
         resourceImports: { farmland: 0, timber: 0, coal: 0, iron: 0 },
         restructuredUntilTick: 0,
         history: {
@@ -1266,13 +1259,14 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
   }
 
   return {
-    version: 6,
+    version: 7,
     seed,
     date: { year: START_YEAR, month: START_MONTH },
     tick: 0,
     playerId,
     countries,
     wars: [],
+    indemnities: [],
     events: [],
     log: [
       {

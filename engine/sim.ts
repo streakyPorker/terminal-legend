@@ -15,6 +15,7 @@ import type {
   TradeTension,
   War,
   WarGoal,
+  WarIndemnity,
   WorldState,
 } from '../types'
 import type { LaborStats } from './data'
@@ -46,7 +47,13 @@ import {
   techCost,
   techName,
 } from './data'
-import { expenseParts, incomeParts } from './fiscal'
+import {
+  expenseParts,
+  incomeParts,
+  nationalDebt,
+  type ExpenseParts,
+  type IncomeParts,
+} from './fiscal'
 import type { Rng } from './rng'
 import {
   MODIFIER_STATS,
@@ -98,6 +105,9 @@ export type EconomySnapshot = {
   realGdp: number
   income: number
   expense: number
+  /** Raw revenue/outlay parts used to build this month's totals. */
+  revenue: IncomeParts
+  outlay: ExpenseParts
   components: GdpComponents
   laborShare: number
   wages: number
@@ -107,6 +117,13 @@ export type EconomySnapshot = {
 
 export const clamp = (value: number, min: number, max: number): number =>
   Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : min
+
+const sumParts = (parts: Record<string, number>): number =>
+  Object.values(parts).reduce((sum, value) => sum + value, 0)
+
+/** The applied share of a raw part after the `income`/`expense` modifier. */
+const appliedPart = (raw: number, rawTotal: number, total: number): number =>
+  rawTotal > 0 ? raw * (total / rawTotal) : 0
 
 /** Numeric parameter with a finite fallback; model output can be a string. */
 const num = (value: unknown, fallback: number): number => {
@@ -394,7 +411,14 @@ export function inspectEconomy(country: Country): {
 
 export function computeEconomy(
   country: Country,
-  override?: { supply?: Record<GoodId, number>; nx?: number; tariffRevenue?: number },
+  override?: {
+    supply?: Record<GoodId, number>
+    nx?: number
+    tariffRevenue?: number
+    /** Fiscal-context flags for the interest rates (defaults: peace, tick 0). */
+    atWar?: boolean
+    tick?: number
+  },
 ): EconomySnapshot {
   const production = computeProduction(country)
   const breakdown = computeDemand(country)
@@ -443,13 +467,23 @@ export function computeEconomy(
   // can show a real cash account instead of a single net figure. Tariff
   // revenue is the gold actually collected on this month's import flows
   // (plan §2.4); construction is settled separately and folded in later.
-  const revenue = incomeParts(country, gdp, override?.tariffRevenue ?? 0)
+  const context = { atWar: override?.atWar ?? false, tick: override?.tick ?? 0 }
+  const revenue = incomeParts(
+    country,
+    gdp,
+    override?.tariffRevenue ?? 0,
+    context,
+  )
   const income = applyModifiers(
     country,
     'income',
-    revenue.taxes + revenue.tariffs + revenue.ports,
+    revenue.taxes +
+      revenue.tariffs +
+      revenue.ports +
+      revenue.sovereignIncome +
+      revenue.reparations,
   )
-  const outlay = expenseParts(country, gdp)
+  const outlay = expenseParts(country, gdp, context)
   const expense = applyModifiers(
     country,
     'expense',
@@ -460,7 +494,8 @@ export function computeEconomy(
       outlay.welfare +
       outlay.debtInterest +
       outlay.marketLoss +
-      outlay.upkeep,
+      outlay.upkeep +
+      outlay.reparations,
   )
 
   const labor = deriveLabor(country)
@@ -477,7 +512,9 @@ export function computeEconomy(
     gdp,
     realGdp,
     income,
-    expense: applyModifiers(country, 'expense', expense),
+    expense,
+    revenue,
+    outlay,
     components,
     laborShare,
     wages,
@@ -490,10 +527,11 @@ export function calibrateWorld(world: WorldState): void {
   for (const country of Object.values(world.countries)) {
     // Two passes: the first seeds wages/profits from GDP, the second lets
     // Stone-Geary demand read that income.
-    let snap = computeEconomy(country)
+    const context = { atWar: false, tick: world.tick }
+    let snap = computeEconomy(country, context)
     country.econ.wages = snap.wages
     country.econ.profits = snap.profits
-    snap = computeEconomy(country)
+    snap = computeEconomy(country, context)
     country.econ.gdp = snap.gdp
     country.econ.income = snap.income
     country.econ.expense = snap.expense
@@ -506,6 +544,18 @@ export function calibrateWorld(world: WorldState): void {
     country.econ.laborForce = snap.labor.force
     country.econ.laborUtilization = snap.labor.utilization
     country.econ.laborRawUtilization = snap.labor.raw
+    const rawIncomeTotal = sumParts(snap.revenue)
+    const rawExpenseTotal = sumParts(snap.outlay)
+    country.econ.lastFundIncome = appliedPart(
+      snap.revenue.sovereignIncome,
+      rawIncomeTotal,
+      snap.income,
+    )
+    country.econ.lastDebtInterest = appliedPart(
+      snap.outlay.debtInterest,
+      rawExpenseTotal,
+      snap.expense,
+    )
     country.econ.history = {
       gdp: [snap.gdp],
       treasury: [country.econ.treasury],
@@ -725,7 +775,7 @@ function infrastructureScore(country: Country, building: BuildingId): number {
 }
 
 function capitalThreshold(country: Country): number {
-  const debtRatio = country.econ.debt / Math.max(1, country.econ.gdp)
+  const debtRatio = nationalDebt(country) / Math.max(1, country.econ.gdp)
   // 4%/year + debt ratio × 2%/year, expressed as a monthly markup. Confidence
   // policies lower the hurdle rate, so `privateInvestment` boosts both savings
   // and the range of projects that clear it.
@@ -878,16 +928,20 @@ function simulateCountry(
   },
 ): void {
   const oldPops = Math.max(1, country.pops.total)
-  const snap = computeEconomy(
-    country,
-    incoming === undefined
-      ? undefined
+  const atWar = world.wars.some(
+    war => war.attackers.includes(country.id) || war.defenders.includes(country.id),
+  )
+  const snap = computeEconomy(country, {
+    ...(incoming === undefined
+      ? {}
       : {
           supply: incoming.supply,
           nx: incoming.nx,
           tariffRevenue: incoming.settlement.tariffRevenue,
-        },
-  )
+        }),
+    atWar,
+    tick: world.tick,
+  })
   // The demand computed above consumed last month's released idle capital.
   country.econ.idlePurchases = 0
 
@@ -914,23 +968,27 @@ function simulateCountry(
   country.econ.laborForce = snap.labor.force
   country.econ.laborUtilization = snap.labor.utilization
   country.econ.laborRawUtilization = snap.labor.raw
+  const rawIncomeTotal = sumParts(snap.revenue)
+  const rawExpenseTotal = sumParts(snap.outlay)
+  country.econ.lastFundIncome = appliedPart(
+    snap.revenue.sovereignIncome,
+    rawIncomeTotal,
+    snap.income,
+  )
+  country.econ.lastDebtInterest = appliedPart(
+    snap.outlay.debtInterest,
+    rawExpenseTotal,
+    snap.expense,
+  )
 
   const balance = snap.income - snap.expense
   country.econ.treasury += balance
-  country.econ.lastDebtRepayment = 0
-  if (country.econ.treasury < 0) {
-    country.econ.debt += -country.econ.treasury
-    country.econ.treasury = 0
-  } else if (country.econ.debt > 0 && country.econ.treasury > 2) {
-    const repay = Math.min(country.econ.debt, country.econ.treasury * 0.08)
-    country.econ.debt -= repay
-    country.econ.treasury -= repay
-    country.econ.lastDebtRepayment = repay
-  }
-  // A debt spiral ends in restructuring instead of growing forever.
-  if (country.econ.debt > country.econ.gdp * 3 && country.econ.treasury <= 0) {
-    const before = country.econ.debt
-    country.econ.debt = country.econ.gdp * 1.5
+  // The treasury is signed net assets: a negative balance is national debt
+  // and pays interest next month. There is no separate debt stock and no
+  // principal-repayment step to reconcile.
+  if (country.econ.treasury < -country.econ.gdp * 3) {
+    const before = -country.econ.treasury
+    country.econ.treasury = -country.econ.gdp * 1.5
     // Halve import capacity and cap new external debt for the next 12 months
     // (plan §2.4).
     country.econ.restructuredUntilTick = Math.max(
@@ -944,21 +1002,22 @@ function simulateCountry(
       date: { ...world.date },
       kind: 'economy',
       countryId: country.id,
-      text: `[${country.flag}] ${country.name}债务违约并重组：国债从 ${before.toFixed(0)} 降至 ${country.econ.debt.toFixed(0)}`,
+      text: `[${country.flag}] ${country.name}债务违约并重组：国债从 ${before.toFixed(0)} 降至 ${(-country.econ.treasury).toFixed(0)}`,
     })
   }
 
   // Gold settlement (plan §2.4): the private sector's external net accrues to
-  // or is drawn from private capital; the unfinanced shortfall becomes external
-  // debt. Applied after the treasury's own debt service so this month's new
-  // trade debt is not repaid in the same month.
+  // or is drawn from private capital; the unfinanced shortfall now draws down
+  // the state's net assets directly (negative = national debt).
+  country.econ.lastTradeDebt = 0
   if (incoming !== undefined) {
     const settlement = incoming.settlement
     if (settlement.externalNet >= 0) {
       country.econ.privateCapital += settlement.externalNet
     } else {
       country.econ.privateCapital -= settlement.drawnFromCapital
-      country.econ.debt += settlement.debtIncrease
+      country.econ.treasury -= settlement.debtIncrease
+      country.econ.lastTradeDebt = settlement.debtIncrease
       if (settlement.dropped > 0) {
         log.push({
           date: { ...world.date },
@@ -1126,7 +1185,7 @@ function simulateCountry(
         govBonus -
         country.pops.radicals * 0.5 +
         (country.econ.treasury > 0 ? 4 : -6) +
-        (country.econ.debt > snap.gdp ? -10 : 0) -
+        (nationalDebt(country) > snap.gdp ? -10 : 0) -
         country.military.exhaustion * 0.2 +
         country.econ.spending.welfare * 2,
     ),
@@ -1275,17 +1334,18 @@ function simulateCountry(
   pushHistory(country.econ.history.legitimacy, country.government.legitimacy)
   pushHistory(country.econ.history.radicals, country.pops.radicals)
 
+  const debt = nationalDebt(country)
   if (
     country.econ.treasury <= 0 &&
     snap.income - country.econ.expense < 0 &&
-    country.econ.debt > country.econ.gdp * 0.5 &&
+    debt > country.econ.gdp * 0.5 &&
     rng.chance(0.03)
   ) {
     log.push({
       date: { ...world.date },
       kind: 'economy',
       countryId: country.id,
-      text: `[${country.flag}] ${country.name}财政告急，国债升至 ${country.econ.debt.toFixed(1)}`,
+      text: `[${country.flag}] ${country.name}财政告急，国债升至 ${debt.toFixed(1)}`,
     })
   }
 }
@@ -1535,6 +1595,18 @@ export function strength(world: WorldState, ids: string[]): number {
 }
 
 /**
+ * The victor's reparation terms: total gold and the maximum installment term.
+ * The loser decides how much of the total it pays immediately and how the
+ * remainder is spread over the term (see the `reparations` goal branch).
+ */
+export type ReparationTerms = {
+  /** Defaults to 10% of the loser's GDP. */
+  total?: number
+  /** Maximum installment term in months; defaults to 60 (five years). */
+  maxMonths?: number
+}
+
+/**
  * Peace terms for one war (plan 0004 §5). The goal owner's side winning applies
  * the victory column, its side losing the defeat column; effects land on every
  * country of a side, mirroring the belligerent loop in `endWar`.
@@ -1545,6 +1617,7 @@ function applyWarGoal(
   goalOwnerWon: boolean,
   winnerIds: string[],
   loserIds: string[],
+  terms?: ReparationTerms,
 ): void {
   const goalSide = goalOwnerWon ? winnerIds : loserIds
   const otherSide = goalOwnerWon ? loserIds : winnerIds
@@ -1584,18 +1657,48 @@ function applyWarGoal(
   switch (war.goal) {
     case 'reparations': {
       const recipient = world.countries[war.goalOwner]
+      if (!Array.isArray(world.indemnities)) world.indemnities = []
       for (const id of loserIds) {
         const loser = world.countries[id]
         if (loser === undefined) continue
-        const due = loser.econ.gdp * 0.1
-        const paid = Math.min(Math.max(0, loser.econ.treasury), due)
-        loser.econ.treasury -= paid
-        // Whatever cannot be paid becomes the loser's debt, so the indemnity is
-        // conserved as either gold or a claim (plan §5).
-        loser.econ.debt += Math.max(0, due - paid)
+        const rawTotal = terms?.total
+        const total = clamp(
+          Number.isFinite(rawTotal) ? (rawTotal as number) : loser.econ.gdp * 0.1,
+          0,
+          loser.econ.gdp * 2,
+        )
+        const rawMonths = terms?.maxMonths
+        const maxMonths = clamp(
+          Number.isFinite(rawMonths) ? Math.round(rawMonths as number) : 60,
+          1,
+          240,
+        )
+        // The loser pays what it can without going into debt, then spreads the
+        // rest over at most `maxMonths`. The victor only set the total and the
+        // term; this split is the loser's own plan.
+        const lump = clamp(loser.econ.treasury, 0, total)
+        loser.econ.treasury -= lump
         loser.government.legitimacy = clamp(loser.government.legitimacy - 5, 0, 100)
-        // The paid gold is credited to the winner instead of being destroyed.
-        if (recipient !== undefined && paid > 0) recipient.econ.treasury += paid
+        if (recipient !== undefined && lump > 0) recipient.econ.treasury += lump
+
+        const remaining = total - lump
+        if (remaining > 0.01) {
+          const capacity = Math.max(0.5, loser.econ.income * 0.15)
+          const months = Math.min(
+            maxMonths,
+            Math.max(1, Math.ceil(remaining / capacity)),
+          )
+          world.indemnities.push({
+            id: `indemnity-${war.id}-${id}`,
+            from: id,
+            to: war.goalOwner,
+            monthlyAmount: remaining / months,
+            monthsLeft: months,
+            remaining,
+            startsAtTick: world.tick + 1,
+            startedAt: { ...world.date },
+          })
+        }
       }
       for (const id of winnerIds) {
         const winner = world.countries[id]
@@ -1695,6 +1798,7 @@ function endWar(
   war: War,
   winner: 'attackers' | 'defenders' | 'white',
   log: LogEntry[],
+  terms?: ReparationTerms,
 ): void {
   const attackerIds = war.attackers
   const defenderIds = war.defenders
@@ -1721,7 +1825,14 @@ function endWar(
 
   // A white peace or the 60-month timeout settles no goal (plan §5).
   if (winner !== 'white') {
-    applyWarGoal(world, war, winnerIds.includes(war.goalOwner), winnerIds, loserIds)
+    applyWarGoal(
+      world,
+      war,
+      winnerIds.includes(war.goalOwner),
+      winnerIds,
+      loserIds,
+      terms,
+    )
   }
 
   for (const id of [...attackerIds, ...defenderIds]) {
@@ -1805,11 +1916,9 @@ export function applyEventOption(
 
   const effects = option.effects
   if (effects.treasury !== undefined) {
+    // A negative result stays on the books as national debt; there is no
+    // separate debt stock to transfer it into.
     country.econ.treasury += effects.treasury
-    if (country.econ.treasury < 0) {
-      country.econ.debt += -country.econ.treasury
-      country.econ.treasury = 0
-    }
   }
   if (effects.radicals !== undefined) {
     country.pops.radicals = clamp(country.pops.radicals + effects.radicals, 0, 100)
@@ -1943,6 +2052,45 @@ function recordTrade(
   }
 }
 
+/**
+ * Books this month's installment reparations onto both sides before the
+ * country simulation runs. The payer's expense and the receiver's income are
+ * equal, so the transfer conserves gold without touching either treasury
+ * directly here.
+ */
+function prepareIndemnities(world: WorldState): void {
+  if (!Array.isArray(world.indemnities)) world.indemnities = []
+  for (const country of Object.values(world.countries)) {
+    country.econ.reparationsPaid = 0
+    country.econ.reparationsReceived = 0
+  }
+  const active: WarIndemnity[] = []
+  for (const schedule of world.indemnities) {
+    if (world.tick < schedule.startsAtTick) {
+      active.push(schedule)
+      continue
+    }
+    const payer = world.countries[schedule.from]
+    const receiver = world.countries[schedule.to]
+    if (
+      payer === undefined ||
+      receiver === undefined ||
+      schedule.remaining <= 0
+    ) {
+      continue
+    }
+    const amount = Math.min(schedule.monthlyAmount, schedule.remaining)
+    payer.econ.reparationsPaid += amount
+    receiver.econ.reparationsReceived += amount
+    schedule.remaining = Math.max(0, schedule.remaining - amount)
+    schedule.monthsLeft -= 1
+    if (schedule.remaining > 0.01 && schedule.monthsLeft > 0) {
+      active.push(schedule)
+    }
+  }
+  world.indemnities = active
+}
+
 export function advance(
   world: WorldState,
   months: number,
@@ -1975,6 +2123,9 @@ export function advance(
   for (let index = 0; index < total; index += 1) {
     world.date = advanceDate(world.date)
     world.tick += 1
+    // Reparations are booked before any country simulates, so both sides see
+    // the same installment in this month's income/expense.
+    prepareIndemnities(world)
     // Embargoes age at the start of the month, before clearing, so an embargo
     // that expires this month no longer blocks it (plan §3).
     expireEmbargoes(world, log)
@@ -2345,6 +2496,18 @@ export function applyDecision(
               (one.defenders.includes(country.id) && one.attackers.includes(target.id)),
           )
           if (war === undefined) return { ok: false, text: `${tag} 与${target.name}并未交战` }
+          // The victor's terms: total gold and the maximum installment term.
+          // Omitted values fall back to 10% of GDP and 60 months.
+          const terms: ReparationTerms = {
+            total:
+              typeof params.indemnityTotal === 'number'
+                ? params.indemnityTotal
+                : undefined,
+            maxMonths:
+              typeof params.indemnityMonths === 'number'
+                ? params.indemnityMonths
+                : undefined,
+          }
           endWar(
             world,
             war,
@@ -2358,6 +2521,7 @@ export function applyDecision(
                   : 'attackers'
                 : 'white',
             [],
+            terms,
           )
           return { ok: true, text: `${tag} 与${target.name}停战` }
         }
@@ -2684,7 +2848,7 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
   // Debt service is a hard constraint; the deterministic fallback raises
   // taxes before a debt spiral becomes permanent.
   if (
-    country.econ.debt > country.econ.gdp &&
+    nationalDebt(country) > country.econ.gdp &&
     country.econ.taxRate < 45 &&
     rng.chance(0.5)
   ) {

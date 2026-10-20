@@ -71,9 +71,9 @@ function readStat(country: Country, stat: ThresholdStat): number {
     case 'treasury':
       return country.econ.treasury
     case 'debt':
-      return country.econ.debt
+      return Math.max(0, -country.econ.treasury)
     case 'debtRatio':
-      return country.econ.debt / Math.max(1, country.econ.gdp)
+      return Math.max(0, -country.econ.treasury) / Math.max(1, country.econ.gdp)
     case 'gdp':
       return country.econ.gdp
     case 'army':
@@ -162,7 +162,7 @@ export const THRESHOLD_RULES: ThresholdRule[] = [
   {
     id: 'debt-crisis',
     label: '债台高筑',
-    description: '债务超过 GDP 的 1.5 倍',
+    description: '国债超过 GDP 的 1.5 倍',
     mode: 'while',
     conditions: [{ stat: 'debtRatio', op: '>=', value: 1.5 }],
     modifiers: [
@@ -173,7 +173,7 @@ export const THRESHOLD_RULES: ThresholdRule[] = [
   {
     id: 'bankrupt',
     label: '财政崩溃',
-    description: '国库见底且债务达到 50',
+    description: '净资产为负且国债达到 50',
     mode: 'while',
     conditions: [
       { stat: 'treasury', op: '<=', value: 0 },

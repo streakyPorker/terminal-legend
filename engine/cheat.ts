@@ -28,8 +28,13 @@ export function applyCheat(
   switch (action) {
     case 'treasury': {
       const amount = finite(params.amount)
-      player.econ.treasury = Math.max(0, player.econ.treasury + amount)
-      text = `国库${amount >= 0 ? '增加' : '减少'} ${Math.abs(amount).toFixed(1)} 金，现为 ${player.econ.treasury.toFixed(1)} 金`
+      // Net assets may go negative: that is national debt, not a separate stock.
+      player.econ.treasury += amount
+      const stock =
+        player.econ.treasury < 0
+          ? `国债 ${(-player.econ.treasury).toFixed(1)} 金`
+          : `主权基金 ${player.econ.treasury.toFixed(1)} 金`
+      text = `国库净资产${amount >= 0 ? '增加' : '减少'} ${Math.abs(amount).toFixed(1)} 金，现为${stock}`
       break
     }
     case 'techPoints': {

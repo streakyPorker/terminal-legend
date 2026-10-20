@@ -116,23 +116,47 @@ function statusText(world: WorldState): string {
   for (const country of Object.values(world.countries)) {
     const playerMark = country.isPlayer ? '★' : ' '
     lines.push(
-      `${playerMark}[${country.flag}]${country.name}(${country.id}) 国库${fmtMoney(country.econ.treasury)} GDP${fmtGdp(country.econ.gdp)} 合法性${Math.round(country.government.legitimacy)} 激进${Math.round(country.pops.radicals)} 陆军${fmtNumber(country.military.army)}万 海军${fmtNumber(country.military.navy)} 科技${country.tech.level}`,
+      `${playerMark}[${country.flag}]${country.name}(${country.id}) 净资产${fmtMoney(country.econ.treasury)} GDP${fmtGdp(country.econ.gdp)} 合法性${Math.round(country.government.legitimacy)} 激进${Math.round(country.pops.radicals)} 陆军${fmtNumber(country.military.army)}万 海军${fmtNumber(country.military.navy)} 科技${country.tech.level}`,
     )
   }
   const player = world.countries[world.playerId]
   if (player !== undefined) {
     const queue = player.econ.constructionQueue
-    const ledger = fiscalLedger(player)
+    const atWar = world.wars.some(
+      war =>
+        war.attackers.includes(player.id) || war.defenders.includes(player.id),
+    )
+    const ledger = fiscalLedger(player, { atWar, tick: world.tick })
     const taxShare =
       ledger.gdp > 0 ? ((ledger.income.taxes / ledger.gdp) * 100).toFixed(1) : '0.0'
+    const stock =
+      ledger.debt > 0
+        ? `国债 ${fmtMoney(ledger.debt)}（月息 ${(ledger.debtRate * 100).toFixed(2)}%）`
+        : `主权基金 ${fmtMoney(ledger.fund)}（月息 ${(ledger.fundRate * 100).toFixed(2)}%）`
+    const schedules = (world.indemnities ?? []).filter(
+      schedule => schedule.from === player.id || schedule.to === player.id,
+    )
     lines.push(
       '',
       `本国官僚：${Math.round(player.bureaucracy.score)}/${Math.round(player.bureaucracy.ceiling)}，行动预算 ${player.bureaucracy.actionBudget} 项/月，资金效率 ${Math.round(player.bureaucracy.fundEfficiency * 100)}%，延迟 ${Math.round(player.bureaucracy.delayChance * 100)}%，失真 ${Math.round(player.bureaucracy.infoDistortion * 100)}%`,
       `交通基础设施 ${Math.round(player.econ.transportInfrastructure)} · 行政能力 ${Math.round(player.econ.administrativeCapacity)} · 失业 ${player.econ.unemployment.toFixed(1)}%`,
       `GDP构成：消费 ${fmtNumber(player.econ.gdpComponents.c)} / 投资 ${fmtNumber(player.econ.gdpComponents.i)} / 政府 ${fmtNumber(player.econ.gdpComponents.g)}；工资 ${fmtNumber(player.econ.wages)}（劳动份额 ${Math.round(player.econ.laborShare * 100)}%）/ 利润 ${fmtNumber(player.econ.profits)}`,
-      `财政收入：税入 ${fmtNumber(ledger.income.taxes)} + 关税 ${fmtNumber(ledger.income.tariffs)} + 港口 ${fmtNumber(ledger.income.ports)} = ${fmtMoney(ledger.income.total)}/月（税入占 GDP ${taxShare}%）`,
-      `财政支出：陆军 ${fmtNumber(ledger.expense.army)} + 海军 ${fmtNumber(ledger.expense.navy)} + 行政 ${fmtNumber(ledger.expense.administration)} + 教育 ${fmtNumber(ledger.expense.education)} + 福利 ${fmtNumber(ledger.expense.welfare)} + 债息 ${fmtNumber(ledger.expense.debtInterest)} + 市场损耗 ${fmtNumber(ledger.expense.marketLoss)} + 设施维护 ${fmtNumber(ledger.expense.upkeep)} + 国有建设 ${fmtNumber(ledger.expense.construction)} = ${fmtMoney(ledger.expense.total)}/月`,
-      `国库净额：收入 − 支出 − 还本（${fmtNumber(ledger.debtRepayment)}）= ${fmtSigned(ledger.net)} 金/月；GDP 是产出，与国库收支不是同一本账`,
+      `国库净资产：${fmtMoney(player.econ.treasury)}（${stock}）`,
+      `财政收入：税入 ${fmtNumber(ledger.income.taxes)} + 关税 ${fmtNumber(ledger.income.tariffs)} + 港口 ${fmtNumber(ledger.income.ports)} + 基金收益 ${fmtNumber(ledger.income.sovereignIncome)} + 赔款收入 ${fmtNumber(ledger.income.reparations)} = ${fmtMoney(ledger.income.total)}/月（税入占 GDP ${taxShare}%）`,
+      `财政支出：陆军 ${fmtNumber(ledger.expense.army)} + 海军 ${fmtNumber(ledger.expense.navy)} + 行政 ${fmtNumber(ledger.expense.administration)} + 教育 ${fmtNumber(ledger.expense.education)} + 福利 ${fmtNumber(ledger.expense.welfare)} + 债息 ${fmtNumber(ledger.expense.debtInterest)} + 市场损耗 ${fmtNumber(ledger.expense.marketLoss)} + 设施维护 ${fmtNumber(ledger.expense.upkeep)} + 赔款支出 ${fmtNumber(ledger.expense.reparations)} + 国有建设 ${fmtNumber(ledger.expense.construction)} = ${fmtMoney(ledger.expense.total)}/月`,
+      `国库净额：收入 − 支出 = ${fmtSigned(ledger.net)} 金/月；贸易缺口 ${fmtMoney(ledger.tradeGap)}（单独扣减净资产，不计入支出）；净资产实际变动 ${fmtSigned(ledger.net - ledger.tradeGap)} 金/月；GDP 是产出，与国库收支不是同一本账`,
+      `赔款日程：${
+        schedules.length === 0
+          ? '无'
+          : schedules
+              .map(schedule => {
+                const paying = schedule.from === player.id
+                const otherId = paying ? schedule.to : schedule.from
+                const other = world.countries[otherId]?.name ?? otherId
+                return `${paying ? '付给' : '收自'}${other} 每月 ${fmtNumber(schedule.monthlyAmount)} 金，剩余 ${schedule.monthsLeft} 月（余 ${fmtNumber(schedule.remaining)} 金）`
+              })
+              .join('；')
+      }`,
       `私人资本 ${fmtNumber(player.econ.privateCapital)} · 投资信心 ${player.econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(player.econ.investmentConfidence)} · 闲置利润 ${fmtNumber(player.econ.idleProfits)} · 劳动原始利用率 ${(player.econ.laborRawUtilization * 100).toFixed(1)}%（需求 ${fmtPop(player.econ.laborDemand)} / 劳动力 ${fmtPop(player.econ.laborForce)}）`,
       `资源禀赋：农田 ${player.econ.resources.farmland} · 林地 ${player.econ.resources.timber} · 煤矿 ${player.econ.resources.coal} · 铁矿 ${player.econ.resources.iron}`,
       `建造队列：${
@@ -321,8 +345,17 @@ async function advanceGame(
     if (beforePlayer !== undefined && afterPlayer !== undefined) {
       const delta = (now: number, before: number): string =>
         `${fmtNumber(now)}（${fmtSigned(now - before)}）`
-      const ledger = fiscalLedger(afterPlayer)
-      summary += `\n本月：GDP ${delta(afterPlayer.econ.gdp, beforePlayer.econ.gdp)}｜国库 ${delta(afterPlayer.econ.treasury, beforePlayer.econ.treasury)}｜收入 ${fmtNumber(ledger.income.total)} 支出 ${fmtNumber(ledger.expense.total + ledger.debtRepayment)} 净 ${fmtSigned(ledger.net)}｜失业 ${afterPlayer.econ.unemployment.toFixed(1)}%｜债务 ${fmtNumber(afterPlayer.econ.debt)}｜激进 ${Math.round(afterPlayer.pops.radicals)}`
+      const atWar = world.wars.some(
+        war =>
+          war.attackers.includes(afterPlayer.id) ||
+          war.defenders.includes(afterPlayer.id),
+      )
+      const ledger = fiscalLedger(afterPlayer, { atWar, tick: world.tick })
+      const stock =
+        ledger.debt > 0
+          ? `国债 ${fmtNumber(ledger.debt)}`
+          : `基金 ${fmtNumber(ledger.fund)}`
+      summary += `\n本月：GDP ${delta(afterPlayer.econ.gdp, beforePlayer.econ.gdp)}｜国库净资产 ${delta(afterPlayer.econ.treasury, beforePlayer.econ.treasury)}｜收入 ${fmtNumber(ledger.income.total)} 支出 ${fmtNumber(ledger.expense.total)} 净 ${fmtSigned(ledger.net)}｜失业 ${afterPlayer.econ.unemployment.toFixed(1)}%｜${stock}｜激进 ${Math.round(afterPlayer.pops.radicals)}`
       summary += `\n私人资本 ${fmtNumber(afterPlayer.econ.privateCapital)} · 投资信心 ${afterPlayer.econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(afterPlayer.econ.investmentConfidence)} · 资源 农${afterPlayer.econ.resources.farmland}/林${afterPlayer.econ.resources.timber}/煤${afterPlayer.econ.resources.coal}/铁${afterPlayer.econ.resources.iron}`
     }
     await setWorld($, world)
@@ -848,7 +881,7 @@ const TOOL_SPECS: {
   {
     name: 'v3_diplomacy',
     description:
-      '终末传奇：执行外交行动。move 取值：improve（改善关系）、insult（交恶）、alliance（结盟）、rival（设为对手）、gift（赠礼）、war（宣战）、peace（停战）、embargo（禁运，可选定商品与月数）、unembargo（解除禁运）、tension（就敏感商品施加贸易张力）。target 是国家代码，例如 GBR、RUS、QING。',
+      '终末传奇：执行外交行动。move 取值：improve（改善关系）、insult（交恶）、alliance（结盟）、rival（设为对手）、gift（赠礼）、war（宣战）、peace（停战；本方获胜时可用 indemnityTotal/indemnityMonths 声明赔款总额与最长分期月数）、embargo（禁运，可选定商品与月数）、unembargo（解除禁运）、tension（就敏感商品施加贸易张力）。target 是国家代码，例如 GBR、RUS、QING。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -896,6 +929,19 @@ const TOOL_SPECS: {
           type: 'string',
           enum: ['reparations', 'openMarket', 'sphere', 'humiliation'],
           description: 'war 的战争目标，决定停战时的和约条款；缺省 reparations。',
+        },
+        indemnityTotal: {
+          type: 'number',
+          minimum: 0,
+          maximum: 100000,
+          description:
+            'peace 且本方获胜时的赔款总额（金）；缺省为败方 GDP 的 10%，上限为败方 GDP 的 2 倍。败方自行决定一次付清多少、余款分几期。',
+        },
+        indemnityMonths: {
+          type: 'number',
+          minimum: 1,
+          maximum: 240,
+          description: 'peace 时允许的最长分期月数；缺省 60（5 年）。',
         },
       },
       required: ['target', 'move'],
@@ -1563,6 +1609,12 @@ export const register: Register = (on, options) => {
       if (typeof args.relationDelta === 'number') params.relationDelta = args.relationDelta
       if (typeof args.reason === 'string') params.reason = args.reason
       if (typeof args.goal === 'string') params.goal = args.goal
+      if (typeof args.indemnityTotal === 'number') {
+        params.indemnityTotal = args.indemnityTotal
+      }
+      if (typeof args.indemnityMonths === 'number') {
+        params.indemnityMonths = args.indemnityMonths
+      }
       const result = applyDecision(
         world,
         { countryId: world.playerId, action: 'diplomacy', params },

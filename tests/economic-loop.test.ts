@@ -351,12 +351,17 @@ describe('Round 1 regressions', () => {
     expect(fra).toBeDefined()
     if (fra === undefined) return
     fra.econ.treasury = 100
-    fra.econ.debt = 0
     fra.econ.spending.construction = 10
     const before = fra.econ.treasury
     advance(world, 1, [], makeRngForWorld(world))
     const delta = fra.econ.treasury - before
-    expect(Math.abs(fra.econ.expense - (fra.econ.income - delta))).toBeLessThan(0.05)
+    // The treasury also absorbs the unfinanced trade gap directly, so it is
+    // not part of expense; the cash identity is income − expense − gap.
+    expect(
+      Math.abs(
+        fra.econ.income - fra.econ.expense - fra.econ.lastTradeDebt - delta,
+      ),
+    ).toBeLessThan(0.05)
   })
 
   test('a partial or malformed AI batch is filled per country', async () => {
@@ -629,10 +634,9 @@ describe('Round 3 regressions', () => {
     const qing = world.countries.QING
     expect(qing).toBeDefined()
     if (qing === undefined) return
-    qing.econ.debt = qing.econ.gdp * 10
-    qing.econ.treasury = 0
+    qing.econ.treasury = -qing.econ.gdp * 10
     advance(world, 1, [], makeRngForWorld(world))
-    expect(qing.econ.debt).toBeLessThan(qing.econ.gdp * 2)
+    expect(-qing.econ.treasury).toBeLessThan(qing.econ.gdp * 2)
     expect(qing.pops.radicals).toBeGreaterThan(8)
   })
 

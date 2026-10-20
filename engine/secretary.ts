@@ -45,13 +45,35 @@ export function monthlyBriefing(world: WorldState): string {
   lines.push(
     `日期 ${world.date.year} 年 ${world.date.month} 月（第 ${world.tick} 回合）｜玩家国家 ${player.name}（${player.id}）`,
   )
-  const ledger = fiscalLedger(player)
+  const atWar = world.wars.some(
+    war => war.attackers.includes(player.id) || war.defenders.includes(player.id),
+  )
+  const ledger = fiscalLedger(player, { atWar, tick: world.tick })
+  const stock =
+    ledger.debt > 0
+      ? `国债 ${ledger.debt.toFixed(1)} 金`
+      : `主权基金 ${ledger.fund.toFixed(1)} 金`
   lines.push(
-    `财政：国库 ${player.econ.treasury.toFixed(1)} 金（${ledger.net.toFixed(1)} 金/月），收入 ${ledger.income.total.toFixed(1)} 金/月，支出 ${ledger.expense.total.toFixed(1)} 金/月，还本 ${ledger.debtRepayment.toFixed(1)} 金，债务 ${player.econ.debt.toFixed(1)} 金，税率 ${player.econ.taxRate}%，关税 ${player.econ.tariff}%`,
+    `财政：国库净资产 ${player.econ.treasury.toFixed(1)} 金（${ledger.net.toFixed(1)} 金/月），收入 ${ledger.income.total.toFixed(1)} 金/月，支出 ${ledger.expense.total.toFixed(1)} 金/月，${stock}，税率 ${player.econ.taxRate}%，关税 ${player.econ.tariff}%`,
   )
   lines.push(
-    `收支构成：税入 ${ledger.income.taxes.toFixed(1)} + 关税 ${ledger.income.tariffs.toFixed(1)} + 港口 ${ledger.income.ports.toFixed(1)}；陆军 ${ledger.expense.army.toFixed(1)} + 海军 ${ledger.expense.navy.toFixed(1)} + 行政 ${ledger.expense.administration.toFixed(1)} + 教育 ${ledger.expense.education.toFixed(1)} + 福利 ${ledger.expense.welfare.toFixed(1)} + 债息 ${ledger.expense.debtInterest.toFixed(1)} + 市场损耗 ${ledger.expense.marketLoss.toFixed(1)} + 设施维护 ${ledger.expense.upkeep.toFixed(1)} + 国有建设 ${ledger.expense.construction.toFixed(1)}。GDP ${player.econ.gdp.toFixed(1)} 金/月是产出，不是国库收入。`,
+    `收支构成：税入 ${ledger.income.taxes.toFixed(1)} + 关税 ${ledger.income.tariffs.toFixed(1)} + 港口 ${ledger.income.ports.toFixed(1)} + 基金收益 ${ledger.income.sovereignIncome.toFixed(1)} + 赔款收入 ${ledger.income.reparations.toFixed(1)}；陆军 ${ledger.expense.army.toFixed(1)} + 海军 ${ledger.expense.navy.toFixed(1)} + 行政 ${ledger.expense.administration.toFixed(1)} + 教育 ${ledger.expense.education.toFixed(1)} + 福利 ${ledger.expense.welfare.toFixed(1)} + 债息 ${ledger.expense.debtInterest.toFixed(1)} + 市场损耗 ${ledger.expense.marketLoss.toFixed(1)} + 设施维护 ${ledger.expense.upkeep.toFixed(1)} + 赔款支出 ${ledger.expense.reparations.toFixed(1)} + 国有建设 ${ledger.expense.construction.toFixed(1)}。GDP ${player.econ.gdp.toFixed(1)} 金/月是产出，不是国库收入。`,
   )
+  const schedules = (world.indemnities ?? []).filter(
+    schedule => schedule.from === player.id || schedule.to === player.id,
+  )
+  if (schedules.length > 0) {
+    lines.push(
+      `赔款日程：${schedules
+        .map(schedule => {
+          const paying = schedule.from === player.id
+          const otherId = paying ? schedule.to : schedule.from
+          const other = world.countries[otherId]?.name ?? otherId
+          return `${paying ? '付给' : '收自'}${other} 每月 ${schedule.monthlyAmount.toFixed(1)} 金，剩余 ${schedule.monthsLeft} 月（余 ${schedule.remaining.toFixed(1)} 金）`
+        })
+        .join('；')}`,
+    )
+  }
   lines.push(
     `社会：人口 ${player.pops.total.toFixed(0)} 万，识字率 ${pct(player.pops.literacy)}，生活水平 ${Math.round(player.pops.sol)}，激进 ${Math.round(player.pops.radicals)}，合法性 ${Math.round(player.government.legitimacy)}，权威 ${Math.round(player.government.authority)}，失业 ${player.econ.unemployment.toFixed(1)}%`,
   )

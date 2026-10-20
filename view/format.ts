@@ -144,11 +144,11 @@ export function logKindMark(kind: LogEntry['kind']): string {
 export function statusLine(world: WorldState): string {
   const player = world.countries[world.playerId]
   if (player === undefined) return '终末传奇 · 无进行中的游戏'
-  const ledger = fiscalLedger(player)
-  const surplus = ledger.net
   const wars = world.wars.filter(
     war => war.attackers.includes(player.id) || war.defenders.includes(player.id),
   )
+  const ledger = fiscalLedger(player, { atWar: wars.length > 0, tick: world.tick })
+  const surplus = ledger.net
   const warText = wars.length > 0 ? `战争×${wars.length}` : '和平'
   const pending = world.events.filter(
     event => event.countryId === player.id && !event.isResolved,
@@ -157,7 +157,10 @@ export function statusLine(world: WorldState): string {
     fmtDate(world.date),
     `[${player.flag}]${player.name}`,
     `国库${fmtMoney(player.econ.treasury)}(${fmtSigned(surplus)}金/月)`,
-    `收${fmtNumber(ledger.income.total)} 支${fmtNumber(ledger.expense.total + ledger.debtRepayment)}`,
+    `收${fmtNumber(ledger.income.total)} 支${fmtNumber(ledger.expense.total)}`,
+    ledger.debt > 0
+      ? `国债${fmtMoney(ledger.debt)}`
+      : `基金${fmtMoney(ledger.fund)}`,
     `GDP${fmtGdp(player.econ.gdp)}`,
     `合法性${Math.round(player.government.legitimacy)}`,
     `激进${Math.round(player.pops.radicals)}`,

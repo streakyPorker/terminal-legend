@@ -34,7 +34,7 @@ describe('M1 types, data and migration', () => {
     expect(qing).toBeDefined()
     if (qing === undefined) return
 
-    expect(world.version).toBe(6)
+    expect(world.version).toBe(7)
     expect(world.ironman).toBe(false)
     expect(world.secretary.delegation).toEqual({
       internal: false,
@@ -546,6 +546,17 @@ describe('M6 destiny and ironman', () => {
     expect(result.text).toContain('铁人')
     expect(fra.econ.treasury).toBe(before)
     expect(statusLine(world)).toContain('铁人')
+  })
+
+  test('destiny can push net assets negative, which is national debt', async () => {
+    const world = newWorld(18, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    const amount = -(qing.econ.treasury + 50)
+    expect(applyCheat(world, { action: 'treasury', amount }).ok).toBe(true)
+    expect(qing.econ.treasury).toBeLessThan(0)
+    expect(Math.abs(qing.econ.treasury + 50)).toBeLessThan(1e-9)
   })
 })
 

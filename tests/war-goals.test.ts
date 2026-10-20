@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { makeRngForWorld } from '../engine/data'
 import { decideForAi } from '../engine/ai'
+import { fiscalLedger } from '../engine/fiscal'
 import { advance, applyDecision, newWorld } from '../engine/sim'
 import type { Country, Decision, WorldState } from '../types'
 
@@ -67,28 +68,97 @@ describe('T4 war goals: declaration (plan §5)', () => {
 })
 
 describe('T4 reparations: gold is transferred, not destroyed (plan §5)', () => {
-  test('the paid indemnity moves to the winner and the shortfall becomes debt', () => {
+  test('the paid part settles now and the rest becomes an installment schedule', () => {
     const world = newWorld(9110, 'QING')
     declare(world, 'RUS', 'reparations')
     const qing = countryOf(world, 'QING')
     const rus = countryOf(world, 'RUS')
     const wTreasury = qing.econ.treasury
     const lTreasury = rus.econ.treasury
-    const lDebt = rus.econ.debt
     const wPrestige = qing.diplo.prestige
     const lLegit = rus.government.legitimacy
 
     const due = rus.econ.gdp * 0.1
-    const paid = Math.min(lTreasury, due)
+    const paid = Math.min(Math.max(0, lTreasury), due)
     expect(paid).toBeGreaterThan(0)
 
     makePeace(world, 'RUS', 50)
     expect(world.wars.length).toBe(0)
     expect(close(qing.econ.treasury, wTreasury + paid)).toBe(true)
     expect(close(rus.econ.treasury, lTreasury - paid)).toBe(true)
-    expect(close(rus.econ.debt, lDebt + (due - paid))).toBe(true)
+    expect(world.indemnities.length).toBe(1)
+    const schedule = world.indemnities[0]
+    expect(schedule?.from).toBe('RUS')
+    expect(schedule?.to).toBe('QING')
+    expect(close(schedule?.remaining ?? 0, due - paid)).toBe(true)
+    expect(schedule?.monthlyAmount ?? 0).toBeGreaterThan(0)
+    expect(schedule?.monthsLeft ?? 0).toBeGreaterThan(0)
+    expect(schedule?.startsAtTick).toBe(world.tick + 1)
     expect(close(qing.diplo.prestige, wPrestige + 10)).toBe(true)
     expect(close(rus.government.legitimacy, lLegit - 5)).toBe(true)
+  })
+
+  test('the victor can state the total and the maximum term; the loser plans the split', () => {
+    const world = newWorld(9111, 'QING')
+    declare(world, 'RUS', 'reparations')
+    const rus = countryOf(world, 'RUS')
+    const before = rus.econ.treasury
+    const war = world.wars[0]
+    expect(war).toBeDefined()
+    if (war === undefined) return
+    war.warScore = 50
+    const result = applyDecision(
+      world,
+      {
+        countryId: 'QING',
+        action: 'diplomacy',
+        params: {
+          target: 'RUS',
+          move: 'peace',
+          indemnityTotal: 40,
+          indemnityMonths: 24,
+        },
+      },
+      rngFor(world),
+    )
+    expect(result.ok).toBe(true)
+    const schedule = world.indemnities[0]
+    expect(schedule).toBeDefined()
+    if (schedule === undefined) return
+    const expectedLump = Math.min(Math.max(0, before), 40)
+    expect(close(schedule.remaining, 40 - expectedLump)).toBe(true)
+    expect(schedule.monthsLeft).toBeLessThanOrEqual(24)
+    expect(schedule.startsAtTick).toBe(world.tick + 1)
+    expect(close(rus.econ.treasury, before - expectedLump)).toBe(true)
+  })
+})
+
+describe('T4 reparations: monthly installments', () => {
+  test('the installment is the payer expense and the recipient income, and it shrinks the schedule', () => {
+    const world = newWorld(9112, 'QING')
+    declare(world, 'RUS', 'reparations')
+    makePeace(world, 'RUS', 50)
+    const schedule = world.indemnities[0]
+    expect(schedule).toBeDefined()
+    if (schedule === undefined) return
+    const monthly = schedule.monthlyAmount
+    const remaining = schedule.remaining
+    const months = schedule.monthsLeft
+
+    advance(world, 1, [], rngFor(world))
+    const qing = countryOf(world, 'QING')
+    const rus = countryOf(world, 'RUS')
+    expect(close(qing.econ.reparationsReceived, monthly)).toBe(true)
+    expect(close(rus.econ.reparationsPaid, monthly)).toBe(true)
+    expect(close(qing.econ.reparationsReceived, rus.econ.reparationsPaid)).toBe(true)
+    expect(fiscalLedger(qing).income.reparations).toBeGreaterThan(0)
+    expect(fiscalLedger(rus).expense.reparations).toBeGreaterThan(0)
+
+    const next = world.indemnities[0]
+    expect(next).toBeDefined()
+    if (next === undefined) return
+    expect(close(next.remaining, Math.max(0, remaining - monthly))).toBe(true)
+    expect(next.monthsLeft).toBe(months - 1)
   })
 })
 

@@ -298,8 +298,12 @@ export type ConstructionProject = {
 
 export type Economy = {
   gdp: number
+  /**
+   * Signed net assets, in gold. Positive is the sovereign fund (earns the
+   * fund rate); negative is national debt (pays the debt rate). There is no
+   * separate debt stock: debt = max(0, -treasury).
+   */
   treasury: number
-  debt: number
   income: number
   expense: number
   taxRate: number
@@ -344,8 +348,14 @@ export type Economy = {
   lastConstructionSpend: number
   lastStateConstructionSpend: number
   lastPrivateConstructionSpend: number
-  /** Principal repaid from the treasury last month. */
-  lastDebtRepayment: number
+  /** Installment reparations paid this month, folded into expense. */
+  reparationsPaid: number
+  /** Installment reparations received this month, folded into income. */
+  reparationsReceived: number
+  /** Sovereign-fund interest applied in the last settlement (income side). */
+  lastFundIncome: number
+  /** National-debt interest applied in the last settlement (expense side). */
+  lastDebtInterest: number
   /** Gold paid for imports last month, at unit prices (plan 0004 §2.4). */
   lastImportBill: number
   /** Gold earned from exports last month, at unit prices. */
@@ -354,6 +364,8 @@ export type Economy = {
   lastTariffRevenue: number
   /** lastExportRevenue − lastImportBill; feeds next month's income (plan 0004 §2.4). */
   lastTradeBalance: number
+  /** Unfinanced trade gap deducted from net assets last month (not an expense). */
+  lastTradeDebt: number
   /** Imported coal/iron/timber last month, feeding next month's effective endowment. */
   resourceImports: Record<ResourceId, number>
   /** Tick until which a post-default restructuring halves capacity and caps new debt. */
@@ -446,6 +458,24 @@ export type War = {
   goal: WarGoal
   /** The declaring country; its side's win/loss decides which column applies. */
   goalOwner: string
+}
+
+/**
+ * A reparations schedule. The victor sets the total and the maximum term; the
+ * loser splits it into an immediate lump sum and this monthly installment
+ * schedule. Installments flow through income (recipient) and expense (payer).
+ */
+export type WarIndemnity = {
+  id: string
+  from: string
+  to: string
+  monthlyAmount: number
+  monthsLeft: number
+  /** Gold still owed after the lump sum and any installments already paid. */
+  remaining: number
+  /** First tick that charges an installment (the next simulated month). */
+  startsAtTick: number
+  startedAt: GameDate
 }
 
 /** A participant's declared position in a situation (plan 0004 §4.2). */
@@ -584,6 +614,8 @@ export type WorldState = {
   playerId: string
   countries: Record<string, Country>
   wars: War[]
+  /** Active installment reparations (lump sums do not appear here). */
+  indemnities: WarIndemnity[]
   events: GameEvent[]
   log: LogEntry[]
   /** Auditable trade tensions, newest last; only the last 24 months are kept (plan 0004 §2.7). */

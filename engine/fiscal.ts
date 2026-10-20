@@ -4,11 +4,26 @@ import { applyModifiers } from './modifiers'
 /**
  * The treasury's monthly cash account, split by source and by category.
  *
+ * The treasury is a single signed net-assets balance: positive is the
+ * sovereign fund, negative is national debt. There is no separate debt stock.
  * GDP is output valued at base prices; the treasury only ever sees the tax
- * wedge on that output plus tariffs and port dues. Keeping the two ledgers
- * separate is the point of this module: a big GDP with a thin tax take is a
- * perfectly ordinary state of affairs.
+ * wedge on that output, tariffs, port dues and the fund's interest.
  */
+
+export type FiscalContext = {
+  atWar: boolean
+  tick: number
+}
+
+const DEFAULT_CONTEXT: FiscalContext = { atWar: false, tick: 0 }
+
+/** National debt: the negative half of net assets. */
+export const nationalDebt = (country: Country): number =>
+  Math.max(0, -country.econ.treasury)
+
+/** Sovereign fund: the positive half of net assets. */
+export const sovereignFund = (country: Country): number =>
+  Math.max(0, country.econ.treasury)
 
 /** Raw monthly revenue by source, before the `income` modifier. */
 export type IncomeParts = {
@@ -18,6 +33,10 @@ export type IncomeParts = {
   tariffs: number
   /** Port dues. */
   ports: number
+  /** Interest earned by a positive net-assets balance. */
+  sovereignIncome: number
+  /** Installment reparations received this month. */
+  reparations: number
 }
 
 /** Raw monthly expense by category, before the `expense` modifier. */
@@ -27,9 +46,12 @@ export type ExpenseParts = {
   administration: number
   education: number
   welfare: number
+  /** Interest paid on a negative net-assets balance. */
   debtInterest: number
   marketLoss: number
   upkeep: number
+  /** Installment reparations paid this month. */
+  reparations: number
 }
 
 export type FiscalLedger = {
@@ -41,10 +63,15 @@ export type FiscalLedger = {
     construction: number
     total: number
   }
-  /** Principal repaid from the treasury (not an expense; a balance-sheet item). */
-  debtRepayment: number
-  /** income − expense − debtRepayment. */
+  /** income − expense. */
   net: number
+  /** Unfinanced trade gap deducted from net assets (not an expense). */
+  tradeGap: number
+  /** Derived stocks and the rates they earned/paid this month. */
+  debt: number
+  fund: number
+  debtRate: number
+  fundRate: number
 }
 
 const clamp = (value: number, min: number, max: number): number =>
@@ -65,10 +92,63 @@ export function taxCompliance(country: Country): number {
     : clamp(1 - (country.econ.taxRate - 25) * 0.015, 0.45, 1)
 }
 
+/**
+ * Monthly rate paid on national debt. War, a weak mandate, low prestige,
+ * unrest and a post-default window all make borrowing dearer.
+ */
+export function debtRate(
+  country: Country,
+  context: FiscalContext = DEFAULT_CONTEXT,
+): number {
+  const weakMandate =
+    clamp((50 - country.government.legitimacy) / 50, 0, 1) * 0.004
+  const lowPrestige = clamp((20 - country.diplo.prestige) / 20, 0, 1) * 0.004
+  const unrest = country.pops.radicals >= 50 ? 0.002 : 0
+  // Mirrors the trade-capacity window (`tick <= restructuredUntilTick`).
+  const restructuring =
+    country.econ.restructuredUntilTick > 0 &&
+    context.tick <= country.econ.restructuredUntilTick
+      ? 0.004
+      : 0
+  return clamp(
+    0.004 +
+      (context.atWar ? 0.002 : 0) +
+      weakMandate +
+      lowPrestige +
+      unrest +
+      restructuring,
+    0.002,
+    0.02,
+  )
+}
+
+/**
+ * Monthly rate earned by the sovereign fund. A legitimate, prestigious state
+ * with open markets earns more; war drags it down.
+ */
+export function fundRate(
+  country: Country,
+  context: FiscalContext = DEFAULT_CONTEXT,
+): number {
+  const legitimacy = (country.government.legitimacy / 100) * 0.002
+  const prestige = clamp(country.diplo.prestige / 100, 0, 1) * 0.002
+  const access = country.econ.marketAccess * 0.001
+  return clamp(
+    0.0015 +
+      legitimacy +
+      prestige +
+      access -
+      (context.atWar ? 0.0005 : 0),
+    0.0002,
+    0.006,
+  )
+}
+
 export function incomeParts(
   country: Country,
   gdp: number,
   tariffRevenue: number,
+  context: FiscalContext = DEFAULT_CONTEXT,
 ): IncomeParts {
   return {
     taxes:
@@ -79,10 +159,16 @@ export function incomeParts(
       taxCompliance(country),
     tariffs: tariffRevenue,
     ports: country.econ.buildings.ports * 0.02,
+    sovereignIncome: sovereignFund(country) * fundRate(country, context),
+    reparations: country.econ.reparationsReceived ?? 0,
   }
 }
 
-export function expenseParts(country: Country, gdp: number): ExpenseParts {
+export function expenseParts(
+  country: Country,
+  gdp: number,
+  context: FiscalContext = DEFAULT_CONTEXT,
+): ExpenseParts {
   const b = country.econ.buildings
   const sp = country.econ.spending
   const popFactor = Math.max(0.1, country.pops.total / 1000)
@@ -93,17 +179,15 @@ export function expenseParts(country: Country, gdp: number): ExpenseParts {
     administration: popFactor * 0.12 + sp.bureaucracy * popFactor * 0.02,
     education: sp.education * popFactor * 0.03,
     welfare: sp.welfare * popFactor * 0.03,
-    debtInterest: country.econ.debt * 0.004,
+    debtInterest: nationalDebt(country) * debtRate(country, context),
     marketLoss:
       gdp *
       (1 - applyModifiers(country, 'marketAccess', country.econ.marketAccess)) *
       0.02,
     upkeep: (b.universities + b.barracks) * 0.01,
+    reparations: country.econ.reparationsPaid ?? 0,
   }
 }
-
-const total = (parts: Record<string, number>): number =>
-  Object.values(parts).reduce((sum, value) => sum + value, 0)
 
 /**
  * Reads the last settled month back out of the stored totals. The raw parts
@@ -111,17 +195,44 @@ const total = (parts: Record<string, number>): number =>
  * the composition adds up exactly to `econ.income` / `econ.expense` (which
  * already carry the `income` / `expense` modifiers and construction spending).
  */
-export function fiscalLedger(country: Country): FiscalLedger {
+export function fiscalLedger(
+  country: Country,
+  context: FiscalContext = DEFAULT_CONTEXT,
+): FiscalLedger {
   const econ = country.econ
-  const rawIncome = incomeParts(country, econ.gdp, econ.lastTariffRevenue)
-  const rawIncomeTotal = total(rawIncome)
-  const incomeFactor = rawIncomeTotal > 0 ? econ.income / rawIncomeTotal : 1
+  const rawIncome = incomeParts(country, econ.gdp, econ.lastTariffRevenue, context)
+  const rawIncomeNoInterest =
+    rawIncome.taxes + rawIncome.tariffs + rawIncome.ports + rawIncome.reparations
+  // The settlement stored the interest actually applied on the opening
+  // balance; using it here keeps a month that crossed zero from displaying
+  // the other side's interest.
+  const fundIncome = Number.isFinite(econ.lastFundIncome)
+    ? econ.lastFundIncome
+    : rawIncome.sovereignIncome
+  const incomeNonInterest = Math.max(0, econ.income - fundIncome)
+  const incomeFactor =
+    rawIncomeNoInterest > 0 ? incomeNonInterest / rawIncomeNoInterest : 1
 
-  const rawExpense = expenseParts(country, econ.gdp)
-  const rawExpenseTotal = total(rawExpense)
+  const rawExpense = expenseParts(country, econ.gdp, context)
+  const rawExpenseNoInterest =
+    rawExpense.army +
+    rawExpense.navy +
+    rawExpense.administration +
+    rawExpense.education +
+    rawExpense.welfare +
+    rawExpense.marketLoss +
+    rawExpense.upkeep +
+    rawExpense.reparations
+  const debtInterest = Number.isFinite(econ.lastDebtInterest)
+    ? econ.lastDebtInterest
+    : rawExpense.debtInterest
   const construction = Math.max(0, econ.lastStateConstructionSpend)
-  const operatingExpense = Math.max(0, econ.expense - construction)
-  const expenseFactor = rawExpenseTotal > 0 ? operatingExpense / rawExpenseTotal : 1
+  const expenseNonInterest = Math.max(
+    0,
+    econ.expense - construction - debtInterest,
+  )
+  const expenseFactor =
+    rawExpenseNoInterest > 0 ? expenseNonInterest / rawExpenseNoInterest : 1
 
   return {
     gdp: econ.gdp,
@@ -129,6 +240,8 @@ export function fiscalLedger(country: Country): FiscalLedger {
       taxes: rawIncome.taxes * incomeFactor,
       tariffs: rawIncome.tariffs * incomeFactor,
       ports: rawIncome.ports * incomeFactor,
+      sovereignIncome: fundIncome,
+      reparations: rawIncome.reparations * incomeFactor,
       total: econ.income,
     },
     expense: {
@@ -137,13 +250,18 @@ export function fiscalLedger(country: Country): FiscalLedger {
       administration: rawExpense.administration * expenseFactor,
       education: rawExpense.education * expenseFactor,
       welfare: rawExpense.welfare * expenseFactor,
-      debtInterest: rawExpense.debtInterest * expenseFactor,
+      debtInterest,
       marketLoss: rawExpense.marketLoss * expenseFactor,
       upkeep: rawExpense.upkeep * expenseFactor,
+      reparations: rawExpense.reparations * expenseFactor,
       construction,
       total: econ.expense,
     },
-    debtRepayment: econ.lastDebtRepayment,
-    net: econ.income - econ.expense - econ.lastDebtRepayment,
+    net: econ.income - econ.expense,
+    tradeGap: econ.lastTradeDebt ?? 0,
+    debt: nationalDebt(country),
+    fund: sovereignFund(country),
+    debtRate: debtRate(country, context),
+    fundRate: fundRate(country, context),
   }
 }
