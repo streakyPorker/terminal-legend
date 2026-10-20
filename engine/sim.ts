@@ -14,6 +14,7 @@ import type {
   PolicyProposal,
   TradeTension,
   War,
+  WarGoal,
   WorldState,
 } from '../types'
 import type { LaborStats } from './data'
@@ -31,6 +32,7 @@ import {
   INVESTMENT_DEMAND,
   SPENDING,
   SUBSISTENCE,
+  WAR_GOAL_NAMES,
   buildOf,
   createWorld,
   deriveBureaucracy,
@@ -113,6 +115,14 @@ const num = (value: unknown, fallback: number): number => {
 /** A validated GoodId, or undefined; the cast is safe because of the check. */
 const asGood = (value: string): GoodId | undefined =>
   (GOOD_IDS as readonly string[]).includes(value) ? (value as GoodId) : undefined
+
+const WAR_GOALS = Object.keys(WAR_GOAL_NAMES) as WarGoal[]
+
+/** An unknown or absent goal falls back to `reparations` (plan §5). */
+const asWarGoal = (value: unknown): WarGoal => {
+  const id = String(value)
+  return (WAR_GOALS as readonly string[]).includes(id) ? (id as WarGoal) : 'reparations'
+}
 
 export function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
@@ -1502,6 +1512,162 @@ function strength(world: WorldState, ids: string[]): number {
   return total
 }
 
+/**
+ * Peace terms for one war (plan 0004 §5). The goal owner's side winning applies
+ * the victory column, its side losing the defeat column; effects land on every
+ * country of a side, mirroring the belligerent loop in `endWar`.
+ */
+function applyWarGoal(
+  world: WorldState,
+  war: War,
+  goalOwnerWon: boolean,
+  winnerIds: string[],
+  loserIds: string[],
+): void {
+  const goalSide = goalOwnerWon ? winnerIds : loserIds
+  const otherSide = goalOwnerWon ? loserIds : winnerIds
+
+  if (!goalOwnerWon) {
+    for (const id of goalSide) {
+      const country = world.countries[id]
+      if (country === undefined) continue
+      switch (war.goal) {
+        case 'reparations':
+          country.diplo.prestige = clamp(country.diplo.prestige - 10, 0, 240)
+          country.government.legitimacy = clamp(country.government.legitimacy - 3, 0, 100)
+          break
+        case 'openMarket':
+          for (const otherId of otherSide) {
+            country.diplo.relations[otherId] = clamp(
+              (country.diplo.relations[otherId] ?? 0) - 10,
+              -100,
+              100,
+            )
+          }
+          country.diplo.prestige = clamp(country.diplo.prestige - 5, 0, 240)
+          break
+        case 'sphere':
+          country.diplo.prestige = clamp(country.diplo.prestige - 8, 0, 240)
+          country.government.legitimacy = clamp(country.government.legitimacy - 2, 0, 100)
+          break
+        case 'humiliation':
+          country.diplo.prestige = clamp(country.diplo.prestige - 8, 0, 240)
+          country.government.legitimacy = clamp(country.government.legitimacy - 3, 0, 100)
+          break
+      }
+    }
+    return
+  }
+
+  switch (war.goal) {
+    case 'reparations': {
+      const recipient = world.countries[war.goalOwner]
+      for (const id of loserIds) {
+        const loser = world.countries[id]
+        if (loser === undefined) continue
+        const due = loser.econ.gdp * 0.1
+        const paid = Math.min(Math.max(0, loser.econ.treasury), due)
+        loser.econ.treasury -= paid
+        // Whatever cannot be paid becomes the loser's debt, so the indemnity is
+        // conserved as either gold or a claim (plan §5).
+        loser.econ.debt += Math.max(0, due - paid)
+        loser.government.legitimacy = clamp(loser.government.legitimacy - 5, 0, 100)
+        // The paid gold is credited to the winner instead of being destroyed.
+        if (recipient !== undefined && paid > 0) recipient.econ.treasury += paid
+      }
+      for (const id of winnerIds) {
+        const winner = world.countries[id]
+        if (winner === undefined) continue
+        winner.diplo.prestige = clamp(winner.diplo.prestige + 10, 0, 240)
+      }
+      break
+    }
+    case 'openMarket': {
+      for (const id of loserIds) {
+        const loser = world.countries[id]
+        if (loser === undefined) continue
+        loser.econ.tariff = clamp(loser.econ.tariff - 10, 0, 60)
+        loser.government.legitimacy = clamp(loser.government.legitimacy - 4, 0, 100)
+        addModifier(loser, {
+          id: `war:${war.id}:openMarket:access`,
+          label: '门户开放',
+          stat: 'marketAccess',
+          stack: 'flat',
+          value: 0.15,
+          monthsLeft: 24,
+          source: `war:${war.id}`,
+        })
+      }
+      for (const id of winnerIds) {
+        const winner = world.countries[id]
+        if (winner === undefined) continue
+        addModifier(winner, {
+          id: `war:${war.id}:openMarket:income`,
+          label: '通商特权',
+          stat: 'income',
+          stack: 'percent',
+          value: 5,
+          monthsLeft: 24,
+          source: `war:${war.id}`,
+        })
+      }
+      break
+    }
+    case 'sphere': {
+      for (const id of winnerIds) {
+        const winner = world.countries[id]
+        if (winner === undefined) continue
+        for (const loserId of loserIds) {
+          if (!winner.diplo.sphere.includes(loserId)) winner.diplo.sphere.push(loserId)
+        }
+        addModifier(winner, {
+          id: `war:${war.id}:sphere:access`,
+          label: '势力范围',
+          stat: 'marketAccess',
+          stack: 'flat',
+          value: 0.05,
+          monthsLeft: 24,
+          source: `war:${war.id}`,
+        })
+      }
+      // Both sides fall an extra 10 beyond the belligerent relation decline.
+      for (const id of winnerIds) {
+        const winner = world.countries[id]
+        if (winner === undefined) continue
+        for (const loserId of loserIds) {
+          winner.diplo.relations[loserId] = clamp(
+            (winner.diplo.relations[loserId] ?? 0) - 10,
+            -100,
+            100,
+          )
+          const loser = world.countries[loserId]
+          if (loser === undefined) continue
+          loser.diplo.relations[id] = clamp(
+            (loser.diplo.relations[id] ?? 0) - 10,
+            -100,
+            100,
+          )
+        }
+      }
+      break
+    }
+    case 'humiliation': {
+      for (const id of winnerIds) {
+        const winner = world.countries[id]
+        if (winner === undefined) continue
+        winner.diplo.prestige = clamp(winner.diplo.prestige + 15, 0, 240)
+      }
+      for (const id of loserIds) {
+        const loser = world.countries[id]
+        if (loser === undefined) continue
+        loser.diplo.prestige = clamp(loser.diplo.prestige - 15, 0, 240)
+        loser.government.legitimacy = clamp(loser.government.legitimacy - 8, 0, 100)
+      }
+      break
+    }
+  }
+}
+
 function endWar(
   world: WorldState,
   war: War,
@@ -1513,10 +1679,11 @@ function endWar(
   const winnerIds = winner === 'attackers' ? attackerIds : winner === 'defenders' ? defenderIds : []
   const loserIds = winner === 'attackers' ? defenderIds : winner === 'defenders' ? attackerIds : []
 
+  // Exhaustion recovery, morale and leader memory stay goal-independent; only
+  // the generic prestige/radical effects are replaced (plan §5).
   for (const id of winnerIds) {
     const country = world.countries[id]
     if (country === undefined) continue
-    country.diplo.prestige = clamp(country.diplo.prestige + 12, 0, 240)
     country.military.exhaustion = clamp(country.military.exhaustion - 15, 0, 100)
     country.military.morale = clamp(country.military.morale + 10, 20, 100)
     country.leader.memory.push(`${war.name}以胜利告终`)
@@ -1525,13 +1692,14 @@ function endWar(
   for (const id of loserIds) {
     const country = world.countries[id]
     if (country === undefined) continue
-    const reparations = Math.min(country.econ.treasury, country.econ.gdp * 0.08)
-    country.econ.treasury -= reparations
-    country.diplo.prestige = clamp(country.diplo.prestige - 15, 0, 240)
     country.military.exhaustion = clamp(country.military.exhaustion + 5, 0, 100)
-    country.pops.radicals = clamp(country.pops.radicals + 6, 0, 100)
     country.leader.memory.push(`${war.name}以失败告终`)
     if (country.leader.memory.length > 8) country.leader.memory.shift()
+  }
+
+  // A white peace or the 60-month timeout settles no goal (plan §5).
+  if (winner !== 'white') {
+    applyWarGoal(world, war, winnerIds.includes(war.goalOwner), winnerIds, loserIds)
   }
 
   for (const id of [...attackerIds, ...defenderIds]) {
@@ -2143,6 +2311,8 @@ export function applyDecision(
             battles: 0,
             reason: String(params.reason ?? '边境争端'),
             lastEvent: '战争爆发',
+            goal: asWarGoal(params.goal),
+            goalOwner: country.id,
           })
           country.diplo.relations[target.id] = clamp(current - 50, -100, 100)
           target.diplo.relations[country.id] = clamp(
@@ -2574,7 +2744,7 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
       return {
         countryId: country.id,
         action: 'diplomacy',
-        params: { target: target.id, move: 'war', reason: '宿怨与野心' },
+        params: { target: target.id, move: 'war', reason: '宿怨与野心', goal: 'reparations' },
         narrative: `${country.name}对${target.name}发出最后通牒`,
       }
     }

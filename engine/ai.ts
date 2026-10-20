@@ -1,6 +1,6 @@
 import type { EngineInterface } from 'claude-code'
 import type { Country, GameDate, WorldState } from '../types'
-import { BUILDING_IDS, GOODS, GOOD_IDS, SPENDING, techName } from './data'
+import { BUILDING_IDS, GOODS, GOOD_IDS, SPENDING, WAR_GOAL_NAMES, techName } from './data'
 
 import type { Rng } from './rng'
 import { SENSITIVE_GOODS, randomDecision, type Decision } from './sim'
@@ -22,6 +22,7 @@ const SYSTEM = `你是 19 世纪大战略游戏的世界决策引擎。你为每
 - invest 调整投资信心：params.amount 取 -3..3，结果被限制在该国基准上下 10 点内。
 - diplomacy 需要 params.target（国家代码）与 params.move（improve, insult, alliance, rival, gift, war, peace, embargo, unembargo, tension）。
   - embargo/unembargo 可选 params.good（商品代码，缺省=全部）与 params.months（1..60，缺省=永久）。
+  - war 可选 params.goal（reparations=赔款, openMarket=开放市场, sphere=势力范围, humiliation=威望羞辱，缺省=reparations），决定停战时的和约条款。
   - tension 需要 params.good（只能取 opium/arms/grain）与 params.relationDelta（-10..10），表示对 target 的关系张力。
 - law 的 name 只能是：教育改革, 福利改革, 自由贸易, 保护关税, 征兵制, 宗教宽容。
 - 贸易简报给出各国贸易收支、Top-3 伙伴、鸦片进口、关税收入与资源进口；禁运与战争会切断对应贸易，若被禁运应寻找替代伙伴。
@@ -232,6 +233,14 @@ function validParams(
       const move = String(params.move ?? '')
       if (world.countries[target] === undefined || target === countryId) return false
       if (!DIPLOMACY_MOVES.has(move)) return false
+      // A war goal is optional (defaults to reparations) but must be known.
+      if (
+        move === 'war' &&
+        params.goal !== undefined &&
+        !(Object.keys(WAR_GOAL_NAMES) as string[]).includes(String(params.goal))
+      ) {
+        return false
+      }
       const knownGood = (value: unknown): boolean => {
         const id = String(value ?? '')
         return (GOOD_IDS as readonly string[]).includes(id)

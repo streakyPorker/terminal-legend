@@ -427,6 +427,9 @@ export type Country = {
   modifiers: Modifier[]
 }
 
+/** The four peace aims a war may be declared for (plan 0004 §5). */
+export type WarGoal = 'reparations' | 'openMarket' | 'sphere' | 'humiliation'
+
 export type War = {
   id: string
   name: string
@@ -439,6 +442,10 @@ export type War = {
   battles: number
   reason: string
   lastEvent: string
+  /** Peace terms key off this, not a generic victory (plan 0004 §5). */
+  goal: WarGoal
+  /** The declaring country; its side's win/loss decides which column applies. */
+  goalOwner: string
 }
 
 export type EventOption = {

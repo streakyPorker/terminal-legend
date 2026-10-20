@@ -15,6 +15,7 @@ import type {
   SpendingCategory,
   TradeState,
   UiState,
+  WarGoal,
   WorldState,
 } from '../types'
 import { makeRng, type Rng } from './rng'
@@ -22,6 +23,14 @@ import { applyModifiers } from './modifiers'
 
 export const START_YEAR = 1836
 export const START_MONTH = 1
+
+/** Chinese display labels for the four war goals (plan 0004 §5). */
+export const WAR_GOAL_NAMES: Record<WarGoal, string> = {
+  reparations: '赔款',
+  openMarket: '开放市场',
+  sphere: '势力范围',
+  humiliation: '威望羞辱',
+}
 
 export const GOODS: Record<GoodId, { name: string; basePrice: number }> = {
   grain: { name: '粮食', basePrice: 1 },

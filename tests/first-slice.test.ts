@@ -471,6 +471,8 @@ describe('M4/M5 council and managed runs', () => {
       battles: 0,
       reason: '测试',
       lastEvent: '开战',
+      goal: 'reparations',
+      goalOwner: 'GBR',
     })
     expect(councilInterrupt(before, withWar)).toBe('新的战争')
     expect(councilInterrupt(withWar, before)).toBe('战争结束')
@@ -494,6 +496,8 @@ describe('M4/M5 council and managed runs', () => {
       battles: 0,
       reason: '测试',
       lastEvent: '开战',
+      goal: 'reparations',
+      goalOwner: 'GBR',
     })
     expect(councilInterrupt(beforeWar, world)).toBe('新的战争')
   })

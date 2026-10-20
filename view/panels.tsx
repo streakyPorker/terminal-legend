@@ -9,6 +9,7 @@ import {
   RESOURCE_NAMES,
   SPENDING,
   TECHS,
+  WAR_GOAL_NAMES,
   techCost,
   techName,
 } from '../engine/data'
@@ -685,7 +686,7 @@ function DiplomacyPanel(props: { ui: UiKit; world: WorldState }): any {
         ) : (
           props.world.wars.map(war => (
             <Box flexDirection="column">
-              <Text color="red" wrap="truncate">{war.name} · 第 {war.months} 月</Text>
+              <Text color="red" wrap="truncate">{war.name} · 第 {war.months} 月 · 目标{WAR_GOAL_NAMES[war.goal]}</Text>
               <Text dimColor wrap="truncate">{war.attackers.join(',')} vs {war.defenders.join(',')} · {war.lastEvent}</Text>
               <Box flexDirection="row" columnGap={1}>
                 <Text dimColor>战争分数</Text>

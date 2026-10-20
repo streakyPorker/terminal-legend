@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { PolicyProposal, TabId, UiState, WorldState } from '../types'
 import { MODIFIER_STATS } from '../engine/modifiers'
-import { BUILDINGS, COUNTRY_SEEDS, GOOD_IDS, initialUi, makeRngForWorld } from '../engine/data'
+import { BUILDINGS, COUNTRY_SEEDS, GOOD_IDS, WAR_GOAL_NAMES, initialUi, makeRngForWorld } from '../engine/data'
 import { decideForAi, describeWorldForNarrator } from '../engine/ai'
 import {
   advance,
@@ -149,7 +149,7 @@ function statusText(world: WorldState): string {
     lines.push('', '战争：')
     for (const war of wars) {
       lines.push(
-        `- ${war.name}：${war.attackers.join(',')} vs ${war.defenders.join(',')}，分数 ${Math.round(war.warScore)}，${war.lastEvent}`,
+        `- ${war.name}（目标：${WAR_GOAL_NAMES[war.goal]}）：${war.attackers.join(',')} vs ${war.defenders.join(',')}，分数 ${Math.round(war.warScore)}，${war.lastEvent}`,
       )
     }
   }
@@ -842,6 +842,11 @@ const TOOL_SPECS: {
           description: 'tension 的关系张力（-10..10）。',
         },
         reason: { type: 'string', description: '宣战/禁运/张力的理由，可选。' },
+        goal: {
+          type: 'string',
+          enum: ['reparations', 'openMarket', 'sphere', 'humiliation'],
+          description: 'war 的战争目标，决定停战时的和约条款；缺省 reparations。',
+        },
       },
       required: ['target', 'move'],
       additionalProperties: false,
@@ -1492,6 +1497,7 @@ export const register: Register = (on, options) => {
       if (typeof args.months === 'number') params.months = args.months
       if (typeof args.relationDelta === 'number') params.relationDelta = args.relationDelta
       if (typeof args.reason === 'string') params.reason = args.reason
+      if (typeof args.goal === 'string') params.goal = args.goal
       const result = applyDecision(
         world,
         { countryId: world.playerId, action: 'diplomacy', params },
