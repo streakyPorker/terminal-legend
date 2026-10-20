@@ -563,6 +563,42 @@ describe('M6 destiny and ironman', () => {
     expect(world.log.some(entry => entry.text.includes('[天命]'))).toBe(true)
   })
 
+  test('destiny completes every state project and leaves private ones', async () => {
+    const world = newWorld(19, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.econ.constructionQueue = [
+      {
+        id: 'state-1',
+        building: 'factories',
+        count: 2,
+        owner: 'state',
+        monthsLeft: 4,
+        monthlyCost: 2,
+        lastSpend: 0,
+        progress: 0,
+        startedAt: { ...world.date },
+      },
+      {
+        id: 'private-1',
+        building: 'mines',
+        count: 1,
+        owner: 'private',
+        monthsLeft: 3,
+        monthlyCost: 1,
+        lastSpend: 0,
+        progress: 0,
+        startedAt: { ...world.date },
+      },
+    ]
+    const factories = qing.econ.buildings.factories
+    const result = applyCheat(world, { action: 'finishProjects' })
+    expect(result.ok).toBe(true)
+    expect(qing.econ.buildings.factories).toBe(factories + 2)
+    expect(qing.econ.constructionQueue.map(one => one.id)).toEqual(['private-1'])
+  })
+
   test('ironman refuses every destiny action', async () => {
     const world = newWorld(17, 'FRA')
     world.ironman = true

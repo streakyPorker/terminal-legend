@@ -771,7 +771,7 @@ const TOOL_SPECS: {
   {
     name: 'v3_cheat',
     description:
-      '终末传奇（天命）：修改玩家国家的金钱、科技点、建筑、关系、战争分数、日期，或触发事件、更换领袖、施加修正。铁人模式下拒绝。action 取值：treasury（amount）、techPoints（amount）、building（building/count）、relations（country/amount）、warScore（country/amount）、date（year/month）、event（kind 可选）、leader（name/title/persona）、modifier（stat/stack/value/months/label）。',
+      '终末传奇（天命）：修改玩家国家的金钱、科技点、建筑、关系、战争分数、日期，或触发事件、更换领袖、施加修正、立即完成国有建造队列。铁人模式下拒绝。action 取值：treasury（amount）、techPoints（amount）、building（building/count）、finishProjects（完成全部国有在建项目）、relations（country/amount）、warScore（country/amount）、date（year/month）、event（kind 可选）、leader（name/title/persona）、modifier（stat/stack/value/months/label）。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -781,6 +781,7 @@ const TOOL_SPECS: {
             'treasury',
             'techPoints',
             'building',
+            'finishProjects',
             'relations',
             'warScore',
             'date',
@@ -1268,7 +1269,13 @@ export const register: Register = (on, options) => {
           const lower = (parts[1] ?? '').toLowerCase()
           // The tool schema spells two actions in camelCase; accept either.
           const action =
-            lower === 'techpoints' ? 'techPoints' : lower === 'warscore' ? 'warScore' : lower
+            lower === 'techpoints'
+              ? 'techPoints'
+              : lower === 'warscore'
+                ? 'warScore'
+                : lower === 'finishprojects'
+                  ? 'finishProjects'
+                  : lower
           const params: CheatParams = { action }
           if (action === 'treasury' || action === 'techPoints') {
             params.amount = Number(parts[2] ?? 0)
@@ -1281,6 +1288,8 @@ export const register: Register = (on, options) => {
           } else if (action === 'date') {
             params.year = Number(parts[2] ?? current.world.date.year)
             params.month = Number(parts[3] ?? current.world.date.month)
+          } else if (action === 'finishProjects') {
+            // No parameters: completes every state project in the queue.
           } else if (action === 'event') {
             if (parts[2] !== undefined) params.kind = parts[2]
           } else if (action === 'leader') {
@@ -1292,7 +1301,7 @@ export const register: Register = (on, options) => {
             if (parts[5] !== undefined) params.months = Number(parts[5])
           } else {
             return {
-              text: '用法：/v3 cheat treasury|techPoints <数值>｜building <建筑> <数量>｜relations <国家> <数值>｜warScore <国家> <数值>｜date <年> <月>｜event [类型]｜leader <姓名>',
+              text: '用法：/v3 cheat treasury|techPoints <数值>｜building <建筑> <数量>｜finishProjects｜relations <国家> <数值>｜warScore <国家> <数值>｜date <年> <月>｜event [类型]｜leader <姓名>',
             }
           }
           const world = clone(current.world)

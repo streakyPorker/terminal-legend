@@ -1,5 +1,5 @@
 import type { ModifierStack, ModifierStat, WorldState } from '../types'
-import { buildOf, makeRngForWorld, spawnEvent } from './data'
+import { BUILDINGS, buildOf, makeRngForWorld, spawnEvent } from './data'
 import { MODIFIER_STATS, MODIFIER_STAT_NAMES, addModifier } from './modifiers'
 import { clamp, completeBuilding } from './sim'
 
@@ -52,6 +52,25 @@ export function applyCheat(
       // bureaucracy, so removing a railroad also removes its infrastructure.
       completeBuilding(player, id, count)
       text = `${player.name}的${id}数量${count > 0 ? '增加' : '减少'} ${Math.abs(count)}，现为 ${player.econ.buildings[id]}`
+      break
+    }
+    case 'finishProjects': {
+      const stateProjects = player.econ.constructionQueue.filter(
+        project => (project.owner ?? 'state') !== 'private',
+      )
+      if (stateProjects.length === 0) {
+        return { ok: false, text: '国有建造队列为空。' }
+      }
+      const summary = stateProjects
+        .map(project => `${BUILDINGS[project.building].name}×${project.count}`)
+        .join('、')
+      for (const project of stateProjects) {
+        completeBuilding(player, project.building, project.count)
+      }
+      player.econ.constructionQueue = player.econ.constructionQueue.filter(
+        project => (project.owner ?? 'state') === 'private',
+      )
+      text = `国有建造队列全部完成：${summary}`
       break
     }
     case 'relations': {
