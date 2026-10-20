@@ -52,7 +52,7 @@ describe('T1a world schema (v6)', () => {
     expect(world.countries.GBR?.region).toBe('europe')
     expect(world.countries.USA?.region).toBe('americas')
     expect(world.countries.OTT?.region).toBe('middleEast')
-    expect(world.countries.GBR?.opium.outputFactor).toBe(3)
+    expect(world.countries.GBR?.opium.outputFactor).toBe(8)
     expect(qing.trade.exports).toEqual([])
     expect(qing.trade.imports).toEqual([])
     expect(qing.trade.nx).toBe(0)

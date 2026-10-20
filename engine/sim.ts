@@ -52,7 +52,18 @@ import {
   totalsFor,
 } from './modifiers'
 import { evaluateThresholds, logThresholds } from './thresholds'
-import { clearTrade, effectiveSupply, type MarketSnapshot, type TradeBalance } from './trade'
+import {
+  applyCapacity,
+  applyPaymentCapacity,
+  clearTrade,
+  deriveResourceImports,
+  effectiveResources,
+  effectiveSupply,
+  settleTrade,
+  type MarketSnapshot,
+  type TradeBalance,
+  type TradeSettlement,
+} from './trade'
 
 export type Decision = {
   countryId: string
@@ -117,10 +128,16 @@ const zeroGoods = (): Record<GoodId, number> => {
 
 const techMultiplier = (country: Country): number => 1 + country.tech.level * 0.07
 
-/** Resource multipliers for every good, for display and price formation. */
+/**
+ * Resource multipliers for every good, for display and price formation. Reads
+ * this month's effective endowments: last month's resource imports raise coal,
+ * iron and timber toward the base (the `econ.resources` base itself stays put,
+ * plan §2.6).
+ */
 export function resourceFactors(country: Country): Record<GoodId, number> {
   const out = zeroGoods()
-  for (const id of GOOD_IDS) out[id] = resourceMultiplier(country.econ.resources, id)
+  const effective = effectiveResources(country)
+  for (const id of GOOD_IDS) out[id] = resourceMultiplier(effective, id)
   return out
 }
 
@@ -357,7 +374,7 @@ export function inspectEconomy(country: Country): {
 
 export function computeEconomy(
   country: Country,
-  override?: { supply?: Record<GoodId, number>; nx?: number },
+  override?: { supply?: Record<GoodId, number>; nx?: number; tariffRevenue?: number },
 ): EconomySnapshot {
   const production = computeProduction(country)
   const breakdown = computeDemand(country)
@@ -402,14 +419,6 @@ export function computeEconomy(
   components.g *= gdpFactor
   const gdp = realGdp * gdpFactor + nx
 
-  const gross = (() => {
-    let total = 0
-    for (const id of GOOD_IDS) total += production[id] * country.econ.prices[id]
-    return total
-  })()
-  // Tariffs still ride on the abstract trade volume until the trade slice
-  // replaces it with real import flows (plan 0004).
-  const tradeVolume = gross * 0.35
   const taxEfficiency = applyModifiers(
     country,
     'taxEfficiency',
@@ -421,11 +430,13 @@ export function computeEconomy(
     country.econ.taxRate <= 25
       ? 1
       : clamp(1 - (country.econ.taxRate - 25) * 0.015, 0.45, 1)
+  // Tariff revenue is now the real gold collected on this month's import flows
+  // (plan §2.4), replacing the abstract trade-volume estimate.
   const income = applyModifiers(
     country,
     'income',
     gdp * (country.econ.taxRate / 100) * 0.45 * taxEfficiency * taxCompliance +
-      tradeVolume * (country.econ.tariff / 100) * 0.12 +
+      (override?.tariffRevenue ?? 0) +
       country.econ.buildings.ports * 0.02,
   )
 
@@ -856,10 +867,23 @@ function simulateCountry(
   country: Country,
   rng: Rng,
   log: LogEntry[],
-  incoming?: { supply: Record<GoodId, number>; nx: number },
+  incoming?: {
+    supply: Record<GoodId, number>
+    nx: number
+    settlement: TradeSettlement
+  },
 ): void {
   const oldPops = Math.max(1, country.pops.total)
-  const snap = computeEconomy(country, incoming)
+  const snap = computeEconomy(
+    country,
+    incoming === undefined
+      ? undefined
+      : {
+          supply: incoming.supply,
+          nx: incoming.nx,
+          tariffRevenue: incoming.settlement.tariffRevenue,
+        },
+  )
   // The demand computed above consumed last month's released idle capital.
   country.econ.idlePurchases = 0
 
@@ -903,6 +927,12 @@ function simulateCountry(
   if (country.econ.debt > country.econ.gdp * 3 && country.econ.treasury <= 0) {
     const before = country.econ.debt
     country.econ.debt = country.econ.gdp * 1.5
+    // Halve import capacity and cap new external debt for the next 12 months
+    // (plan §2.4).
+    country.econ.restructuredUntilTick = Math.max(
+      country.econ.restructuredUntilTick,
+      world.tick + 12,
+    )
     country.pops.radicals = clamp(country.pops.radicals + 8, 0, 100)
     country.government.legitimacy = clamp(country.government.legitimacy - 8, 0, 100)
     country.diplo.prestige = clamp(country.diplo.prestige - 8, 0, 240)
@@ -912,6 +942,28 @@ function simulateCountry(
       countryId: country.id,
       text: `[${country.flag}] ${country.name}债务违约并重组：国债从 ${before.toFixed(0)} 降至 ${country.econ.debt.toFixed(0)}`,
     })
+  }
+
+  // Gold settlement (plan §2.4): the private sector's external net accrues to
+  // or is drawn from private capital; the unfinanced shortfall becomes external
+  // debt. Applied after the treasury's own debt service so this month's new
+  // trade debt is not repaid in the same month.
+  if (incoming !== undefined) {
+    const settlement = incoming.settlement
+    if (settlement.externalNet >= 0) {
+      country.econ.privateCapital += settlement.externalNet
+    } else {
+      country.econ.privateCapital -= settlement.drawnFromCapital
+      country.econ.debt += settlement.debtIncrease
+      if (settlement.dropped > 0) {
+        log.push({
+          date: { ...world.date },
+          kind: 'economy',
+          countryId: country.id,
+          text: `[${country.flag}] ${country.name}重组期内新增外债超上限，${settlement.dropped.toFixed(1)} 金未能融资`,
+        })
+      }
+    }
   }
 
   // Income distribution: profits fund private savings, and this month's
@@ -1491,19 +1543,30 @@ function tickEvents(world: WorldState, rng: Rng, log: LogEntry[]): GameEvent[] {
 }
 
 /** Overwrites a country's trade record with this month's clearing result. */
-function recordTrade(country: Country, balance: TradeBalance): void {
+function recordTrade(
+  country: Country,
+  balance: TradeBalance,
+  capacity: number,
+  settlement: TradeSettlement,
+  resourceImports: Country['econ']['resourceImports'],
+): void {
   const trade = country.trade
   trade.exports = balance.flows.filter(flow => flow.from === country.id)
   trade.imports = balance.flows.filter(flow => flow.to === country.id)
   trade.exportValue = balance.exportValue[country.id] ?? 0
   trade.importValue = balance.importValue[country.id] ?? 0
-  trade.tariffRevenue = 0 // T1b: gold settlement fills this.
+  trade.tariffRevenue = settlement.tariffRevenue
   trade.nx = balance.nx[country.id] ?? 0
-  trade.capacity = 0 // T1b: soft capacity fills this.
+  trade.capacity = capacity
+  country.econ.lastImportBill = settlement.importBill
+  country.econ.lastExportRevenue = settlement.exportRevenue
+  country.econ.lastTariffRevenue = settlement.tariffRevenue
+  country.econ.lastTradeBalance = settlement.tradeBalance
+  country.econ.resourceImports = resourceImports
   trade.history.exportValue.push(trade.exportValue)
   trade.history.importValue.push(trade.importValue)
   trade.history.nx.push(trade.nx)
-  trade.history.tariffRevenue.push(0)
+  trade.history.tariffRevenue.push(trade.tariffRevenue)
   for (const series of Object.values(trade.history)) {
     if (series.length > 36) series.shift()
   }
@@ -1541,11 +1604,19 @@ export function advance(
     // any of them is settled, so import/export decisions are order-independent.
     const markets: Record<string, MarketSnapshot> = {}
     for (const country of countries) markets[country.id] = inspectEconomy(country)
-    // Phase B: clear each tradable good globally.
+    // Phase B: clear each tradable good globally, then cap imports by soft
+    // capacity (plan §2.3) before anything is derived from the flows.
     const balance = clearTrade(countries, markets)
+    const capacities = applyCapacity(countries, balance, world.tick)
+    // Payment capacity (plan §10) is a second, independent limiter: a country
+    // cannot fund imports past its export revenue, private capital and a small
+    // GDP-share of new debt. Applied after the soft capacity as one
+    // deterministic pass, so a country may be capped by either.
+    applyPaymentCapacity(countries, balance)
     // Phases C/D: recompute each country from its effective supply and book NX.
     for (const country of countries) {
       const market = markets[country.id] as MarketSnapshot
+      const settlement = settleTrade(country, balance.flows, world.tick)
       const supply = effectiveSupply(
         market.production,
         balance.importQty[country.id] as Record<GoodId, number>,
@@ -1554,8 +1625,15 @@ export function advance(
       simulateCountry(world, country, rng, log, {
         supply,
         nx: balance.nx[country.id] ?? 0,
+        settlement,
       })
-      recordTrade(country, balance)
+      recordTrade(
+        country,
+        balance,
+        capacities[country.id] ?? 0,
+        settlement,
+        deriveResourceImports(balance.flows, country.id),
+      )
     }
     driftRelations(world)
     resolveWars(world, rng, log)

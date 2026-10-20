@@ -1,4 +1,4 @@
-import type { Country, GoodId, TradeFlow } from '../types'
+import type { Country, GoodId, ResourceId, Resources, TradeFlow } from '../types'
 import { GOODS, GOOD_IDS, REGION_COST } from './data'
 
 export { REGION_COST }
@@ -7,6 +7,13 @@ export { REGION_COST }
 export const TOP_PARTNERS = 6
 /** Relations below this cut a partner out of the candidate list (plan §1.2). */
 export const RELATION_CUTOFF = -50
+/**
+ * Share of GDP the private sector may borrow abroad in one month to fund the
+ * import bill it cannot pay from export revenue or private capital (plan §10
+ * mitigation, §11 calibration knob). Small so a trade deficit is contained
+ * instead of being allowed to compound unbounded into external debt.
+ */
+export const MAX_MONTHLY_DEFICIT_SHARE = 0.03
 
 /** Services are the one good that never crosses a border (plan §0). */
 const NON_TRADABLE: GoodId[] = ['services']
@@ -91,7 +98,7 @@ function clearGood(
   good: GoodId,
   countries: Country[],
   markets: Record<string, MarketSnapshot>,
-  balance: TradeBalance,
+  flows: TradeFlow[],
 ): void {
   const offer = new Map<string, number>()
   const bid = new Map<string, number>()
@@ -138,39 +145,36 @@ function clearGood(
     offerRemaining.set(pair.exporter.id, (offerRemaining.get(pair.exporter.id) ?? 0) - quantity)
 
     const unitPrice = pair.exporter.econ.prices[good]
-    const basePrice = GOODS[good].basePrice
-    balance.flows.push({
+    flows.push({
       good,
       from: pair.exporter.id,
       to: pair.importer.id,
       quantity,
       unitPrice,
       landedPrice: pair.landed,
-      tariffPaid: 0, // T1b: gold settlement fills this.
+      tariffPaid: 0,
       value: quantity * unitPrice,
     })
-    balance.importQty[pair.importer.id]![good] += quantity
-    balance.exportQty[pair.exporter.id]![good] += quantity
-    balance.importValue[pair.importer.id] =
-      (balance.importValue[pair.importer.id] ?? 0) + quantity * unitPrice
-    balance.exportValue[pair.exporter.id] =
-      (balance.exportValue[pair.exporter.id] ?? 0) + quantity * unitPrice
-    balance.nx[pair.importer.id] = (balance.nx[pair.importer.id] ?? 0) - quantity * basePrice
-    balance.nx[pair.exporter.id] = (balance.nx[pair.exporter.id] ?? 0) + quantity * basePrice
   }
 }
 
+/** Country lookup by id, so per-flow tariff reads never scan the array. */
+function byId(countries: Country[]): Record<string, Country> {
+  const out: Record<string, Country> = {}
+  for (const country of countries) out[country.id] = country
+  return out
+}
+
 /**
- * Global Top-6 bilateral quantity clearing for one month (plan §2.1 phases
- * A/B, §2.2). Deterministic and pure; the caller supplies the pre-clearing
- * domestic snapshots so no country can be settled before another.
+ * Derives every aggregate from a final flow list (plan §2.5): the caller has
+ * already applied clearing and any capacity scaling, so quantities, values,
+ * tariffs and NX can never drift apart. Rewrites each flow's `value` and
+ * `tariffPaid` so a scaled quantity stays self-consistent.
  */
-export function clearTrade(
-  countries: Country[],
-  markets: Record<string, MarketSnapshot>,
-): TradeBalance {
+function deriveBalance(countries: Country[], flows: TradeFlow[]): TradeBalance {
+  const index = byId(countries)
   const balance: TradeBalance = {
-    flows: [],
+    flows,
     exportQty: {},
     importQty: {},
     exportValue: {},
@@ -184,6 +188,266 @@ export function clearTrade(
     balance.importValue[country.id] = 0
     balance.nx[country.id] = 0
   }
-  for (const good of TRADABLE_GOODS) clearGood(good, countries, markets, balance)
+  for (const flow of flows) {
+    const value = flow.quantity * flow.unitPrice
+    const base = GOODS[flow.good].basePrice
+    const tariff = index[flow.to]?.econ.tariff ?? 0
+    flow.value = value
+    flow.tariffPaid = value * (tariff / 100)
+    const imported = balance.importQty[flow.to]
+    const exported = balance.exportQty[flow.from]
+    if (imported !== undefined) imported[flow.good] += flow.quantity
+    if (exported !== undefined) exported[flow.good] += flow.quantity
+    balance.importValue[flow.to] = (balance.importValue[flow.to] ?? 0) + value
+    balance.exportValue[flow.from] = (balance.exportValue[flow.from] ?? 0) + value
+    balance.nx[flow.to] = (balance.nx[flow.to] ?? 0) - flow.quantity * base
+    balance.nx[flow.from] = (balance.nx[flow.from] ?? 0) + flow.quantity * base
+  }
   return balance
+}
+
+/**
+ * Global Top-6 bilateral quantity clearing for one month (plan §2.1 phases
+ * A/B, §2.2). Deterministic and pure; the caller supplies the pre-clearing
+ * domestic snapshots so no country can be settled before another.
+ */
+export function clearTrade(
+  countries: Country[],
+  markets: Record<string, MarketSnapshot>,
+): TradeBalance {
+  const flows: TradeFlow[] = []
+  for (const good of TRADABLE_GOODS) clearGood(good, countries, markets, flows)
+  return deriveBalance(countries, flows)
+}
+
+/**
+ * Soft import capacity in gold for one country this month (plan §2.3). A
+ * country restructured within the last 12 months has its capacity halved.
+ */
+export function importCapacity(country: Country, tick: number): number {
+  const base =
+    50 +
+    country.econ.buildings.ports * 8 +
+    country.econ.marketAccess * 200 +
+    country.econ.transportInfrastructure * 1
+  return tick <= country.econ.restructuredUntilTick ? base * 0.5 : base
+}
+
+/**
+ * Applies the soft capacity cap to the cleared flows (plan §2.3/§2.4). When an
+ * importer's total pre-tariff gold import bill exceeds its capacity, every one
+ * of its flows is scaled by the same factor; because an exporter shares the
+ * very same flow object, its export shrinks identically and global conservation
+ * (Σ importBill === Σ exportRevenue) survives. Aggregates, tariffs and NX are
+ * re-derived from the scaled flow list. Returns each country's capacity.
+ */
+export function applyCapacity(
+  countries: Country[],
+  balance: TradeBalance,
+  tick: number,
+): Record<string, number> {
+  const capacities: Record<string, number> = {}
+  const byImporter = new Map<string, TradeFlow[]>()
+  for (const flow of balance.flows) {
+    const list = byImporter.get(flow.to)
+    if (list === undefined) byImporter.set(flow.to, [flow])
+    else list.push(flow)
+  }
+  for (const country of countries) {
+    const capacity = importCapacity(country, tick)
+    capacities[country.id] = capacity
+    const flows = byImporter.get(country.id)
+    if (flows === undefined) continue
+    let bill = 0
+    for (const flow of flows) bill += flow.quantity * flow.unitPrice
+    if (bill > capacity && bill > 0) {
+      const factor = capacity / bill
+      for (const flow of flows) flow.quantity *= factor
+    }
+  }
+  Object.assign(balance, deriveBalance(countries, balance.flows))
+  return capacities
+}
+
+/**
+ * Gold an importer can actually pay this month (plan §10): its export revenue,
+ * plus its realisable private capital, plus a small GDP-share of new external
+ * debt. This is the hard counterpart to §2.3's soft capacity — soft capacity
+ * models ports and transport, payment capacity models solvency.
+ */
+export function paymentCapacity(country: Country, exportRevenue: number): number {
+  return (
+    exportRevenue +
+    Math.max(0, country.econ.privateCapital) +
+    country.econ.gdp * MAX_MONTHLY_DEFICIT_SHARE
+  )
+}
+
+/**
+ * Applies the payment-capacity cut after the soft capacity (plan §10). When an
+ * importer's pre-tariff gold bill exceeds `paymentCapacity`, every one of its
+ * flows is scaled by the same factor; the exporter shares the flow object, so
+ * its export shrinks identically and global conservation survives. Each
+ * country's export revenue is read from the same pre-cut list, so the pass is
+ * order-independent; unmet demand is simply left unmet (no iteration). Returns
+ * each country's payment capacity.
+ */
+export function applyPaymentCapacity(
+  countries: Country[],
+  balance: TradeBalance,
+): Record<string, number> {
+  const capacities: Record<string, number> = {}
+  const byImporter = new Map<string, TradeFlow[]>()
+  for (const flow of balance.flows) {
+    const list = byImporter.get(flow.to)
+    if (list === undefined) byImporter.set(flow.to, [flow])
+    else list.push(flow)
+  }
+  // Freeze every exporter's revenue from the pre-cut list: a later partner
+  // scaling its imports must not change what this country could have paid.
+  const exportRevenue = new Map<string, number>()
+  for (const flow of balance.flows) {
+    exportRevenue.set(
+      flow.from,
+      (exportRevenue.get(flow.from) ?? 0) + flow.quantity * flow.unitPrice,
+    )
+  }
+  for (const country of countries) {
+    capacities[country.id] = paymentCapacity(country, exportRevenue.get(country.id) ?? 0)
+  }
+  for (const country of countries) {
+    const flows = byImporter.get(country.id)
+    if (flows === undefined) continue
+    const capacity = capacities[country.id] ?? 0
+    let bill = 0
+    for (const flow of flows) bill += flow.quantity * flow.unitPrice
+    if (bill > capacity && bill > 0) {
+      const factor = capacity / bill
+      for (const flow of flows) flow.quantity *= factor
+    }
+  }
+  Object.assign(balance, deriveBalance(countries, balance.flows))
+  return capacities
+}
+
+/** Per-country gold settlement derived from the final flow list (plan §2.4). */
+export type TradeSettlement = {
+  importBill: number
+  exportRevenue: number
+  tariffRevenue: number
+  /** exportRevenue − importBill; the reported trade balance. */
+  tradeBalance: number
+  /** The private sector's external net: exportRevenue − importBill − tariffRevenue. */
+  externalNet: number
+  drawnFromCapital: number
+  debtIncrease: number
+  /** Post-default excess beyond the gdp×0.2 new-debt cap, dropped from debt. */
+  dropped: number
+}
+
+/**
+ * Settles one country's gold from the final flows (plan §2.4). The importer's
+ * private sector pays `qty×unitPrice` to the exporter plus `qty×unitPrice×tariff`
+ * to its own treasury; transport friction inside `landedPrice` never appears
+ * here. A shortfall draws on `privateCapital` first, then becomes external debt,
+ * capped at `gdp×0.2` inside the post-default window. Pure: the caller applies
+ * the returned amounts.
+ */
+export function settleTrade(
+  country: Country,
+  flows: TradeFlow[],
+  tick: number,
+): TradeSettlement {
+  let importBill = 0
+  let exportRevenue = 0
+  let tariffRevenue = 0
+  for (const flow of flows) {
+    const value = flow.quantity * flow.unitPrice
+    if (flow.to === country.id) {
+      importBill += value
+      tariffRevenue += value * (country.econ.tariff / 100)
+    }
+    if (flow.from === country.id) exportRevenue += value
+  }
+  const tradeBalance = exportRevenue - importBill
+  const externalNet = exportRevenue - importBill - tariffRevenue
+  let drawnFromCapital = 0
+  let debtIncrease = 0
+  let dropped = 0
+  if (externalNet < 0) {
+    const need = -externalNet
+    drawnFromCapital = Math.min(Math.max(0, country.econ.privateCapital), need)
+    let remainder = need - drawnFromCapital
+    if (tick <= country.econ.restructuredUntilTick) {
+      const cap = country.econ.gdp * 0.2
+      if (remainder > cap) {
+        dropped = remainder - cap
+        remainder = cap
+      }
+    }
+    debtIncrease = remainder
+  }
+  return {
+    importBill,
+    exportRevenue,
+    tariffRevenue,
+    tradeBalance,
+    externalNet,
+    drawnFromCapital,
+    debtIncrease,
+    dropped,
+  }
+}
+
+/** Which resource each imported good feeds; farmland has no imported good. */
+export const RESOURCE_IMPORT_GOOD: Record<ResourceId, GoodId | undefined> = {
+  farmland: undefined,
+  timber: 'wood',
+  coal: 'coal',
+  iron: 'iron',
+}
+
+/** Imported amount per resource this month, from the final flow list (plan §2.6). */
+export function deriveResourceImports(
+  flows: TradeFlow[],
+  countryId: string,
+): Record<ResourceId, number> {
+  const out: Record<ResourceId, number> = { farmland: 0, timber: 0, coal: 0, iron: 0 }
+  for (const [resource, good] of Object.entries(RESOURCE_IMPORT_GOOD) as [
+    ResourceId,
+    GoodId | undefined,
+  ][]) {
+    if (good === undefined) continue
+    for (const flow of flows) {
+      if (flow.to === countryId && flow.good === good) out[resource] += flow.quantity
+    }
+  }
+  return out
+}
+
+/**
+ * Effective endowment bonus from imports (plan §2.6): the import share of
+ * available supply, scaled and capped at +15 points. Derived only — it never
+ * writes back into `econ.resources`.
+ */
+export function resourceImportBonus(imports: number, domesticProduction: number): number {
+  const share = imports / Math.max(1, domesticProduction + imports)
+  return Math.min(15, Math.max(0, share * 20))
+}
+
+/** Effective endowments after last month's imports; the base array is untouched. */
+export function effectiveResources(country: Country): Resources {
+  const out: Resources = { ...country.econ.resources }
+  for (const [resource, good] of Object.entries(RESOURCE_IMPORT_GOOD) as [
+    ResourceId,
+    GoodId | undefined,
+  ][]) {
+    if (good === undefined) continue
+    const bonus = resourceImportBonus(
+      country.econ.resourceImports[resource] ?? 0,
+      country.econ.goods[good] ?? 0,
+    )
+    out[resource] = Math.min(100, Math.max(0, out[resource] + bonus))
+  }
+  return out
 }

@@ -1,8 +1,8 @@
 // Type contract for terminal-legend.
 // Self-contained by design: the engine loads it as the plugin's `types` entry
 // and type-checks every `$.state` key the hooks module names against it.
-// World model v6: bilateral trade quantities and NX accounting are live
-// (plan 0004 T1a); gold movement and tariffs follow in T1b.
+// World model v6: bilateral trade quantities, NX accounting, gold settlement and
+// resource imports are live (plan 0004 T1a/T1b).
 
 export type GameDate = { year: number; month: number }
 
@@ -36,7 +36,7 @@ export type TradeFlow = {
   unitPrice: number
   /** The importer's landed price (unitPrice plus tariff, transport, risk). */
   landedPrice: number
-  /** Tariff the importing state collected. // T1b: gold settlement fills this. */
+  /** Tariff the importing state collected: value × tariff/100 (plan 0004 §2.4). */
   tariffPaid: number
   /** quantity × unitPrice, the exporter's book value. */
   value: number
@@ -52,11 +52,11 @@ export type TradeState = {
   exportValue: number
   /** Gold value of this month's imports at unit prices. */
   importValue: number
-  /** Tariff revenue this month, in gold. // T1b: gold settlement fills this. */
+  /** Tariff revenue this month, in gold (plan 0004 §2.4). */
   tariffRevenue: number
   /** Net exports at base prices; feeds gdpComponents.nx (plan 0004 §2.5). */
   nx: number
-  /** Soft import capacity in gold. // T1b: soft capacity fills this. */
+  /** Soft import capacity in gold: 50 + ports×8 + marketAccess×200 + transport×1 (plan 0004 §2.3). */
   capacity: number
   history: {
     exportValue: number[]
@@ -313,6 +313,18 @@ export type Economy = {
   lastPrivateConstructionSpend: number
   /** Principal repaid from the treasury last month. */
   lastDebtRepayment: number
+  /** Gold paid for imports last month, at unit prices (plan 0004 §2.4). */
+  lastImportBill: number
+  /** Gold earned from exports last month, at unit prices. */
+  lastExportRevenue: number
+  /** Tariff collected on imports last month; the only treasury trade channel. */
+  lastTariffRevenue: number
+  /** lastExportRevenue − lastImportBill; feeds next month's income (plan 0004 §2.4). */
+  lastTradeBalance: number
+  /** Imported coal/iron/timber last month, feeding next month's effective endowment. */
+  resourceImports: Record<ResourceId, number>
+  /** Tick until which a post-default restructuring halves capacity and caps new debt. */
+  restructuredUntilTick: number
   history: {
     gdp: number[]
     treasury: number[]

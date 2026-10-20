@@ -379,6 +379,13 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
     .reduce((sum, flow) => sum + flow.quantity, 0)
   const opiumDemand = snapshot.demand.opium
   const opiumDependency = opiumDemand > 0 ? fmtPercent(opiumImports / opiumDemand) : '—'
+  const importedResources = (['coal', 'iron', 'timber'] as const).map(id => ({
+    name: RESOURCE_NAMES[id],
+    value: econ.resourceImports[id] ?? 0,
+  }))
+  const resourceImportLine = importedResources.some(row => row.value > 0)
+    ? `资源进口 ${importedResources.map(row => `${row.name} ${fmtNumber(row.value)}`).join(' · ')}`
+    : '本月无资源进口'
 
   return (
     <Box flexDirection="column">
@@ -456,7 +463,10 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
         <Text dimColor>
           鸦片依存 进口 {fmtNumber(opiumImports)} / 需求 {fmtNumber(opiumDemand)}（{opiumDependency}）
         </Text>
-        <Text dimColor>关税收入与贸易容量（T1b 未接入）。</Text>
+        <Text dimColor>
+          关税收入 {fmtMoney(econ.lastTariffRevenue)} · 贸易容量 {fmtNumber(player.trade.capacity)} · 贸易收支 {fmtSigned(econ.lastTradeBalance)}金
+        </Text>
+        <Text dimColor>{resourceImportLine}</Text>
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
