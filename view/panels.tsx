@@ -1016,12 +1016,16 @@ function CouncilPanel(props: {
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
-        <Heading ui={props.ui} text="本月月报" />
+        <Heading
+          ui={props.ui}
+          text="本月月报"
+          hint={reportLines.length > 0 ? '滚轮 / ↑↓ 查看完整' : undefined}
+        />
         {reportLines.length === 0 ? (
           <Text dimColor>尚无月报。批准推进一月后生成。</Text>
         ) : (
           reportLines.map((line, index) => (
-            <Text key={`council-report:${index}`} wrap="truncate">{line}</Text>
+            <Text key={`council-report:${index}`} wrap="wrap">{line}</Text>
           ))
         )}
       </Box>
@@ -1033,12 +1037,20 @@ function CouncilPanel(props: {
       <SituationCard ui={props.ui} world={props.world} />
 
       <Box flexDirection="column" marginTop={1}>
-        <Heading ui={props.ui} text="秘书报告" hint={props.world.secretary.lastRunTick === 0 ? '（尚未呈报）' : undefined} />
+        <Heading
+          ui={props.ui}
+          text="秘书报告"
+          hint={
+            props.council.secretaryReport === ''
+              ? '（尚未呈报）'
+              : '滚轮 / ↑↓ 查看完整'
+          }
+        />
         {props.council.secretaryReport === '' ? (
           <Text dimColor>秘书尚未呈报。点「重新拟旨」或在对话里让秘书拟旨。</Text>
         ) : (
           props.council.secretaryReport.split('\n').map((line, index) => (
-            <Text key={`secretary:${index}`} wrap="truncate">{line}</Text>
+            <Text key={`secretary:${index}`} wrap="wrap">{line}</Text>
           ))
         )}
       </Box>
@@ -1350,9 +1362,9 @@ function TurnReport(props: { ui: UiKit; world: WorldState; width: number }): any
         <Text weight="bold">回合报告</Text>
         <Text dimColor>{statusLine(props.world)}</Text>
       </Box>
-      <Text dimColor wrap="truncate">最新动态</Text>
+      <Text dimColor>最新动态（完整月报：/v3 council 打开御前面板，滚轮 / ↑↓ 查看）</Text>
       {recent.map((entry, index) => (
-        <Text key={`report:${index}`} wrap="truncate">
+        <Text key={`report:${index}`} wrap="wrap">
           <Text dimColor>{fmtDate(entry.date)} </Text>
           <Text color={entry.kind === 'war' ? 'red' : entry.kind === 'tech' ? 'cyan' : undefined}>{logKindMark(entry.kind)}</Text>
           <Text> {entry.text}</Text>
@@ -1362,7 +1374,7 @@ function TurnReport(props: { ui: UiKit; world: WorldState; width: number }): any
         <Box flexDirection="column" marginTop={1}>
           <Text color="yellow" weight="bold">待决事件</Text>
           {pending.map(event => (
-            <Text wrap="truncate">◆ {event.title}：{event.text}</Text>
+            <Text wrap="wrap">◆ {event.title}：{event.text}</Text>
           ))}
           <Text dimColor>输入 /v3 events 选择，或直接告诉 Claude 你的决定。</Text>
         </Box>
@@ -1412,7 +1424,7 @@ export function Report(props: ReportProps): any {
     default:
       return (
         <Box flexDirection="column">
-          <Text dimColor wrap="truncate">{props.text}</Text>
+          <Text dimColor wrap="wrap">{props.text}</Text>
           <Box marginTop={1}>
             <Overview ui={props.ui} world={props.world} width={props.width} />
           </Box>
