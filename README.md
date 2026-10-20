@@ -123,20 +123,18 @@ node statusline/install.mjs
 
 ## 下一步
 
-1. `docs/plans/0003-economic-loop.md`：支出法 C+I+G+NX、Stone-Geary 需求、劳动/利润
-   分配、自动私人投资、国家级资源禀赋（软乘数 0.7–1.3）。先把「需求→生产→GDP→收入
-   →再需求」的螺旋做成可玩闭环。
-2. `docs/plans/0004-trade-diplomacy.md`：Top-6 双边贸易、金币结算与关税、软容量与资源
-   进口、敏感商品关系效应与禁运、鸦片危机（局势/提案/仲裁/结果包）、四种战争目标。
-   **T1–T4 已实现（World v6）**。
-3. `docs/plans/0005-tech-tree.md`：科技树 v8：工业/行政/军事三分支 + 通用时代线、跨分支
-   溢出、国际扩散。
-4. `docs/plans/0002-agent-event-trees.md`：主要大国专属国策/事件树，再到多国交互事件树。
-   树只定义触发条件、参与者、效果信封与历史上下文；具体提案由各国 agent 根据当前史实
-   生成，引擎校验后落成修正，不做死模板。
-5. `docs/plans/0006-gm-engine-interface.md`：GM 与引擎的交互**全部走 MCP 工具**，禁止读
+1. **`docs/plans/0007-economy-polish.md`（当前优先）**：世界贸易校准（农产品没有全球
+   bid）、支付能力可见化、建造队列公平、GDP/科技/劳动力口径。先让经济可解释、可操作。
+2. `docs/plans/0006-gm-engine-interface.md`：GM 与引擎的交互**全部走 MCP 工具**，禁止读
    `.terminal-legend/save.json`；补 `v3_inspect`（贸易/市场/财政/建造/外交等明细）与
-   `v3_forecast`（下月现金流预测）。
+   `v3_forecast`（下月现金流预测）。E2 可见化直接依赖它。
+3. `docs/plans/0005-tech-tree.md`：科技树 v8：工业/行政/军事三分支 + 通用时代线、跨分支
+   溢出、国际扩散。**等 0007-E5 校准后再排期。**
+4. `docs/plans/0002-agent-event-trees.md`：主要大国专属国策/事件树，再到多国交互事件树。
+   **⏸ 暂停**，等经济系统打磨完成后再恢复。
+
+已完成、作为参考：`0003-economic-loop.md`（World v5）、`0004-trade-diplomacy.md`（World v6）、
+ADR 0006（World v7 净资产财政）。
 
 ## 开发
 
@@ -193,8 +191,9 @@ tests/first-slice.test.ts    第一刀（M1–M6）引擎与命令测试
 | 0003 | 经济循环 E1–E5：支出法 GDP、Stone-Geary、私人投资、资源禀赋 | ✅ 已实现（World v5） |
 | 0004 | 贸易与外交 T1–T4：Top-6 双边流、NX、鸦片危机、战争目标 | ✅ 已实现（World v6） |
 | ADR 0006 | 国库净资产化：单一余额、双向利率、贸易缺口并入、分期赔款 | ✅ 已实现（World v7） |
-| 0005 | 科技树 K1–K4：三分支 + 通用时代线、跨分支溢出、国际扩散 | 📝 已规划（World v8） |
-| 0002 | 事件树 S1–S4：局势/提案/多国交互 | 📝 已规划 |
+| 0005 | 科技树 K1–K4：三分支 + 通用时代线、跨分支溢出、国际扩散 | 📝 已规划（等经济打磨后） |
+| 0002 | 事件树 S1–S4：局势/提案/多国交互 | ⏸ 暂缓（先打磨经济） |
 | 0006 | GM ⇄ 引擎接口：查询/预测全部走 MCP，禁止读存档 | 📝 已规划 |
+| 0007 | 经济打磨：世界贸易校准、支付能力可见化、建造队列、GDP/科技/劳动力 | 🔧 当前优先 |
 
 规划文档在 `docs/plans/`；架构决策在 `docs/adr/`；术语以 `GLOSSARY.md` 为准。
