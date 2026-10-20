@@ -12,6 +12,8 @@
 
 - GM **不得读取** `.terminal-legend/save.json`；状态查询与操作一律通过 MCP 工具
   （`v3_status`、`v3_action`、`v3_diplomacy` 等）。存档是引擎内部表示。
+- GM 的**游玩决策**只依据工具返回的状态与世界内信息，不通过阅读引擎源码来推断规则；
+  源码只在用户明确要求开发/修复时阅读。
 - 需要更多明细时，按 `docs/plans/0006-gm-engine-interface.md` 补 `v3_inspect` /
   `v3_forecast`，而不是绕过工具读档。
 
