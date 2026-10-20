@@ -1197,6 +1197,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         unemployment: seedRow.unemployment,
         resources: { ...seedRow.resources },
         privateCapital: 0,
+        lastPrivateStartTick: -999,
         investmentConfidence: seedRow.politicalEconomy.investmentConfidence,
         gdpComponents: { c: 0, i: 0, g: 0, nx: 0 },
         laborShare: seedRow.politicalEconomy.laborShareBase,
@@ -1231,6 +1232,14 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
           sol: [seedRow.pops.sol],
           legitimacy: [seedRow.legitimacy],
           radicals: [seedRow.pops.radicals],
+          c: [],
+          i: [],
+          g: [],
+          income: [],
+          expense: [],
+          unemployment: [],
+          debt: [],
+          tariff: [],
         },
       },
       tech: {
@@ -1363,7 +1372,12 @@ const EVENT_TEMPLATES: EventTemplate[] = [
     kind: 'famine',
     title: '饥荒',
     weight: 10,
-    when: c => c.pops.sol < 45,
+    // A famine needs an actual grain shortage, not merely low living
+    // standards: grain priced above its base level (PT-025).
+    when: c =>
+      c.pops.sol < 45 &&
+      (c.econ.prices.grain ?? GOODS.grain.basePrice) >=
+        GOODS.grain.basePrice * 1.05,
     text: c => `${c.name}部分产粮区歉收，流民开始向城市聚集。`,
     options: c => [
       {

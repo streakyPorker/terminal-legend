@@ -198,6 +198,9 @@ function ensureConstructionFields(country: Country): void {
   if (typeof country.econ.lastIncomeOther !== 'number') {
     country.econ.lastIncomeOther = 0
   }
+  if (typeof country.econ.lastPrivateStartTick !== 'number') {
+    country.econ.lastPrivateStartTick = -999
+  }
   if (
     typeof country.econ.lastConstructionDemand !== 'object' ||
     country.econ.lastConstructionDemand === null
@@ -929,6 +932,14 @@ export function calibrateWorld(world: WorldState): void {
       sol: [country.pops.sol],
       legitimacy: [country.government.legitimacy],
       radicals: [country.pops.radicals],
+      c: [snap.components.c],
+      i: [snap.components.i],
+      g: [snap.components.g],
+      income: [snap.income],
+      expense: [snap.expense],
+      unemployment: [country.econ.unemployment],
+      debt: [nationalDebt(country)],
+      tariff: [country.econ.lastTariffRevenue],
     }
     country.diplo.prestige = computePrestige(country)
   }
@@ -1297,6 +1308,14 @@ function capitalThreshold(country: Country): number {
 const DEPRECIATION_PER_MONTH = 0.0015
 
 /**
+ * Private builders start at most one project every other month, with at most
+ * three in flight. Without the brake the queue filled with ten mine projects
+ * within a year and the private sector felt like a second state (PT-029).
+ */
+export const MAX_PRIVATE_PROJECTS = 3
+export const PRIVATE_START_INTERVAL = 2
+
+/**
  * Allocates this month's private savings to at most one new private project.
  * Private projects are visible in the queue but cannot be cancelled
  * (plan 0003 §4). Returns the savings that stayed idle.
@@ -1365,11 +1384,13 @@ function investPrivateCapital(
     return { affordable: Math.floor(headroom / perMonth) }
   })()
   let started = false
+  const sinceStart = world.tick - (country.econ.lastPrivateStartTick ?? -999)
   if (
     best !== undefined &&
     canStart !== undefined &&
     best.score > threshold &&
-    ownProjects.length < 10 &&
+    ownProjects.length < MAX_PRIVATE_PROJECTS &&
+    sinceStart >= PRIVATE_START_INTERVAL &&
     canStart.affordable >= 1
   ) {
     const count = clamp(canStart.affordable, 1, MAX_BUILDINGS_PER_SLOT)
@@ -1392,6 +1413,7 @@ function investPrivateCapital(
         countryId: country.id,
         text: `[${country.flag}] ${country.name}的私人资本投建 ${count} 座${BUILDINGS[best.building].name}`,
       })
+      country.econ.lastPrivateStartTick = world.tick
       started = true
     }
   }
@@ -1400,7 +1422,12 @@ function investPrivateCapital(
   // a healthy existing stock (score > 0.7) still needs one-for-one renewal.
   // This keeps private construction and I from freezing for years after the
   // initial industrialisation (round-2 P1-1).
-  if (!started && ownProjects.length === 0 && renewal !== undefined) {
+  if (
+    !started &&
+    ownProjects.length < MAX_PRIVATE_PROJECTS &&
+    sinceStart >= PRIVATE_START_INTERVAL &&
+    renewal !== undefined
+  ) {
     const monthlyCost = constructionMonthlyCost(
       draftProject(renewal.building, 1),
     )
@@ -1418,6 +1445,7 @@ function investPrivateCapital(
       })
       // Renewal is routine maintenance; it stays visible in the queue but is
       // not worth a chronicle line every few months for every country.
+      country.econ.lastPrivateStartTick = world.tick
       started = true
     }
   }
@@ -1761,12 +1789,20 @@ function simulateCountry(
   country.bureaucracy = deriveBureaucracy(country, true)
 
   // Technology.
+  // A base research rate keeps a state without universities from standing
+  // still for decades (PT-007); universities, literacy, education spending and
+  // the tech level itself multiply on top of it.
+  const researchBase =
+    2 +
+    country.pops.literacy * 3 +
+    country.bureaucracy.score * 0.06
   country.tech.pointsPerMonth =
+    researchBase +
     country.econ.buildings.universities *
-    0.9 *
-    (0.4 + country.pops.literacy) *
-    (1 + country.econ.spending.education * 0.03) *
-    (1 + country.tech.level * 0.02)
+      0.9 *
+      (0.4 + country.pops.literacy) *
+      (1 + country.econ.spending.education * 0.03) *
+      (1 + country.tech.level * 0.02)
   country.tech.points += applyModifiers(
     country,
     'techPoints',
@@ -1860,6 +1896,14 @@ function simulateCountry(
   pushHistory(country.econ.history.sol, country.pops.sol)
   pushHistory(country.econ.history.legitimacy, country.government.legitimacy)
   pushHistory(country.econ.history.radicals, country.pops.radicals)
+  pushHistory(country.econ.history.c, snap.components.c)
+  pushHistory(country.econ.history.i, snap.components.i)
+  pushHistory(country.econ.history.g, snap.components.g)
+  pushHistory(country.econ.history.income, country.econ.income)
+  pushHistory(country.econ.history.expense, country.econ.expense)
+  pushHistory(country.econ.history.unemployment, country.econ.unemployment)
+  pushHistory(country.econ.history.debt, nationalDebt(country))
+  pushHistory(country.econ.history.tariff, country.econ.lastTariffRevenue)
 
   const debt = nationalDebt(country)
   if (

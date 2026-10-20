@@ -337,6 +337,8 @@ export type Economy = {
   resources: Resources
   /** Private savings pool available to private construction. */
   privateCapital: number
+  /** Tick of the last private project start, for the expansion brake (PT-029). */
+  lastPrivateStartTick: number
   /** Current investment confidence, base ± envelope (percentage points). */
   investmentConfidence: number
   /** Expenditure-method GDP components, monthly gold. */
@@ -403,6 +405,15 @@ export type Economy = {
     sol: number[]
     legitimacy: number[]
     radicals: number[]
+    /** GDP components and the monthly fiscal/labour series for `v3_inspect`. */
+    c: number[]
+    i: number[]
+    g: number[]
+    income: number[]
+    expense: number[]
+    unemployment: number[]
+    debt: number[]
+    tariff: number[]
   }
 }
 

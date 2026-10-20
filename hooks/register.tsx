@@ -23,6 +23,7 @@ import {
   type Decision,
 } from '../engine/sim'
 import { CURRENT_WORLD_VERSION, loadGame, saveGame } from '../engine/save'
+import { forecastWorld, inspectWorld } from '../engine/inspect'
 import { fiscalLedger } from '../engine/fiscal'
 import { applyCheat, type CheatParams } from '../engine/cheat'
 import { SECRETARY_PROMPT, monthlyBriefing } from '../engine/secretary'
@@ -62,6 +63,8 @@ const SECRETARY_TIMEOUT_MS = 240_000
 // afterwards, not prevented by withholding tools.
 const SECRETARY_TOOLS = [
   'mcp__terminal-legend__v3_status',
+  'mcp__terminal-legend__v3_inspect',
+  'mcp__terminal-legend__v3_forecast',
   'mcp__terminal-legend__v3_advance',
   'mcp__terminal-legend__v3_cheat',
   'mcp__terminal-legend__v3_action',
@@ -755,6 +758,35 @@ const TOOL_SPECS: {
     name: 'v3_status',
     description:
       '终末传奇：读取当前世界状态（玩家国家、财政、人口、军力、科技、各国对比、待决事件、战争）。在回答任何需要具体数字的问题前先调用它。',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'v3_inspect',
+    description:
+      '终末传奇：只读明细查询。section 取 economy（GDP 分解/物价/缺口）、fiscal（收支/债务/税率）、labor（失业分解/工资）、trade（分商品进出口/伙伴）、construction（建造力/队列/租金）、military（军力/战争）、history（近 12 个月序列）。遇到“为什么变了”先用它，不要读存档或源码。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        section: {
+          type: 'string',
+          enum: [
+            'economy',
+            'fiscal',
+            'labor',
+            'trade',
+            'construction',
+            'military',
+            'history',
+          ],
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'v3_forecast',
+    description:
+      '终末传奇：预估下月现金流（收入、支出、净额、结算后国库、建造力分配与租金）。它是计划值，遇贸易/事件会偏移。',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
@@ -1500,6 +1532,29 @@ export const register: Register = (on, options) => {
       return toolOk(statusText(current.world))
     } catch (error) {
       return toolFail(`读取状态失败：${String(error)}`)
+    }
+  })
+
+  on('tool.call', { tool: 'mcp__terminal-legend__v3_inspect' }, async ($, e) => {
+    try {
+      const current = await activeWorld($)
+      if (current === undefined) return toolFail('还没有进行中的游戏。')
+      const args = e as unknown as Args
+      const section =
+        typeof args.section === 'string' ? args.section : 'economy'
+      return toolOk(inspectWorld(current.world, section))
+    } catch (error) {
+      return toolFail(`明细查询失败：${String(error)}`)
+    }
+  })
+
+  on('tool.call', { tool: 'mcp__terminal-legend__v3_forecast' }, async $ => {
+    try {
+      const current = await activeWorld($)
+      if (current === undefined) return toolFail('还没有进行中的游戏。')
+      return toolOk(forecastWorld(current.world))
+    } catch (error) {
+      return toolFail(`预估失败：${String(error)}`)
     }
   })
 

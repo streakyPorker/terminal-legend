@@ -62,6 +62,27 @@ function normalizeWorld(world: WorldState): WorldState {
     if (typeof country.econ.lastIncomeOther !== 'number') {
       country.econ.lastIncomeOther = 0
     }
+    if (typeof country.econ.lastPrivateStartTick !== 'number') {
+      country.econ.lastPrivateStartTick = -999
+    }
+    const history = country.econ.history as Record<string, unknown>
+    for (const key of [
+      'gdp',
+      'treasury',
+      'sol',
+      'legitimacy',
+      'radicals',
+      'c',
+      'i',
+      'g',
+      'income',
+      'expense',
+      'unemployment',
+      'debt',
+      'tariff',
+    ]) {
+      if (!Array.isArray(history[key])) history[key] = []
+    }
     if (
       typeof country.econ.lastConstructionDemand !== 'object' ||
       country.econ.lastConstructionDemand === null

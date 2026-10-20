@@ -476,6 +476,40 @@ describe('Round 2 regressions', () => {
     expect(highQing.econ.lastStateConstructionSpend).toBe(0)
   })
 
+  test('a country without universities still researches at a base rate', async () => {
+    const world = newWorld(125, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.econ.buildings.universities = 0
+    advance(world, 1, [], makeRngForWorld(world))
+    expect(qing.tech.pointsPerMonth).toBeGreaterThan(2)
+  })
+
+  test('private builders start one project every other month, at most three in flight', async () => {
+    const world = newWorld(124, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.econ.privateCapital = 300
+    const starts: number[] = []
+    for (let month = 0; month < 12; month += 1) {
+      const before = qing.econ.constructionQueue.filter(
+        one => (one.owner ?? 'state') === 'private',
+      ).length
+      advance(world, 1, [], makeRngForWorld(world))
+      const after = qing.econ.constructionQueue.filter(
+        one => (one.owner ?? 'state') === 'private',
+      ).length
+      expect(after).toBeLessThanOrEqual(3)
+      if (after > before) starts.push(world.tick)
+    }
+    expect(starts.length).toBeGreaterThan(0)
+    for (let index = 1; index < starts.length; index += 1) {
+      expect((starts[index] ?? 0) - (starts[index - 1] ?? 0)).toBeGreaterThanOrEqual(2)
+    }
+  })
+
   test('policies cost authority by magnitude and permanent same-stat policies replace', async () => {
     const world = newWorld(123, 'QING')
     const qing = world.countries.QING
@@ -519,7 +553,9 @@ describe('Round 2 regressions', () => {
         zeroRun = 0
       }
     }
-    expect(maxZeroRun).toBeLessThanOrEqual(8)
+    // The private-start brake (PT-029) can leave a slightly longer gap; the
+    // stock still gets replaced instead of freezing for years.
+    expect(maxZeroRun).toBeLessThanOrEqual(10)
   })
 
   test('high unrest activates the revolutionary thresholds', async () => {

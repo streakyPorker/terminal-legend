@@ -102,6 +102,8 @@ Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplo
 | 工具 | 用途 |
 | --- | --- |
 | `v3_status` | 完整世界状态、各国对比、待决事件、战争、官僚与建造队列 |
+| `v3_inspect` | 只读明细：economy/fiscal/labor/trade/construction/military/history |
+| `v3_forecast` | 下月现金流预估（收入、支出、净额、结算后国库） |
 | `v3_advance` | 批准推进一月；months>1 视为托管并检测中断 |
 | `v3_cheat` | 天命：金钱/科技点/建筑/关系/战争分数/日期/事件/领袖（铁人禁用） |
 | `v3_action` | 建造（入队）、税率、关税、支出、研究、征兵、法案 |
@@ -143,8 +145,8 @@ node statusline/install.mjs
 1. **`docs/plans/0007-economy-polish.md`（当前优先）**：世界贸易校准（农产品没有全球
    bid）、支付能力可见化、建造队列公平、GDP/科技/劳动力口径。先让经济可解释、可操作。
 2. `docs/plans/0006-gm-engine-interface.md`：GM 与引擎的交互**全部走 MCP 工具**，禁止读
-   `.terminal-legend/save.json`；补 `v3_inspect`（贸易/市场/财政/建造/外交等明细）与
-   `v3_forecast`（下月现金流预测）。E2 可见化直接依赖它。
+   `.terminal-legend/save.json`。`v3_inspect`（economy/fiscal/labor/trade/construction/
+   military/history）与 `v3_forecast` 已实现（ADR 0016）；后续补外交与世界市场的更细视图。
 3. `docs/plans/0005-tech-tree.md`：科技树 v8：工业/行政/军事三分支 + 通用时代线、跨分支
    溢出、国际扩散。**等 0007-E5 校准后再排期。**
 4. `docs/plans/0002-agent-event-trees.md`：主要大国专属国策/事件树，再到多国交互事件树。
@@ -217,6 +219,10 @@ tests/first-slice.test.ts    第一刀（M1–M6）引擎与命令测试
 | ADR 0013 | 队列顺位建造：不设每槽月度上限、可吃满闲置建造力、工程量 ×30 | ✅ 已实现（World v7） |
 | ADR 0014 | 进出口关税拆分：进口税率与可选出口税率，缺省同率 | ✅ 已实现（World v7） |
 | ADR 0015 | 建设补贴：每级 +1.5 建造点、0.45 金，重新启用建设支出旋钮 | ✅ 已实现（World v7） |
+| ADR 0016 | GM 明细接口：v3_inspect 七个分区 + v3_forecast 下月现金流 | ✅ 已实现（World v7） |
+| ADR 0017 | 私人投资节奏：每两月最多开工一次、最多三单在途 | ✅ 已实现（World v7） |
+| ADR 0018 | 科技基础研究率：无大学也按月产出，识字与官僚加成 | ✅ 已实现（World v7） |
+| ADR 0019 | 饥荒触发条件：生活水平 <45 且粮价高于基准 5% | ✅ 已实现（World v7） |
 | 0005 | 科技树 K1–K4：三分支 + 通用时代线、跨分支溢出、国际扩散 | 📝 已规划（等经济打磨后） |
 | 0002 | 事件树 S1–S4：局势/提案/多国交互 | ⏸ 暂缓（先打磨经济） |
 | 0006 | GM ⇄ 引擎接口：查询/预测全部走 MCP，禁止读存档 | 📝 已规划 |

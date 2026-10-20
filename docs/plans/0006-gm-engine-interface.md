@@ -1,6 +1,6 @@
 # GM ⇄ 引擎接口：查询与预测全部走 MCP
 
-- Status: proposed（游戏体验改进项，待排期）
+- Status: partially implemented（`v3_inspect` 七个分区与 `v3_forecast` 已随 ADR 0016 落地）
 - Depends on: ADR 0003（确定性引擎 / LLM 判断边界）、ADR 0005（不做存档兼容）
 - Scope: 让主模型（GM）与引擎的所有交互都通过 `$.tool.register` 暴露的 MCP 工具完成；`save.json` 只用于持久化，不再作为 GM 的数据源。世界版本不变。
 
