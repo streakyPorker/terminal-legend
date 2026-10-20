@@ -1122,6 +1122,21 @@ function settleConstruction(
     )
   }
 
+  // Any points still idle after the state and private project passes are
+  // rented to the private sector as a construction service, paid from private
+  // capital. This turns overbuilt capacity into treasury income instead of
+  // leaving it unused.
+  if (capacityLeft > 0 && CONSTRUCTION_RENT_PER_POINT > 0) {
+    const affordableIdle = privateBudget / CONSTRUCTION_RENT_PER_POINT
+    const idleRented = Math.min(capacityLeft, Math.max(0, affordableIdle))
+    const idleRent = idleRented * CONSTRUCTION_RENT_PER_POINT
+    if (idleRent > 0) {
+      privateBudget -= idleRent
+      country.econ.treasury += idleRent
+      rentalIncome += idleRent
+    }
+  }
+
   country.econ.constructionQueue = queue.filter(project => kept.has(project.id))
   country.econ.privateCapital = privateBudget
   country.econ.lastConstructionSpend = stateSpent + privateSpent
