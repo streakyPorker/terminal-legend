@@ -1,6 +1,6 @@
 # 贸易与外交最小闭环（v6）
 
-- Status: planned（决策已定，待实施）
+- Status: implemented（T1a–T4 已实现，World v6；校准见 §11.1/§11.2）
 - Depends on: `0003-economic-loop.md`、ADR 0001（月度会议/秘书）、ADR 0002（自由数值及修订）、ADR 0003（引擎/LLM 边界）、ADR 0004（修正叠算）、ADR 0005（不做兼容）
 - Scope: 双边贸易与 NX → 敏感商品关系效应 → 外交局势（首个：鸦片危机）→ 最小战争目标。世界版本升到 **v6**。
 

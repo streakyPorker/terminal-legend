@@ -448,6 +448,40 @@ export type War = {
   goalOwner: string
 }
 
+/** A participant's declared position in a situation (plan 0004 §4.2). */
+export type SituationStance = 'crackdown' | 'compromise' | 'war' | 'aid' | 'neutral'
+
+/**
+ * One participant's proposal for a situation (plan 0004 §4.2). Proposals are
+ * arbitration context only — their effects are never applied; only the chosen
+ * result pack (§4.3) lands on the world.
+ */
+export type SituationProposal = {
+  countryId: string
+  stance: SituationStance
+  narrative: string
+}
+
+/**
+ * A open diplomatic situation, e.g. the opium crisis (plan 0004 §4.5). A given
+ * `id` may be opened at most once; once resolved the record is pruned to a
+ * summary (proposal narratives dropped) and kept for reproducibility.
+ */
+export type SituationRecord = {
+  id: string
+  kind: 'opium-crisis'
+  opened: GameDate
+  /** Participant country ids; `['QING','GBR']` for the opium crisis. */
+  countries: string[]
+  proposals: SituationProposal[]
+  /** Id of the chosen result pack; absent while open. */
+  resultId?: string
+  resolved: boolean
+  resolvedAt?: GameDate
+  /** Months the situation has been open, for the countdown. */
+  months: number
+}
+
 export type EventOption = {
   id: string
   label: string
@@ -554,6 +588,8 @@ export type WorldState = {
   log: LogEntry[]
   /** Auditable trade tensions, newest last; only the last 24 months are kept (plan 0004 §2.7). */
   tradeTensions: TradeTension[]
+  /** Diplomatic situations; at most one opium crisis may ever exist (plan 0004 §4). */
+  situations: SituationRecord[]
   /** Auto-load this world when a session starts in the project. */
   resumeOnStart: boolean
   ai: AiState

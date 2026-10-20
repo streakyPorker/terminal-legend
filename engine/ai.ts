@@ -1,9 +1,10 @@
 import type { EngineInterface } from 'claude-code'
-import type { Country, GameDate, WorldState } from '../types'
+import type { Country, GameDate, SituationStance, WorldState } from '../types'
 import { BUILDING_IDS, GOODS, GOOD_IDS, SPENDING, WAR_GOAL_NAMES, techName } from './data'
 
 import type { Rng } from './rng'
 import { SENSITIVE_GOODS, randomDecision, type Decision } from './sim'
+import { SITUATION_STANCES } from './situations'
 
 export type AiReport = {
   decisions: Decision[]
@@ -16,7 +17,7 @@ const SYSTEM = `你是 19 世纪大战略游戏的世界决策引擎。你为每
 - 只输出一个 JSON 数组，不要输出解释、Markdown 或代码围栏。
 - 每个元素形如 {"country":"GBR","action":"build","params":{"building":"factories","count":1},"narrative":"一句符合该领袖性格的行动描述"}
 - 每个国家最多 1 条；只为他国（非玩家国）决策。
-- action 只能是：build, tax, tariff, spending, research, conscript, law, diplomacy, invest。
+- action 只能是：build, tax, tariff, spending, research, conscript, law, diplomacy, invest, situation。
 - build 的 building 只能是：farms, mines, factories, railroads, ports, universities, barracks, offices；params.count 为 1..20 的数字。官署提供行政能力与官僚上限。
 - tax/tariff 用 params.rate（0..60）；spending 用 params.category（army/navy/bureaucracy/education/welfare/construction）与 params.amount（0..50）；数值必须是 JSON 数字，不能写成字符串。
 - invest 调整投资信心：params.amount 取 -3..3，结果被限制在该国基准上下 10 点内。
@@ -24,6 +25,7 @@ const SYSTEM = `你是 19 世纪大战略游戏的世界决策引擎。你为每
   - embargo/unembargo 可选 params.good（商品代码，缺省=全部）与 params.months（1..60，缺省=永久）。
   - war 可选 params.goal（reparations=赔款, openMarket=开放市场, sphere=势力范围, humiliation=威望羞辱，缺省=reparations），决定停战时的和约条款。
   - tension 需要 params.good（只能取 opium/arms/grain）与 params.relationDelta（-10..10），表示对 target 的关系张力。
+- situation 只在鸦片危机等局势开启、本国为参与方时提交：params.stance（crackdown=禁烟, compromise=妥协, war=开战, aid=求援, neutral=观望）与 params.narrative（一句叙事，必填）。提案只用于仲裁，不直接生效。
 - law 的 name 只能是：教育改革, 福利改革, 自由贸易, 保护关税, 征兵制, 宗教宽容。
 - 贸易简报给出各国贸易收支、Top-3 伙伴、鸦片进口、关税收入与资源进口；禁运与战争会切断对应贸易，若被禁运应寻找替代伙伴。
 - 每月为每个 AI 国家给出一次决策；行动要服从领袖的人格、当前财政与国内稳定；不要凭空创造数值。
@@ -174,6 +176,7 @@ const ACTIONS = new Set([
   'law',
   'diplomacy',
   'invest',
+  'situation',
 ])
 
 const LAWS = new Set([
@@ -262,6 +265,12 @@ function validParams(
     }
     case 'invest':
       return finite(params.amount, -3, 3)
+    case 'situation': {
+      if (!(SITUATION_STANCES as readonly string[]).includes(String(params.stance ?? ''))) {
+        return false
+      }
+      return typeof params.narrative === 'string' && params.narrative.trim() !== ''
+    }
     default:
       return true
   }

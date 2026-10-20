@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import type { PolicyProposal, TabId, UiState, WorldState } from '../types'
+import type { LogEntry, PolicyProposal, TabId, UiState, WorldState } from '../types'
 import { MODIFIER_STATS } from '../engine/modifiers'
 import { BUILDINGS, COUNTRY_SEEDS, GOOD_IDS, WAR_GOAL_NAMES, initialUi, makeRngForWorld } from '../engine/data'
 import { decideForAi, describeWorldForNarrator } from '../engine/ai'
@@ -19,6 +19,12 @@ import {
 import { CURRENT_WORLD_VERSION, loadGame, saveGame } from '../engine/save'
 import { applyCheat, type CheatParams } from '../engine/cheat'
 import { SECRETARY_PROMPT, monthlyBriefing } from '../engine/secretary'
+import {
+  SITUATION_STANCES,
+  recordSituationProposal,
+  settleDueSituations,
+  situationStatus,
+} from '../engine/situations'
 import {
   countryTag,
   fmtDate,
@@ -54,6 +60,7 @@ const SECRETARY_TOOLS = [
   'mcp__terminal-legend__v3_action',
   'mcp__terminal-legend__v3_policy',
   'mcp__terminal-legend__v3_diplomacy',
+  'mcp__terminal-legend__v3_situation',
   'mcp__terminal-legend__v3_event',
   'mcp__terminal-legend__v3_leader',
   'mcp__terminal-legend__v3_save',
@@ -153,6 +160,8 @@ function statusText(world: WorldState): string {
       )
     }
   }
+  const situation = situationStatus(world)
+  if (situation !== '') lines.push('', situation)
   return lines.join('\n')
 }
 
@@ -228,6 +237,31 @@ async function openPane($: EngineInterface): Promise<void> {
   }
 }
 
+/**
+ * The crisis arbiter's completer: one cheap `$.model.complete` returning the
+ * chosen result id, or '' on failure so the engine falls back deterministically
+ * (plan §4.4). Mirrors engine/ai.ts's model call style.
+ */
+function arbiterCompleter(
+  $: EngineInterface,
+  world: WorldState,
+): (prompt: string) => Promise<string> {
+  return async (prompt: string): Promise<string> => {
+    try {
+      const result = await $.model.complete({
+        model: world.ai.model || 'haiku',
+        prompt,
+        maxTokens: 32,
+        effort: 'low',
+        timeoutMs: 15000,
+      })
+      return result.isAnswered ? result.text : ''
+    } catch {
+      return ''
+    }
+  }
+}
+
 async function advanceGame(
   $: EngineInterface,
   months: number,
@@ -260,6 +294,14 @@ async function advanceGame(
     }
 
     const report = advance(world, months, decisions, rng)
+    // Settlement needs the async arbiter, so it runs here, right after the tick
+    // that aged the situation (plan §4.4); the engine tick only opens/counts.
+    const situationLog: LogEntry[] = []
+    await settleDueSituations(world, arbiterCompleter($, world), rng, situationLog)
+    if (situationLog.length > 0) {
+      world.log.push(...situationLog)
+      if (world.log.length > 400) world.log.splice(0, world.log.length - 400)
+    }
     if (notes.length > 0) {
       const date = { ...world.date }
       for (const note of notes) world.log.push({ date, kind: 'leader', text: note })
@@ -849,6 +891,21 @@ const TOOL_SPECS: {
         },
       },
       required: ['target', 'move'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'v3_situation',
+    description:
+      '终末传奇：就当前开启的局势（如鸦片危机）提交立场。action=submit 需要 stance（crackdown 禁烟 / compromise 妥协 / war 开战 / aid 求援 / neutral 观望）与 narrative（一句叙事）；action=abstain 表示弃权观望。提案只作仲裁上下文，不直接落账。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['submit', 'abstain'] },
+        stance: { type: 'string', enum: [...SITUATION_STANCES] },
+        narrative: { type: 'string', description: '一句提案叙事，submit 时必填。' },
+      },
+      required: ['action'],
       additionalProperties: false,
     },
   },
@@ -1511,6 +1568,32 @@ export const register: Register = (on, options) => {
       return toolOk(result.text)
     } catch (error) {
       return toolFail(`外交行动失败：${String(error)}`)
+    }
+  })
+
+  on('tool.call', { tool: 'mcp__terminal-legend__v3_situation' }, async ($, e) => {
+    try {
+      const current = await activeWorld($)
+      if (current === undefined) return toolFail('还没有进行中的游戏。')
+      const world = clone(current.world)
+      // The secretary may propose only under diplomacy authorisation (plan §4.2);
+      // war and peace stay the player's, which the diplomacy handler audits.
+      if (e.agentId !== undefined && !world.secretary.delegation.diplomacy) {
+        return toolFail('外交未授权，秘书不能提交局势提案。')
+      }
+      const args = e as unknown as Args
+      const action = String(args.action ?? 'submit')
+      const stance = action === 'abstain' ? 'neutral' : String(args.stance ?? '')
+      const narrative = action === 'abstain' ? '弃权观望' : String(args.narrative ?? '')
+      const result = recordSituationProposal(world, world.playerId, stance, narrative)
+      if (!result.ok) return toolFail(result.text)
+      await setWorld($, world)
+      await saveGame($, world).catch(() => undefined)
+      await refreshStatus($)
+      await patchUi($, { notice: result.text })
+      return toolOk(result.text)
+    } catch (error) {
+      return toolFail(`局势提案失败：${String(error)}`)
     }
   })
 

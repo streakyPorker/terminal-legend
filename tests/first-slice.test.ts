@@ -431,10 +431,10 @@ describe('M4/M5 council and managed runs', () => {
     expect(started.text).toContain('托管已开始')
     // The background host advances on its own schedule, so poll for the target
     // date instead of sleeping a fixed 250ms: per-month work grew with the trade
-    // slices (T1a clearing, T1b settlement, T2 relations), which made the fixed
-    // sleep flaky. The assertion is unchanged.
+    // slices, and sibling test files keep the event loop busy, which made a short
+    // fixed wait flaky. The assertion is unchanged.
     let status = ''
-    for (let attempt = 0; attempt < 40; attempt += 1) {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
       await new Promise(resolve => setTimeout(resolve, 100))
       status = (await run({ command: 'v3', args: 'status' })).text
       if (status.includes('1836年3月')) break

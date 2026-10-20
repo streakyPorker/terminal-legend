@@ -70,6 +70,7 @@ import {
   type TradeBlocker,
   type TradeSettlement,
 } from './trade'
+import { recordSituationProposal, tickSituations } from './situations'
 
 export type Decision = {
   countryId: string
@@ -1340,12 +1341,48 @@ export const TRADE_TENSION_RETENTION_MONTHS = 24
 /** Longest embargo an action may set; absent means permanent (plan §3). */
 export const EMBARGO_MONTHS_MAX = 60
 
-function atWar(world: WorldState, a: string, b: string): boolean {
+export function atWar(world: WorldState, a: string, b: string): boolean {
   return world.wars.some(
     war =>
       (war.attackers.includes(a) && war.defenders.includes(b)) ||
       (war.defenders.includes(a) && war.attackers.includes(b)),
   )
+}
+
+/**
+ * Creates a War with the shared shape both the `diplomacy` war move and the
+ * crisis war packs use (plan §4.3/§5). Returns undefined when the pair is
+ * already at war; the caller owns any relation/infamy changes, because those
+ * differ between the diplomacy move (−50) and a result pack (−40).
+ */
+export function declareWar(
+  world: WorldState,
+  attackerId: string,
+  targetId: string,
+  goal: WarGoal,
+  reason: string,
+): War | undefined {
+  const attacker = world.countries[attackerId]
+  const target = world.countries[targetId]
+  if (attacker === undefined || target === undefined) return undefined
+  if (atWar(world, attackerId, targetId)) return undefined
+  const defenders = [targetId, ...target.diplo.alliances.filter(id => id !== attackerId)]
+  const war: War = {
+    id: `war-${world.tick}-${attackerId}-${targetId}`,
+    name: `${attacker.name}—${target.name}战争`,
+    attackers: [attackerId],
+    defenders,
+    started: { ...world.date },
+    months: 0,
+    warScore: 0,
+    battles: 0,
+    reason,
+    lastEvent: '战争爆发',
+    goal,
+    goalOwner: attackerId,
+  }
+  world.wars.push(war)
+  return war
 }
 
 /**
@@ -1495,7 +1532,7 @@ function driftRelations(world: WorldState): void {
   }
 }
 
-function strength(world: WorldState, ids: string[]): number {
+export function strength(world: WorldState, ids: string[]): number {
   let total = 0
   for (const id of ids) {
     const country = world.countries[id]
@@ -1937,9 +1974,12 @@ export function advance(
     if (result.ok) {
       log.push({
         date: { ...world.date },
-        // Diplomacy moves (including embargo/unembargo/tension) read as
-        // diplomacy in the chronicle; everything else is politics (plan §6).
-        kind: decision.action === 'diplomacy' ? 'diplomacy' : 'politics',
+        // Diplomacy moves (including embargo/unembargo/tension) and crisis
+        // proposals read as diplomacy in the chronicle; else politics (plan §6).
+        kind:
+          decision.action === 'diplomacy' || decision.action === 'situation'
+            ? 'diplomacy'
+            : 'politics',
         countryId: decision.countryId,
         text: result.text,
       })
@@ -1992,6 +2032,9 @@ export function advance(
     driftRelations(world)
     applyTradeRelations(world, log)
     resolveWars(world, rng, log)
+    // Age and (maybe) open the opium crisis (plan §4.1). Settlement is deferred
+    // to the host, which owns the async arbiter (§4.4).
+    tickSituations(world, log)
     pending.push(...tickEvents(world, rng, log))
   }
 
@@ -2293,27 +2336,14 @@ export function applyDecision(
           return { ok: true, text: `${tag} 向${target.name}赠送了价值 ${amount.toFixed(1)} 的礼物` }
         }
         case 'war': {
-          const existing = world.wars.find(
-            war =>
-              (war.attackers.includes(country.id) && war.defenders.includes(target.id)) ||
-              (war.defenders.includes(country.id) && war.attackers.includes(target.id)),
+          const war = declareWar(
+            world,
+            country.id,
+            target.id,
+            asWarGoal(params.goal),
+            String(params.reason ?? '边境争端'),
           )
-          if (existing !== undefined) return { ok: false, text: `${tag} 与${target.name}已经在战争中` }
-          const defenders = [target.id, ...target.diplo.alliances.filter(id => id !== country.id)]
-          world.wars.push({
-            id: `war-${world.tick}-${country.id}-${target.id}`,
-            name: `${country.name}—${target.name}战争`,
-            attackers: [country.id],
-            defenders,
-            started: { ...world.date },
-            months: 0,
-            warScore: 0,
-            battles: 0,
-            reason: String(params.reason ?? '边境争端'),
-            lastEvent: '战争爆发',
-            goal: asWarGoal(params.goal),
-            goalOwner: country.id,
-          })
+          if (war === undefined) return { ok: false, text: `${tag} 与${target.name}已经在战争中` }
           country.diplo.relations[target.id] = clamp(current - 50, -100, 100)
           target.diplo.relations[country.id] = clamp(
             (target.diplo.relations[country.id] ?? 0) - 50,
@@ -2321,7 +2351,7 @@ export function applyDecision(
             100,
           )
           country.diplo.infamy = clamp(country.diplo.infamy + 10, 0, 100)
-          return { ok: true, text: `${tag} 向${target.name}宣战（${defenders.length} 国应战）` }
+          return { ok: true, text: `${tag} 向${target.name}宣战（${war.defenders.length} 国应战）` }
         }
         case 'peace': {
           const war = world.wars.find(
@@ -2452,6 +2482,12 @@ export function applyDecision(
         default:
           return { ok: false, text: `${tag} 未知外交动作 ${move}` }
       }
+    }
+    case 'situation': {
+      // A crisis proposal (plan §4.2): context for the arbitration only.
+      const stance = String(params.stance ?? '')
+      const narrative = String(params.narrative ?? decision.narrative ?? '')
+      return recordSituationProposal(world, country.id, stance, narrative)
     }
     case 'event': {
       const eventId = String(params.eventId ?? '')
@@ -2633,6 +2669,33 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
   const atWar = world.wars.some(
     war => war.attackers.includes(country.id) || war.defenders.includes(country.id),
   )
+  // Crisis fallback (plan §6): a participant in an open situation states a
+  // persona-driven stance when the model gave none; proposals carry no effects.
+  const situation = world.situations.find(one => !one.resolved)
+  if (
+    situation !== undefined &&
+    situation.countries.includes(country.id) &&
+    !situation.proposals.some(one => one.countryId === country.id)
+  ) {
+    const aggressive = country.leader.traits.some(trait =>
+      ['扩张', '军事', '专制', '民粹', '海权'].includes(trait),
+    )
+    const reformist = country.leader.traits.some(trait =>
+      ['改革', '贸易', '务实', '维新'].includes(trait),
+    )
+    const stance = aggressive
+      ? country.id === 'QING'
+        ? 'crackdown'
+        : 'war'
+      : reformist
+        ? 'compromise'
+        : 'neutral'
+    return {
+      countryId: country.id,
+      action: 'situation',
+      params: { stance, narrative: `${country.name}就鸦片危机表明立场` },
+    }
+  }
   // Debt service is a hard constraint; the deterministic fallback raises
   // taxes before a debt spiral becomes permanent.
   if (

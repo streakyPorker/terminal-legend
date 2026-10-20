@@ -1282,6 +1282,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
       },
     ],
     tradeTensions: [],
+    situations: [],
     resumeOnStart: true,
     ai: {
       model: 'haiku',

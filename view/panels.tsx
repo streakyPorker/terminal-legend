@@ -16,6 +16,12 @@ import {
 import { inspectEconomy } from '../engine/sim'
 import { MODIFIER_STAT_NAMES, describeModifier } from '../engine/modifiers'
 import {
+  OPIUM_CRISIS_TITLE,
+  SITUATION_TIMEOUT_MONTHS,
+  resultName,
+  stanceSummary,
+} from '../engine/situations'
+import {
   bar,
   clampText,
   countryTag,
@@ -569,6 +575,34 @@ function PopsPanel(props: { ui: UiKit; world: WorldState }): any {
 
 // ---------------------------------------------------------------- diplomacy
 
+/**
+ * A compact situation card (plan 0004 §4.5): the title, each participant's
+ * stance, the countdown while open, or the recorded result once resolved.
+ * Reused by the council and diplomacy panels; no new tab or widget.
+ */
+function SituationCard(props: { ui: UiKit; world: WorldState }): any {
+  const { Box, Text } = props.ui
+  if (props.world.situations.length === 0) return null
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      <Heading ui={props.ui} text="局势" hint="提案 · 倒计时 · 结果" />
+      {props.world.situations.map(situation => {
+        const state = situation.resolved
+          ? `已解决：${resultName(situation.resultId) || '—'}`
+          : situation.months >= SITUATION_TIMEOUT_MONTHS
+            ? '待仲裁'
+            : `等待各方（${situation.months}/${SITUATION_TIMEOUT_MONTHS} 月）`
+        return (
+          <Box flexDirection="column" key={`situation:${situation.id}`}>
+            <Text wrap="truncate">{`${OPIUM_CRISIS_TITLE} · ${state}`}</Text>
+            <Text dimColor wrap="truncate">{stanceSummary(situation)}</Text>
+          </Box>
+        )
+      })}
+    </Box>
+  )
+}
+
 function DiplomacyPanel(props: { ui: UiKit; world: WorldState }): any {
   const { Box, Text } = props.ui
   const player = playerOf(props.world)
@@ -671,6 +705,8 @@ function DiplomacyPanel(props: { ui: UiKit; world: WorldState }): any {
             })
         )}
       </Box>
+
+      <SituationCard ui={props.ui} world={props.world} />
 
       <Box flexDirection="column" marginTop={1}>
         <Heading ui={props.ui} text="领袖与议程" />
@@ -908,6 +944,8 @@ function CouncilPanel(props: {
       <Box marginTop={1}>
         <EventsPanel ui={props.ui} world={props.world} onEvent={props.onEvent} />
       </Box>
+
+      <SituationCard ui={props.ui} world={props.world} />
 
       <Box flexDirection="column" marginTop={1}>
         <Heading ui={props.ui} text="秘书报告" hint={props.world.secretary.lastRunTick === 0 ? '（尚未呈报）' : undefined} />
