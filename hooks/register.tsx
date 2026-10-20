@@ -851,7 +851,7 @@ const TOOL_SPECS: {
           ],
           description: 'build 时必填。',
         },
-        count: { type: 'integer', minimum: 1, maximum: 20 },
+        count: { type: 'integer', minimum: 1, maximum: 15 },
         rate: { type: 'number', minimum: 0, maximum: 60 },
         category: {
           type: 'string',

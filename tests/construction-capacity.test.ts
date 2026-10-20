@@ -4,8 +4,10 @@ import { parseWorld } from '../engine/save'
 import {
   advance,
   capacityCost,
+  applyDecision,
   constructionCapacity,
   constructionLoad,
+  maxSlotCapacity,
   newWorld,
 } from '../engine/sim'
 import type { ConstructionProject, Country, WorldState } from '../types'
@@ -133,5 +135,54 @@ describe('construction capacity (ADR 0010)', () => {
     expect(qing.econ.buildings.workshops).toBeGreaterThan(0)
     expect(qing.econ.lastConstructionRent).toBe(0)
     expect(qing.econ.constructionQueue[0]?.lastCapacity).toBe(0)
+  })
+})
+
+describe('construction slot limits (ADR 0011)', () => {
+  test('a slot holds at most 15 buildings and has a 15× point ceiling', async () => {
+    const world = newWorld(9304, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 10
+    qing.econ.constructionQueue = []
+    const result = applyDecision(
+      world,
+      { countryId: 'QING', action: 'build', params: { building: 'factories', count: 20 } },
+      makeRngForWorld(world),
+    )
+    expect(result.ok).toBe(true)
+    const project = qing.econ.constructionQueue[0]
+    expect(project?.count).toBe(15)
+    expect(project?.monthsLeft).toBe(1)
+    expect(project?.monthlyCost).toBe(60)
+    expect(maxSlotCapacity('factories')).toBe(30)
+  })
+
+  test('a legacy oversized slot is capped at 15 buildings worth of points', async () => {
+    const world = newWorld(9305, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 12
+    qing.econ.constructionQueue = [
+      project(
+        {
+          id: 'oversized',
+          building: 'factories',
+          count: 20,
+          owner: 'state',
+          monthsLeft: 1,
+          monthlyCost: 1,
+        },
+        world.date,
+      ),
+    ]
+    const cap = maxSlotCapacity('factories')
+    const load = constructionLoad(qing)
+    expect(load.byProject.oversized).toBeLessThanOrEqual(cap)
+    advance(world, 1, [], makeRngForWorld(world))
+    const kept = qing.econ.constructionQueue.find(one => one.id === 'oversized')
+    expect(kept).toBeDefined()
+    if (kept === undefined) return
+    expect(kept.lastCapacity ?? 0).toBeLessThanOrEqual(cap)
+    expect(kept.progress).toBeGreaterThan(0)
+    expect(kept.progress).toBeLessThan(1)
   })
 })

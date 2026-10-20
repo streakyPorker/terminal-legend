@@ -1,6 +1,7 @@
 # 建造能力：营造所、资源投入、队列槽位与私人租用
 
-- Status: accepted（World v7，增量字段，不升版本）
+- Status: accepted（World v7，增量字段，不升版本）；槽位上限与“满额 1 个月”由
+  `0011-construction-slot-limits.md` 修订。
 
 ## 背景
 

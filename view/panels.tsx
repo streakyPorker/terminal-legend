@@ -531,7 +531,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
               <Text dimColor>
-                剩余 {project.monthsLeft} 月 · 建造点 {fmtNumber(load.byProject[project.id] ?? 0)}/{fmtNumber(capacityCost(project))} · 每月 {project.monthlyCost.toFixed(1)}金
+                剩余 {project.monthsLeft} 月 · 建造点 {fmtNumber(load.byProject[project.id] ?? 0)}/{fmtNumber(capacityCost(project))} · 满额造价 {project.monthlyCost.toFixed(1)}金
               </Text>
             </Box>
           ))
@@ -556,7 +556,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
               <Text color="magenta">{padEnd('私人', 4)}</Text>
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
-              <Text dimColor>剩余 {project.monthsLeft} 月 · 每月 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
+              <Text dimColor>剩余 {project.monthsLeft} 月 · 满额造价 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
             </Box>
           ))
         )}
@@ -1184,7 +1184,7 @@ function CouncilPanel(props: {
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
               <Text dimColor>
-                剩余 {project.monthsLeft} 月 · 建造点 {fmtNumber(load.byProject[project.id] ?? 0)}/{fmtNumber(capacityCost(project))} · 每月 {project.monthlyCost.toFixed(1)}金
+                剩余 {project.monthsLeft} 月 · 建造点 {fmtNumber(load.byProject[project.id] ?? 0)}/{fmtNumber(capacityCost(project))} · 满额造价 {project.monthlyCost.toFixed(1)}金
               </Text>
             </Box>
           ))
@@ -1209,7 +1209,7 @@ function CouncilPanel(props: {
               <Text color="magenta">{padEnd('私人', 4)}</Text>
               <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
               <Text color="cyan">{padEnd(bar(project.progress, 1, 10), 11)}</Text>
-              <Text dimColor>剩余 {project.monthsLeft} 月 · 每月 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
+              <Text dimColor>剩余 {project.monthsLeft} 月 · 满额造价 {project.monthlyCost.toFixed(1)}金 · 私人出资</Text>
             </Box>
           ))
         )}

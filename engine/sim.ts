@@ -23,7 +23,6 @@ import {
   BUILDINGS,
   BUILDING_IDS,
   BUILDING_OUTPUT,
-  BUILDING_TIME,
   CONSUMPTION_PROPENSITY,
   CONSUMER_GOODS,
   GOODS,
@@ -304,6 +303,16 @@ export const capacityCost = (project: ConstructionProject): number =>
 export const PRIVATE_OWN_CAPACITY_SHARE = 0.5
 /** Gold the state charges per rented construction point. */
 export const CONSTRUCTION_RENT_PER_POINT = 0.3
+/**
+ * A slot may hold at most 15 buildings. Its construction-point ceiling is
+ * `15 × CAPACITY_COST[building]`, i.e. enough to finish a full 15-unit slot in
+ * one month; a larger legacy slot is capped at that ceiling and spreads over
+ * more months (ADR 0011).
+ */
+export const MAX_BUILDINGS_PER_SLOT = 15
+
+export const maxSlotCapacity = (building: BuildingId): number =>
+  MAX_BUILDINGS_PER_SLOT * (CAPACITY_COST[building] ?? 1)
 
 const importedQuantity = (country: Country, good: GoodId): number =>
   country.trade.imports
@@ -373,8 +382,9 @@ export function constructionLoad(country: Country): ConstructionLoad {
   for (const project of country.econ.constructionQueue) {
     if ((project.owner ?? 'state') === 'private') continue
     const need = capacityCost(project)
-    requested += need
-    const take = Math.min(remaining, need)
+    const slotNeed = Math.min(need, maxSlotCapacity(project.building))
+    requested += slotNeed
+    const take = Math.min(remaining, slotNeed)
     remaining -= take
     allocated += take
     byProject[project.id] = take
@@ -877,7 +887,8 @@ function settleConstruction(
   for (const project of queue) {
     if ((project.owner ?? 'state') === 'private') continue
     const need = capacityCost(project)
-    const capacityTake = Math.min(capacityLeft, need)
+    const slotNeed = Math.min(need, maxSlotCapacity(project.building))
+    const capacityTake = Math.min(capacityLeft, slotNeed)
     capacityLeft -= capacityTake
     runProject(
       project,
@@ -892,12 +903,17 @@ function settleConstruction(
   for (const project of queue) {
     if ((project.owner ?? 'state') !== 'private') continue
     const need = capacityCost(project)
-    const own = need * PRIVATE_OWN_CAPACITY_SHARE
+    const slotNeed = Math.min(need, maxSlotCapacity(project.building))
+    const own = slotNeed * PRIVATE_OWN_CAPACITY_SHARE
     const affordableRent =
       CONSTRUCTION_RENT_PER_POINT > 0
         ? privateBudget / CONSTRUCTION_RENT_PER_POINT
         : Infinity
-    const rented = Math.min(capacityLeft, Math.max(0, need - own), affordableRent)
+    const rented = Math.min(
+      capacityLeft,
+      Math.max(0, slotNeed - own),
+      affordableRent,
+    )
     capacityLeft -= rented
     const rent = rented * CONSTRUCTION_RENT_PER_POINT
     if (rent > 0) {
@@ -1039,12 +1055,11 @@ function investPrivateCapital(
   // Keep three months of working capital for everything already under
   // construction; new starts only use the headroom above that reserve.
   const headroom = Math.max(0, country.econ.privateCapital / 3 - activePrivateCost)
-  const canStart = ((): { months: number; affordable: number } | undefined => {
+  const canStart = ((): { affordable: number } | undefined => {
     if (best === undefined) return undefined
-    const months = BUILDING_TIME[best.building]
-    const fullMonthly = BUILDINGS[best.building].cost / months
-    if (fullMonthly <= 0) return undefined
-    return { months, affordable: Math.floor((headroom * months) / BUILDINGS[best.building].cost) }
+    const fullCost = BUILDINGS[best.building].cost
+    if (fullCost <= 0) return undefined
+    return { affordable: Math.floor(headroom / fullCost) }
   })()
   let started = false
   if (
@@ -1054,16 +1069,15 @@ function investPrivateCapital(
     ownProjects.length < 10 &&
     canStart.affordable >= 1
   ) {
-    const { months } = canStart
     const count = clamp(canStart.affordable, 1, 10)
-    const monthlyCost = (BUILDINGS[best.building].cost * count) / months
+    const monthlyCost = BUILDINGS[best.building].cost * count
     if (monthlyCost <= country.econ.privateCapital) {
       country.econ.constructionQueue.push({
         id: `proj-${world.tick}-${country.id}-priv-${country.econ.constructionQueue.length}`,
         building: best.building,
         count,
         owner: 'private',
-        monthsLeft: months,
+        monthsLeft: 1,
         monthlyCost,
         lastSpend: 0,
         progress: 0,
@@ -1084,15 +1098,14 @@ function investPrivateCapital(
   // This keeps private construction and I from freezing for years after the
   // initial industrialisation (round-2 P1-1).
   if (!started && ownProjects.length === 0 && renewal !== undefined) {
-    const months = BUILDING_TIME[renewal.building]
-    const monthlyCost = BUILDINGS[renewal.building].cost / months
+    const monthlyCost = BUILDINGS[renewal.building].cost
     if (monthlyCost <= headroom && monthlyCost <= country.econ.privateCapital) {
       country.econ.constructionQueue.push({
         id: `proj-${world.tick}-${country.id}-renew-${country.econ.constructionQueue.length}`,
         building: renewal.building,
         count: 1,
         owner: 'private',
-        monthsLeft: months,
+        monthsLeft: 1,
         monthlyCost,
         lastSpend: 0,
         progress: 0,
@@ -2430,53 +2443,23 @@ export function applyDecision(
       const id = String(params.building ?? '')
       const building = buildOf(id)
       if (building === undefined) return { ok: false, text: `${tag} 未知建筑 ${id}` }
-      const count = clamp(Math.floor(num(params.count, 1)), 1, 20)
-      const months = BUILDING_TIME[building]
-      const monthlyCost = (BUILDINGS[building].cost * count) / months
-      const stateProjects = country.econ.constructionQueue.filter(
-        project => (project.owner ?? 'state') === 'state',
-      )
-      if (stateProjects.length >= 8) {
-        return {
-          ok: false,
-          text: `${tag} 国有建造队列已满（最多 8 个项目），先等现有项目完成`,
-        }
-      }
-      const constructionBudget = country.econ.spending.construction * 0.8
-      if (constructionBudget > 0 && monthlyCost > constructionBudget * 3) {
-        return {
-          ok: false,
-          text: `${tag} 建设拨款不足（每月 ${monthlyCost.toFixed(1)} 金，预算 ${constructionBudget.toFixed(1)}），先提高建设支出`,
-        }
-      }
-      // Small negative net assets are normal borrowing; only the 3× GDP
-      // restructuring floor blocks a new commitment (ADR 0007).
-      if (country.econ.treasury - monthlyCost < -country.econ.gdp * 3) {
-        return {
-          ok: false,
-          text: `${tag} 债务已接近重组上限，无法再启动${BUILDINGS[building].name}`,
-        }
-      }
+      const count = clamp(Math.floor(num(params.count, 1)), 1, MAX_BUILDINGS_PER_SLOT)
+      // Orders per month are unlimited: every slot is capped at 15 buildings
+      // and at 15× its per-building point cost, so a long queue simply waits.
       country.econ.constructionQueue.push({
         id: `proj-${world.tick}-${country.id}-${country.econ.constructionQueue.length}`,
         building,
         count,
         owner: 'state',
-        monthsLeft: months,
-        monthlyCost,
+        monthsLeft: 1,
+        monthlyCost: BUILDINGS[building].cost * count,
         lastSpend: 0,
         progress: 0,
         startedAt: { ...world.date },
       })
       return {
         ok: true,
-        text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列（${months} 个月，每月 ${monthlyCost.toFixed(1)} 金）${
-          constructionBudget <= 0
-            ? '；注意：当前建设拨款为 0，项目不会推进'
-            : monthlyCost > constructionBudget
-              ? '；注意：建设拨款低于月成本，进度会变慢'
-              : ''
-        }`,
+        text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列（满额造价 ${(BUILDINGS[building].cost * count).toFixed(1)} 金，建造点 ${(CAPACITY_COST[building] * count).toFixed(1)}/月；满额 1 个月完成）`,
       }
     }
     case 'tax': {
