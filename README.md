@@ -134,6 +134,9 @@ node statusline/install.mjs
 4. `docs/plans/0002-agent-event-trees.md`：主要大国专属国策/事件树，再到多国交互事件树。
    树只定义触发条件、参与者、效果信封与历史上下文；具体提案由各国 agent 根据当前史实
    生成，引擎校验后落成修正，不做死模板。
+5. `docs/plans/0006-gm-engine-interface.md`：GM 与引擎的交互**全部走 MCP 工具**，禁止读
+   `.terminal-legend/save.json`；补 `v3_inspect`（贸易/市场/财政/建造/外交等明细）与
+   `v3_forecast`（下月现金流预测）。
 
 ## 开发
 
@@ -192,5 +195,6 @@ tests/first-slice.test.ts    第一刀（M1–M6）引擎与命令测试
 | ADR 0006 | 国库净资产化：单一余额、双向利率、贸易缺口并入、分期赔款 | ✅ 已实现（World v7） |
 | 0005 | 科技树 K1–K4：三分支 + 通用时代线、跨分支溢出、国际扩散 | 📝 已规划（World v8） |
 | 0002 | 事件树 S1–S4：局势/提案/多国交互 | 📝 已规划 |
+| 0006 | GM ⇄ 引擎接口：查询/预测全部走 MCP，禁止读存档 | 📝 已规划 |
 
 规划文档在 `docs/plans/`；架构决策在 `docs/adr/`；术语以 `GLOSSARY.md` 为准。
