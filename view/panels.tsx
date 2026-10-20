@@ -213,7 +213,7 @@ function Overview(props: { ui: UiKit; world: WorldState; width: number }): any {
           <StatLine ui={props.ui} label="GDP" value={`${fmtGdp(econ.gdp)} ${sparkline(econ.history.gdp, 12)} ${trend(econ.history.gdp)}`} />
           <StatLine ui={props.ui} label="GDP构成" value={`${fmtNumber(econ.gdpComponents.c)} 消费 + ${fmtNumber(econ.gdpComponents.i)} 投资 + ${fmtNumber(econ.gdpComponents.g)} 政府（金/月）`} />
           <StatLine ui={props.ui} label="私人资本" value={`${fmtNumber(econ.privateCapital)} 金 · 投资信心 ${econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(econ.investmentConfidence)} 点`} />
-          <StatLine ui={props.ui} label="税率" value={`${econ.taxRate}%  进出口关税 ${econ.tariff}%`} />
+          <StatLine ui={props.ui} label="税率" value={`${econ.taxRate}%  进口关税 ${econ.tariff}% / 出口关税 ${econ.exportTariff ?? econ.tariff}%`} />
           <StatLine ui={props.ui} label="物价" value={GOOD_IDS.slice(0, 5).map(id => `${GOODS[id].name}${econ.prices[id].toFixed(1)}`).join(' ')} />
           <Meter ui={props.ui} label="生活水平" value={player.pops.sol} max={100} color="cyan" />
           <Meter ui={props.ui} label="合法性" value={player.government.legitimacy} max={100} color={legitimacyColor(player.government.legitimacy)} />

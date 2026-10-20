@@ -9,6 +9,7 @@ import {
   deriveResourceImports,
   effectiveResources,
   importCapacity,
+  exportDutyRate,
   landedPrice,
   MAX_MONTHLY_DEFICIT_SHARE,
   paymentCapacity,
@@ -577,5 +578,28 @@ describe('T1b baseline and determinism', () => {
     qing.econ.tariff = 20
     const withDuties = landedPrice(gbr, qing, 'coal')
     expect(Math.abs(withDuties - base * 1.1 * 1.2)).toBeLessThan(1e-9)
+  })
+
+  test('import and export duties can be split, and an absent export rate follows imports', async () => {
+    const world = newWorld(7017, 'QING')
+    const qing = countryOf(world, 'QING')
+    const gbr = countryOf(world, 'GBR')
+    gbr.econ.tariff = 0
+    gbr.econ.exportTariff = 0
+    qing.econ.tariff = 0
+    qing.econ.exportTariff = 0
+    const base = landedPrice(gbr, qing, 'coal')
+    // The exporter's export duty and the importer's import duty are separate.
+    gbr.econ.exportTariff = 2
+    qing.econ.tariff = 30
+    expect(
+      Math.abs(landedPrice(gbr, qing, 'coal') - base * 1.02 * 1.3),
+    ).toBeLessThan(1e-9)
+    // With no export rate set, the historical single-rate behaviour stands.
+    gbr.econ.exportTariff = undefined
+    gbr.econ.tariff = 7
+    expect(exportDutyRate(gbr)).toBe(7)
+    gbr.econ.exportTariff = 2
+    expect(exportDutyRate(gbr)).toBe(2)
   })
 })

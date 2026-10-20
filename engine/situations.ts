@@ -310,7 +310,9 @@ export function applySituationResult(
       if (qing !== undefined) {
         // `ModifierStat` has no `tariff`, so this lands immediately rather than
         // as a 24-month timed change (plan §4.3 reading).
+        const exportRate = qing.econ.exportTariff ?? qing.econ.tariff
         qing.econ.tariff = clamp(qing.econ.tariff - 8, 0, 60)
+        qing.econ.exportTariff = clamp(exportRate - 8, 0, 60)
         addModifier(qing, {
           id: `situation:${OPIUM_CRISIS_ID}:compromise:access`,
           label: '通商口岸',

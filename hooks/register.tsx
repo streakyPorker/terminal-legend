@@ -162,6 +162,7 @@ function statusText(world: WorldState): string {
       `GDP构成：消费 ${fmtNumber(player.econ.gdpComponents.c)} / 投资 ${fmtNumber(player.econ.gdpComponents.i)} / 政府 ${fmtNumber(player.econ.gdpComponents.g)}；工资 ${fmtNumber(player.econ.wages)}（劳动份额 ${Math.round(player.econ.laborShare * 100)}%）/ 利润 ${fmtNumber(player.econ.profits)}`,
       `国库净资产：${fmtMoney(player.econ.treasury)}（${stock}）`,
       debtPressureLine,
+      `税率 ${player.econ.taxRate}% · 进口关税 ${player.econ.tariff}% · 出口关税 ${player.econ.exportTariff ?? player.econ.tariff}%`,
       `财政收入：税入 ${fmtNumber(ledger.income.taxes)} + 关税（进+出） ${fmtNumber(ledger.income.tariffs)} + 港口 ${fmtNumber(ledger.income.ports)} + 基金收益 ${fmtNumber(ledger.income.sovereignIncome)} + 赔款收入 ${fmtNumber(ledger.income.reparations)} + 其他（建造力出租） ${fmtNumber(ledger.income.other)} = ${fmtMoney(ledger.income.total)}/月（税入占 GDP ${taxShare}%）`,
       `财政支出：陆军 ${fmtNumber(ledger.expense.army)} + 海军 ${fmtNumber(ledger.expense.navy)} + 行政 ${fmtNumber(ledger.expense.administration)} + 教育 ${fmtNumber(ledger.expense.education)} + 福利 ${fmtNumber(ledger.expense.welfare)} + 债息 ${fmtNumber(ledger.expense.debtInterest)} + 市场损耗 ${fmtNumber(ledger.expense.marketLoss)} + 设施维护 ${fmtNumber(ledger.expense.upkeep)} + 赔款支出 ${fmtNumber(ledger.expense.reparations)} + 国有建设 ${fmtNumber(ledger.expense.construction)} = ${fmtMoney(ledger.expense.total)}/月`,
       `国库净额：收入 − 支出 = ${fmtSigned(ledger.net)} 金/月；私人部门贸易逆差 ${fmtMoney(ledger.tradeGap)}（由私人资本/私人外债 ${fmtMoney(ledger.privateDebt)} 承担，不影响国库）；净资产实际变动 ${fmtSigned(ledger.net)} 金/月；GDP 是产出，与国库收支不是同一本账`,
@@ -832,7 +833,7 @@ const TOOL_SPECS: {
   {
     name: 'v3_action',
     description:
-      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count）、cancel（取消国有项目，需 projectId）、tax（税率，需 rate）、tariff（进出口关税，需 rate）、spending（支出，需 category/amount）、research（研究方向，需 tech）、conscript（征兵，需 amount）、law（法案，需 name）。',
+      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count）、cancel（取消国有项目，需 projectId）、tax（税率，需 rate）、tariff（关税：rate 为进口税率，可选 exportRate 单独设出口税率；省略则进出口同率）、spending（支出，需 category/amount）、research（研究方向，需 tech）、conscript（征兵，需 amount）、law（法案，需 name）。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -857,7 +858,13 @@ const TOOL_SPECS: {
           description: 'build 时必填。',
         },
         count: { type: 'integer', minimum: 1, maximum: 5 },
-        rate: { type: 'number', minimum: 0, maximum: 60 },
+        rate: { type: 'number', minimum: 0, maximum: 60, description: '进口关税税率（tariff 时）。' },
+        exportRate: {
+          type: 'number',
+          minimum: 0,
+          maximum: 60,
+          description: '出口关税税率（可选；省略则与进口同率）。',
+        },
         category: {
           type: 'string',
           enum: ['army', 'navy', 'bureaucracy', 'education', 'welfare', 'construction'],

@@ -69,6 +69,13 @@ export function embargoed(embargoes: Embargo[], targetId: string, good: GoodId):
 export type TradeBlocker = (importerId: string, exporterId: string, good: GoodId) => boolean
 
 /**
+ * Export duty actually charged: the explicitly split export rate when one is
+ * set, otherwise the same single rate as imports (ADR 0009/0014).
+ */
+export const exportDutyRate = (country: Country): number =>
+  country.econ.exportTariff ?? country.econ.tariff
+
+/**
  * Landed cost of one good delivered from `from` to `to` (plan §1.2): the
  * exporter's domestic price marked up by its export duty, then the importer's
  * import duty, region transport cost, market access, transport infrastructure
@@ -81,7 +88,7 @@ export function landedPrice(from: Country, to: Country, good: GoodId): number {
   const relationRisk = 1 + Math.max(0, -relationOf(to, from.id)) / 200
   return (
     from.econ.prices[good] *
-    (1 + from.econ.tariff / 100) *
+    (1 + exportDutyRate(from) / 100) *
     (1 + to.econ.tariff / 100) *
     regionCost *
     accessFactor *
@@ -215,7 +222,8 @@ function deriveBalance(countries: Country[], flows: TradeFlow[]): TradeBalance {
     const base = GOODS[flow.good].basePrice
     // Export duty is charged on the exporter's domestic value; import duty is
     // then charged on the border value that already includes the export duty.
-    const exportTariff = index[flow.from]?.econ.tariff ?? 0
+    const exporter = index[flow.from]
+    const exportTariff = exporter === undefined ? 0 : exportDutyRate(exporter)
     const importTariff = index[flow.to]?.econ.tariff ?? 0
     const borderValue = value * (1 + exportTariff / 100)
     flow.value = value
@@ -415,7 +423,7 @@ export function settleTrade(
     }
     if (flow.from === country.id) {
       exportRevenue += value
-      exportDuty += value * (country.econ.tariff / 100)
+      exportDuty += value * (exportDutyRate(country) / 100)
     }
   }
   const tariffRevenue = importDuty + exportDuty

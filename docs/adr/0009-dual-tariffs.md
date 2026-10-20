@@ -1,6 +1,6 @@
 # 双向关税：出口国出口税 + 进口国进口税，到岸价按真实税后价格
 
-- Status: accepted（World v7，语义调整，不升版本）
+- Status: accepted（World v7，语义调整，不升版本）；“进出口同税率”部分由 ADR 0014 修订
 
 ## 背景
 

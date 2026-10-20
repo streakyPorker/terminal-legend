@@ -312,7 +312,14 @@ export type Economy = {
   income: number
   expense: number
   taxRate: number
+  /** Import duty charged on goods entering the country. */
   tariff: number
+  /**
+   * Export duty charged on goods leaving the country. Optional: when absent
+   * the state applies the same rate to both directions (`tariff`), which is
+   * the historical single-rate behaviour. Setting it splits the two.
+   */
+  exportTariff?: number
   spending: Spending
   buildings: Record<BuildingId, number>
   goods: Record<GoodId, number>

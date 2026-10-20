@@ -2760,7 +2760,17 @@ export function applyDecision(
     case 'tariff': {
       const rate = clamp(num(params.rate, country.econ.tariff), 0, 60)
       country.econ.tariff = rate
-      return { ok: true, text: `${tag} 将关税调整为 ${rate.toFixed(0)}%` }
+      // Without a separate export rate the old single-rate behaviour stands;
+      // supplying `exportRate` splits the two directions (ADR 0014).
+      const exportRate =
+        params.exportRate === undefined
+          ? rate
+          : clamp(num(params.exportRate, rate), 0, 60)
+      country.econ.exportTariff = exportRate
+      return {
+        ok: true,
+        text: `${tag} 将进口关税调整为 ${rate.toFixed(0)}%，出口关税 ${exportRate.toFixed(0)}%`,
+      }
     }
     case 'spending': {
       const category = String(params.category ?? '') as keyof Country['econ']['spending']
@@ -2849,8 +2859,14 @@ export function applyDecision(
           return `${tag} 推行福利改革，民怨稍减`
         },
         自由贸易: () => {
+          const exportRate = country.econ.exportTariff ?? country.econ.tariff
           country.econ.tariff = clamp(
             country.econ.tariff - 8,
+            FREE_TRADE_TARIFF_FLOOR,
+            60,
+          )
+          country.econ.exportTariff = clamp(
+            exportRate - 8,
             FREE_TRADE_TARIFF_FLOOR,
             60,
           )
@@ -2863,10 +2879,12 @@ export function applyDecision(
             value: 8,
             source: 'law:自由贸易',
           })
-          return `${tag} 推行自由贸易，关税降至 ${country.econ.tariff.toFixed(0)}%（下限 ${FREE_TRADE_TARIFF_FLOOR}%），市场接入提高`
+          return `${tag} 推行自由贸易，进口关税 ${country.econ.tariff.toFixed(0)}%、出口关税 ${country.econ.exportTariff.toFixed(0)}%（下限 ${FREE_TRADE_TARIFF_FLOOR}%），市场接入提高`
         },
         保护关税: () => {
+          const exportRate = country.econ.exportTariff ?? country.econ.tariff
           country.econ.tariff = clamp(country.econ.tariff + 8, 0, 60)
+          country.econ.exportTariff = clamp(exportRate + 8, 0, 60)
           country.econ.marketAccess = clamp(country.econ.marketAccess - 0.04, 0, 1)
           addModifier(country, {
             id: 'law:保护关税:factory',
