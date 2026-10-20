@@ -96,6 +96,14 @@ export type IncomeParts = {
   other: number
 }
 
+/**
+ * State subsidy to the construction bureaus: every spending level adds
+ * capacity points and costs gold (ADR 0015). Kept here because it is a fiscal
+ * outlay; the capacity side reads the same points constant in `sim.ts`.
+ */
+export const CONSTRUCTION_SUBSIDY_POINTS_PER_LEVEL = 1.5
+export const CONSTRUCTION_SUBSIDY_COST_PER_LEVEL = 0.45
+
 /** Raw monthly expense by category, before the `expense` modifier. */
 export type ExpenseParts = {
   army: number
@@ -109,6 +117,8 @@ export type ExpenseParts = {
   upkeep: number
   /** Installment reparations paid this month. */
   reparations: number
+  /** Subsidy to construction bureaus (spending.construction). */
+  constructionSubsidy: number
 }
 
 export type FiscalLedger = {
@@ -258,6 +268,8 @@ export function expenseParts(
       0.02,
     upkeep: (b.universities + b.barracks) * 0.01,
     reparations: country.econ.reparationsPaid ?? 0,
+    constructionSubsidy:
+      Math.max(0, sp.construction) * CONSTRUCTION_SUBSIDY_COST_PER_LEVEL,
   }
 }
 
@@ -298,7 +310,8 @@ export function fiscalLedger(
     rawExpense.welfare +
     rawExpense.marketLoss +
     rawExpense.upkeep +
-    rawExpense.reparations
+    rawExpense.reparations +
+    rawExpense.constructionSubsidy
   const debtInterest = Number.isFinite(econ.lastDebtInterest)
     ? econ.lastDebtInterest
     : rawExpense.debtInterest
@@ -331,6 +344,7 @@ export function fiscalLedger(
       marketLoss: rawExpense.marketLoss * expenseFactor,
       upkeep: rawExpense.upkeep * expenseFactor,
       reparations: rawExpense.reparations * expenseFactor,
+      constructionSubsidy: rawExpense.constructionSubsidy * expenseFactor,
       construction,
       total: econ.expense,
     },

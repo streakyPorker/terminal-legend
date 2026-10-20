@@ -41,7 +41,8 @@ describe('fiscal ledger', () => {
       ledger.income.tariffs +
       ledger.income.ports +
       ledger.income.sovereignIncome +
-      ledger.income.reparations
+      ledger.income.reparations +
+      ledger.income.other
     const expenseSum =
       ledger.expense.army +
       ledger.expense.navy +
@@ -52,7 +53,8 @@ describe('fiscal ledger', () => {
       ledger.expense.marketLoss +
       ledger.expense.upkeep +
       ledger.expense.reparations +
-      ledger.expense.construction
+      ledger.expense.construction +
+      ledger.expense.constructionSubsidy
 
     expect(Math.abs(incomeSum - qing.econ.income)).toBeLessThan(1e-9)
     expect(Math.abs(expenseSum - qing.econ.expense)).toBeLessThan(1e-9)

@@ -230,7 +230,10 @@ export const SPENDING: Record<SpendingCategory, { name: string; note: string }> 
   bureaucracy: { name: '官僚', note: '行政效率与合法性' },
   education: { name: '教育', note: '识字率与科技速度' },
   welfare: { name: '福利', note: '降低激进、提高生活水平' },
-  construction: { name: '建设', note: '手动建造项目的月度拨款上限；不下单则不会花出' },
+  construction: {
+    name: '建设补贴',
+    note: '按等级补贴营造局：每级每月 +1.5 建造点，花费 0.45 金（ADR 0015）',
+  },
 }
 
 export const TECHS = [

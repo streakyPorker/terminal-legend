@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { makeRngForWorld } from '../engine/data'
 import { parseWorld } from '../engine/save'
+import { expenseParts } from '../engine/fiscal'
 import {
   advance,
   capacityCost,
@@ -139,6 +140,25 @@ describe('construction capacity (ADR 0010)', () => {
     expect(qing.econ.buildings.workshops).toBeGreaterThan(0)
     expect(qing.econ.lastConstructionRent).toBe(0)
     expect(qing.econ.constructionQueue[0]?.lastCapacity).toBe(0)
+  })
+})
+
+describe('construction subsidy (ADR 0015)', () => {
+  test('each spending level adds capacity points and costs gold', async () => {
+    const world = newWorld(9308, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 10
+    qing.econ.spending.construction = 0
+    const base = constructionCapacity(qing)
+    qing.econ.spending.construction = 10
+    const subsidised = constructionCapacity(qing)
+    // The subsidy adds 15 gross points; material availability scales the gain.
+    const gain = subsidised - base
+    expect(gain).toBeGreaterThan(10)
+    expect(gain).toBeLessThanOrEqual(15 + 1e-9)
+    expect(
+      Math.abs(expenseParts(qing, qing.econ.gdp).constructionSubsidy - 4.5),
+    ).toBeLessThan(1e-6)
   })
 })
 

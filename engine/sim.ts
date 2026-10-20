@@ -47,6 +47,7 @@ import {
   techName,
 } from './data'
 import {
+  CONSTRUCTION_SUBSIDY_POINTS_PER_LEVEL,
   debtPressure,
   expenseParts,
   incomeParts,
@@ -408,10 +409,12 @@ export function constructionCapacity(country: Country): number {
   const infra = 0.6 + transport / 160
   const gross =
     effectiveCount(workshops) *
-    WORKSHOP_CAPACITY_OUTPUT *
-    techMultiplier(country) *
-    infra *
-    access
+      WORKSHOP_CAPACITY_OUTPUT *
+      techMultiplier(country) *
+      infra *
+      access +
+    Math.max(0, country.econ.spending.construction ?? 0) *
+      CONSTRUCTION_SUBSIDY_POINTS_PER_LEVEL
   const production = computeProduction(country)
   let inputRatio = 1
   for (const [good, perWorkshop] of Object.entries(WORKSHOP_INPUTS) as [
@@ -854,7 +857,8 @@ export function computeEconomy(
       outlay.debtInterest +
       outlay.marketLoss +
       outlay.upkeep +
-      outlay.reparations,
+      outlay.reparations +
+      outlay.constructionSubsidy,
   )
 
   const labor = deriveLabor(country)
