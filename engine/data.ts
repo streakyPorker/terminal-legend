@@ -7,11 +7,13 @@ import type {
   GoodId,
   Leader,
   PoliticalEconomy,
+  Region,
   ResourceId,
   Resources,
   SecretaryState,
   Spending,
   SpendingCategory,
+  TradeState,
   UiState,
   WorldState,
 } from '../types'
@@ -33,10 +35,22 @@ export const GOODS: Record<GoodId, { name: string; basePrice: number }> = {
   machinery: { name: '机械', basePrice: 6 },
   arms: { name: '军械', basePrice: 5.5 },
   luxury: { name: '奢侈品', basePrice: 10 },
+  opium: { name: '鸦片', basePrice: 2.5 },
   services: { name: '服务', basePrice: 4 },
 }
 
 export const GOOD_IDS = Object.keys(GOODS) as GoodId[]
+
+/**
+ * Region-pair transport cost multipliers (plan 0004 §1.2). Symmetric; the
+ * diagonal is 1.0 so domestic-equivalent pairs pay no transport friction.
+ */
+export const REGION_COST: Record<Region, Record<Region, number>> = {
+  europe: { europe: 1.0, eastAsia: 1.25, americas: 1.15, middleEast: 1.08 },
+  eastAsia: { europe: 1.25, eastAsia: 1.0, americas: 1.3, middleEast: 1.2 },
+  americas: { europe: 1.15, eastAsia: 1.3, americas: 1.0, middleEast: 1.25 },
+  middleEast: { europe: 1.08, eastAsia: 1.2, americas: 1.25, middleEast: 1.0 },
+}
 
 // ---------------------------------------------------------------- resources
 
@@ -100,6 +114,7 @@ export const SUBSISTENCE: Record<GoodId, number> = {
   fabric: 0,
   machinery: 0,
   arms: 0,
+  opium: 0,
 }
 
 /**
@@ -122,6 +137,7 @@ export const INCOME_ELASTICITY: Record<GoodId, number> = {
   fabric: 0,
   machinery: 0,
   arms: 0,
+  opium: 0,
 }
 
 /** Government purchases by spending category (plan 0003 §2.3). */
@@ -247,6 +263,20 @@ const basePrices = (): Record<GoodId, number> => {
   return out
 }
 
+/** A country's empty trade record for world creation (plan 0004 §1.3). */
+export function emptyTradeState(): TradeState {
+  return {
+    exports: [],
+    imports: [],
+    exportValue: 0,
+    importValue: 0,
+    tariffRevenue: 0,
+    nx: 0,
+    capacity: 0,
+    history: { exportValue: [], importValue: [], nx: [], tariffRevenue: [] },
+  }
+}
+
 const buildings = (
   farms: number,
   mines: number,
@@ -325,6 +355,8 @@ type CountrySeed = {
   marketAccess: number
   unemployment: number
   resources: Resources
+  region: Region
+  opium: { outputFactor: number; demandFactor: number }
   politicalEconomy: PoliticalEconomy
   techLevel: number
   researching: string
@@ -392,6 +424,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     marketAccess: 0.45,
     unemployment: 6,
     resources: resources(85, 60, 65, 40),
+    region: 'eastAsia',
+    opium: { outputFactor: 0.15, demandFactor: 0.2 },
     politicalEconomy: politicalEconomy(0.62, 0.2, 0.4, -5),
     techLevel: 1,
     researching: '农业改良',
@@ -448,6 +482,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     marketAccess: 0.9,
     unemployment: 8,
     resources: resources(45, 25, 100, 95),
+    region: 'europe',
+    opium: { outputFactor: 3.0, demandFactor: 0.02 },
     politicalEconomy: politicalEconomy(0.52, 0.42, 0.55, 10),
     techLevel: 6,
     researching: '钢铁工业',
@@ -504,6 +540,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     marketAccess: 0.75,
     unemployment: 7,
     resources: resources(70, 55, 55, 60),
+    region: 'europe',
+    opium: { outputFactor: 0.1, demandFactor: 0.03 },
     politicalEconomy: politicalEconomy(0.55, 0.35, 0.5, 5),
     techLevel: 5,
     researching: '机械化生产',
@@ -560,6 +598,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     marketAccess: 0.7,
     unemployment: 5,
     resources: resources(60, 45, 80, 70),
+    region: 'europe',
+    opium: { outputFactor: 0.1, demandFactor: 0.03 },
     politicalEconomy: politicalEconomy(0.54, 0.38, 0.55, 8),
     techLevel: 4,
     researching: '铁路时代',
@@ -616,6 +656,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     marketAccess: 0.5,
     unemployment: 4,
     resources: resources(80, 90, 40, 55),
+    region: 'europe',
+    opium: { outputFactor: 0.1, demandFactor: 0.03 },
     politicalEconomy: politicalEconomy(0.63, 0.18, 0.35, -8),
     techLevel: 2,
     researching: '蒸汽机',
@@ -672,6 +714,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     marketAccess: 0.65,
     unemployment: 6,
     resources: resources(65, 65, 50, 45),
+    region: 'europe',
+    opium: { outputFactor: 0.1, demandFactor: 0.03 },
     politicalEconomy: politicalEconomy(0.6, 0.22, 0.4, -3),
     techLevel: 3,
     researching: '铁路时代',
@@ -728,6 +772,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     marketAccess: 0.7,
     unemployment: 5,
     resources: resources(90, 85, 75, 70),
+    region: 'americas',
+    opium: { outputFactor: 0.1, demandFactor: 0.03 },
     politicalEconomy: politicalEconomy(0.54, 0.4, 0.55, 12),
     techLevel: 3,
     researching: '蒸汽机',
@@ -784,6 +830,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     marketAccess: 0.4,
     unemployment: 3,
     resources: resources(45, 55, 20, 15),
+    region: 'eastAsia',
+    opium: { outputFactor: 0.1, demandFactor: 0.03 },
     politicalEconomy: politicalEconomy(0.6, 0.24, 0.45, 0),
     techLevel: 1,
     researching: '农业改良',
@@ -840,6 +888,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     marketAccess: 0.45,
     unemployment: 8,
     resources: resources(55, 45, 35, 30),
+    region: 'middleEast',
+    opium: { outputFactor: 0.5, demandFactor: 0.05 },
     politicalEconomy: politicalEconomy(0.62, 0.18, 0.35, -6),
     techLevel: 1,
     researching: '农业改良',
@@ -896,6 +946,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     marketAccess: 0.55,
     unemployment: 10,
     resources: resources(55, 40, 35, 45),
+    region: 'europe',
+    opium: { outputFactor: 0.1, demandFactor: 0.03 },
     politicalEconomy: politicalEconomy(0.61, 0.2, 0.4, -4),
     techLevel: 3,
     researching: '蒸汽机',
@@ -1112,6 +1164,9 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         infoDistortion: 0.3,
       },
       politicalEconomy: { ...seedRow.politicalEconomy },
+      region: seedRow.region,
+      trade: emptyTradeState(),
+      opium: { ...seedRow.opium },
       econ: {
         gdp: seedRow.gdp,
         treasury: seedRow.treasury,
@@ -1195,7 +1250,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
   }
 
   return {
-    version: 5,
+    version: 6,
     seed,
     date: { year: START_YEAR, month: START_MONTH },
     tick: 0,

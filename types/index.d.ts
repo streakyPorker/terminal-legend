@@ -1,6 +1,8 @@
 // Type contract for terminal-legend.
 // Self-contained by design: the engine loads it as the plugin's `types` entry
 // and type-checks every `$.state` key the hooks module names against it.
+// World model v6: bilateral trade quantities and NX accounting are live
+// (plan 0004 T1a); gold movement and tariffs follow in T1b.
 
 export type GameDate = { year: number; month: number }
 
@@ -16,7 +18,53 @@ export type GoodId =
   | 'machinery'
   | 'arms'
   | 'luxury'
+  | 'opium'
   | 'services'
+
+/** Transport-cost region of a country (plan 0004 §1.2). */
+export type Region = 'europe' | 'eastAsia' | 'americas' | 'middleEast'
+
+/** One bilateral flow of a single good between two countries (plan 0004 §1.3). */
+export type TradeFlow = {
+  good: GoodId
+  /** Exporting country id. */
+  from: string
+  /** Importing country id. */
+  to: string
+  quantity: number
+  /** The exporter's domestic price this month. */
+  unitPrice: number
+  /** The importer's landed price (unitPrice plus tariff, transport, risk). */
+  landedPrice: number
+  /** Tariff the importing state collected. // T1b: gold settlement fills this. */
+  tariffPaid: number
+  /** quantity × unitPrice, the exporter's book value. */
+  value: number
+}
+
+/** A country's bilateral trade for the current month plus a running history. */
+export type TradeState = {
+  /** Flows where this country is the exporter; only the latest month is kept. */
+  exports: TradeFlow[]
+  /** Flows where this country is the importer; only the latest month is kept. */
+  imports: TradeFlow[]
+  /** Gold value of this month's exports at unit prices. */
+  exportValue: number
+  /** Gold value of this month's imports at unit prices. */
+  importValue: number
+  /** Tariff revenue this month, in gold. // T1b: gold settlement fills this. */
+  tariffRevenue: number
+  /** Net exports at base prices; feeds gdpComponents.nx (plan 0004 §2.5). */
+  nx: number
+  /** Soft import capacity in gold. // T1b: soft capacity fills this. */
+  capacity: number
+  history: {
+    exportValue: number[]
+    importValue: number[]
+    nx: number[]
+    tariffRevenue: number[]
+  }
+}
 
 export type BuildingId =
   | 'farms'
@@ -322,6 +370,12 @@ export type Country = {
   military: Military
   diplo: Diplomacy
   bureaucracy: Bureaucracy
+  /** Transport-cost region used by the trade clearing (plan 0004 §1.2). */
+  region: Region
+  /** Bilateral trade of the current month plus a running history. */
+  trade: TradeState
+  /** Per-country opium production and demand factors (plan 0004 §1.1). */
+  opium: { outputFactor: number; demandFactor: number }
   /** Active buffs and debuffs; see engine/modifiers.ts. */
   modifiers: Modifier[]
 }

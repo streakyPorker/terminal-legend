@@ -2,7 +2,7 @@ import type { EngineInterface } from 'claude-code'
 import type { WorldState } from '../types'
 
 /** Current world shape; older in-memory worlds are discarded like old saves. */
-export const CURRENT_WORLD_VERSION = 5
+export const CURRENT_WORLD_VERSION = 6
 
 const safeName = (name: string | undefined): string => {
   const cleaned = (name ?? 'save').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32)

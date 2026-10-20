@@ -343,6 +343,27 @@ function RankingsPanel(props: { ui: UiKit; world: WorldState }): any {
 
 // ---------------------------------------------------------------- economy
 
+type PartnerTotal = { id: string; imports: number; exports: number; total: number }
+
+function partnerTotals(player: Country): PartnerTotal[] {
+  const merged = new Map<string, { imports: number; exports: number }>()
+  const add = (id: string, key: 'imports' | 'exports', value: number): void => {
+    const entry = merged.get(id) ?? { imports: 0, exports: 0 }
+    entry[key] += value
+    merged.set(id, entry)
+  }
+  for (const flow of player.trade.imports) add(flow.from, 'imports', flow.value)
+  for (const flow of player.trade.exports) add(flow.to, 'exports', flow.value)
+  return Array.from(merged.entries())
+    .map(([id, entry]) => ({
+      id,
+      imports: entry.imports,
+      exports: entry.exports,
+      total: entry.imports + entry.exports,
+    }))
+    .sort((a, b) => b.total - a.total || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+}
+
 function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): any {
   const { Box, Text } = props.ui
   const player = playerOf(props.world)
@@ -351,6 +372,13 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
   const econ = player.econ
   const components = econ.gdpComponents
   const widths = [7, 7, 8, 8, 7, 11]
+  const tradeWidths = [12, 10, 10, 10]
+  const partners = partnerTotals(player).slice(0, 6)
+  const opiumImports = player.trade.imports
+    .filter(flow => flow.good === 'opium')
+    .reduce((sum, flow) => sum + flow.quantity, 0)
+  const opiumDemand = snapshot.demand.opium
+  const opiumDependency = opiumDemand > 0 ? fmtPercent(opiumImports / opiumDemand) : '—'
 
   return (
     <Box flexDirection="column">
@@ -397,6 +425,39 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
           />
         )
       })}
+
+      <Box flexDirection="column" marginTop={1}>
+        <Heading ui={props.ui} text="对外贸易" hint="Top-6 伙伴 · 进口/出口值 · NX · 鸦片依存" />
+        <Text dimColor>
+          出口 {fmtMoney(player.trade.exportValue)} · 进口 {fmtMoney(player.trade.importValue)} · NX {fmtSigned(player.trade.nx)}金 {sparkline(player.trade.history.nx, 16)}
+        </Text>
+        {partners.length === 0 ? (
+          <Text dimColor>本月暂无贸易往来。</Text>
+        ) : (
+          <Box flexDirection="column">
+            <TableRow ui={props.ui} cells={['伙伴', '进口', '出口', '合计']} widths={tradeWidths} />
+            {partners.map(row => {
+              const partner = props.world.countries[row.id]
+              return (
+                <TableRow
+                  ui={props.ui}
+                  cells={[
+                    partner !== undefined ? countryTag(partner) : row.id,
+                    fmtNumber(row.imports),
+                    fmtNumber(row.exports),
+                    fmtNumber(row.total),
+                  ]}
+                  widths={tradeWidths}
+                />
+              )
+            })}
+          </Box>
+        )}
+        <Text dimColor>
+          鸦片依存 进口 {fmtNumber(opiumImports)} / 需求 {fmtNumber(opiumDemand)}（{opiumDependency}）
+        </Text>
+        <Text dimColor>关税收入与贸易容量（T1b 未接入）。</Text>
+      </Box>
 
       <Box flexDirection="column" marginTop={1}>
         <Heading ui={props.ui} text="建筑与基础设施" />
@@ -505,6 +566,7 @@ function DiplomacyPanel(props: { ui: UiKit; world: WorldState }): any {
     .filter(country => country.id !== player.id)
     .map(country => ({ country, value: Math.round(player.diplo.relations[country.id] ?? 0) }))
     .sort((a, b) => b.value - a.value)
+  const tradePartners = partnerTotals(player).slice(0, 6)
 
   return (
     <Box flexDirection="column">
@@ -530,6 +592,26 @@ function DiplomacyPanel(props: { ui: UiKit; world: WorldState }): any {
           </Box>
         )
       })}
+
+      <Box flexDirection="column" marginTop={1}>
+        <Heading ui={props.ui} text="贸易依赖" hint="Top-6 · 双边贸易额 · 伙伴依赖度" />
+        {tradePartners.length === 0 ? (
+          <Text dimColor>本月暂无贸易往来。</Text>
+        ) : (
+          tradePartners.map(row => {
+            const partner = props.world.countries[row.id]
+            const partnerTrade = partner !== undefined ? partner.trade.exportValue + partner.trade.importValue : 0
+            const dependency = partnerTrade > 0 ? fmtPercent(row.total / partnerTrade) : '—'
+            return (
+              <Box flexDirection="row" columnGap={1}>
+                <Text wrap="truncate">{padEnd(partner !== undefined ? countryTag(partner) : row.id, 12)}</Text>
+                <Text>{padEnd(`往来 ${fmtNumber(row.total)}`, 11)}</Text>
+                <Text dimColor>依赖 {padEnd(dependency, 6)}</Text>
+              </Box>
+            )
+          })
+        )}
+      </Box>
 
       <Box flexDirection="column" marginTop={1}>
         <Heading ui={props.ui} text="领袖与议程" />

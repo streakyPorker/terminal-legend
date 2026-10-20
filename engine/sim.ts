@@ -52,6 +52,7 @@ import {
   totalsFor,
 } from './modifiers'
 import { evaluateThresholds, logThresholds } from './thresholds'
+import { clearTrade, effectiveSupply, type MarketSnapshot, type TradeBalance } from './trade'
 
 export type Decision = {
   countryId: string
@@ -69,6 +70,8 @@ export type AdvanceReport = {
 
 export type EconomySnapshot = {
   production: Record<GoodId, number>
+  /** Supply actually available after trade: production + imports − exports. */
+  supply: Record<GoodId, number>
   demand: Record<GoodId, number>
   /** Headline GDP after the `gdp` statistical modifier. */
   gdp: number
@@ -184,6 +187,12 @@ function computeProduction(country: Country): Record<GoodId, number> {
       cap(b.offices) * 0.8 +
       cap(b.universities) * 0.2,
   )
+  // Opium is farm-grown (plan 0004 §1.1) and scaled by the country's own
+  // output factor, which lets Britain stand in for British India.
+  out.opium = output(
+    'opium',
+    cap(b.farms) * 0.004 * tech * infra * access * country.opium.outputFactor,
+  )
   return out
 }
 
@@ -261,7 +270,16 @@ function computeDemand(country: Country): DemandBreakdown {
     consumer.luxury += country.econ.idlePurchases / Math.max(0.1, prices.luxury)
   }
 
+  // Opium is a separate demand block, not part of the Stone-Geary basket
+  // (plan 0004 §1.1): it grows with supernumerary income and the country's
+  // demand factor, and is not counted as a survival good.
+  const opiumDemand = demand(
+    'opium',
+    popFactor * country.opium.demandFactor * (0.5 + supernumerary / 10),
+  )
+
   for (const id of GOOD_IDS) out[id] = consumer[id]
+  out.opium += opiumDemand
   const investment = zeroGoods()
   const government = zeroGoods()
 
@@ -337,14 +355,21 @@ export function inspectEconomy(country: Country): {
   }
 }
 
-export function computeEconomy(country: Country): EconomySnapshot {
+export function computeEconomy(
+  country: Country,
+  override?: { supply?: Record<GoodId, number>; nx?: number },
+): EconomySnapshot {
   const production = computeProduction(country)
   const breakdown = computeDemand(country)
   const demand = breakdown.demand
+  // Trade replaces domestic output with effective supply for pricing and the
+  // C/I/G fill, so imported goods satisfy demand and exported ones leave it.
+  const supply = override?.supply ?? production
+  const nx = override?.nx ?? 0
 
   for (const id of GOOD_IDS) {
-    const produced = Math.max(0.01, production[id])
-    const ratio = demand[id] / produced
+    const available = Math.max(0.01, supply[id])
+    const ratio = demand[id] / available
     const target = GOODS[id].basePrice * clamp(Math.sqrt(ratio), 0.35, 3)
     const floor = GOODS[id].basePrice * 0.25
     const ceiling = GOODS[id].basePrice * 4
@@ -355,14 +380,13 @@ export function computeEconomy(country: Country): EconomySnapshot {
     )
   }
 
-  // With NX fixed at 0, only what domestic supply can actually deliver is
-  // transacted. Each final-use block is filled in proportion to its demand,
-  // so a shortage lowers GDP instead of inflating it through unmet orders.
-  // GDP is valued at base prices (real GDP): valuing at current prices makes
-  // nominal GDP fall whenever new capacity pushes consumer prices down.
-  const components: GdpComponents = { c: 0, i: 0, g: 0, nx: 0 }
+  // GDP is valued at base prices (real GDP). Each final-use block is filled in
+  // proportion to its demand against effective supply, so unmet orders lower
+  // GDP instead of inflating it. NX is added at base price and, like GDP, is
+  // not scaled by the `gdp` statistical modifier.
+  const components: GdpComponents = { c: 0, i: 0, g: 0, nx }
   for (const id of GOOD_IDS) {
-    const fill = clamp(production[id] / Math.max(0.01, demand[id]), 0, 1)
+    const fill = clamp(supply[id] / Math.max(0.01, demand[id]), 0, 1)
     const price = GOODS[id].basePrice
     components.c += breakdown.consumer[id] * price * fill
     components.i += breakdown.investment[id] * price * fill
@@ -376,7 +400,7 @@ export function computeEconomy(country: Country): EconomySnapshot {
   components.c *= gdpFactor
   components.i *= gdpFactor
   components.g *= gdpFactor
-  const gdp = realGdp * gdpFactor
+  const gdp = realGdp * gdpFactor + nx
 
   const gross = (() => {
     let total = 0
@@ -433,6 +457,7 @@ export function computeEconomy(country: Country): EconomySnapshot {
 
   return {
     production,
+    supply,
     demand,
     gdp,
     realGdp,
@@ -831,18 +856,20 @@ function simulateCountry(
   country: Country,
   rng: Rng,
   log: LogEntry[],
+  incoming?: { supply: Record<GoodId, number>; nx: number },
 ): void {
   const oldPops = Math.max(1, country.pops.total)
-  const snap = computeEconomy(country)
+  const snap = computeEconomy(country, incoming)
   // The demand computed above consumed last month's released idle capital.
   country.econ.idlePurchases = 0
 
-  // Market scarcity feeds unrest.
+  // Market scarcity feeds unrest; effective supply already includes this
+  // month's trade, so imports relieve the shortage.
   let scarcity = 0
   for (const id of GOOD_IDS) {
     const demand = snap.demand[id]
     if (demand <= 0) continue
-    const shortage = Math.max(0, demand - snap.production[id])
+    const shortage = Math.max(0, demand - snap.supply[id])
     scarcity += (shortage / demand) * (id === 'grain' || id === 'clothes' ? 1.6 : 0.5)
   }
   scarcity = clamp(scarcity, 0, 8)
@@ -1463,6 +1490,25 @@ function tickEvents(world: WorldState, rng: Rng, log: LogEntry[]): GameEvent[] {
   return pending
 }
 
+/** Overwrites a country's trade record with this month's clearing result. */
+function recordTrade(country: Country, balance: TradeBalance): void {
+  const trade = country.trade
+  trade.exports = balance.flows.filter(flow => flow.from === country.id)
+  trade.imports = balance.flows.filter(flow => flow.to === country.id)
+  trade.exportValue = balance.exportValue[country.id] ?? 0
+  trade.importValue = balance.importValue[country.id] ?? 0
+  trade.tariffRevenue = 0 // T1b: gold settlement fills this.
+  trade.nx = balance.nx[country.id] ?? 0
+  trade.capacity = 0 // T1b: soft capacity fills this.
+  trade.history.exportValue.push(trade.exportValue)
+  trade.history.importValue.push(trade.importValue)
+  trade.history.nx.push(trade.nx)
+  trade.history.tariffRevenue.push(0)
+  for (const series of Object.values(trade.history)) {
+    if (series.length > 36) series.shift()
+  }
+}
+
 export function advance(
   world: WorldState,
   months: number,
@@ -1490,8 +1536,26 @@ export function advance(
   for (let index = 0; index < total; index += 1) {
     world.date = advanceDate(world.date)
     world.tick += 1
-    for (const country of Object.values(world.countries)) {
-      simulateCountry(world, country, rng, log)
+    const countries = Object.values(world.countries)
+    // Phase A: snapshot every country's domestic production and demand before
+    // any of them is settled, so import/export decisions are order-independent.
+    const markets: Record<string, MarketSnapshot> = {}
+    for (const country of countries) markets[country.id] = inspectEconomy(country)
+    // Phase B: clear each tradable good globally.
+    const balance = clearTrade(countries, markets)
+    // Phases C/D: recompute each country from its effective supply and book NX.
+    for (const country of countries) {
+      const market = markets[country.id] as MarketSnapshot
+      const supply = effectiveSupply(
+        market.production,
+        balance.importQty[country.id] as Record<GoodId, number>,
+        balance.exportQty[country.id] as Record<GoodId, number>,
+      )
+      simulateCountry(world, country, rng, log, {
+        supply,
+        nx: balance.nx[country.id] ?? 0,
+      })
+      recordTrade(country, balance)
     }
     driftRelations(world)
     resolveWars(world, rng, log)

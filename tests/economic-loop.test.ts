@@ -24,7 +24,11 @@ describe('E1 expenditure GDP, Stone-Geary and factor shares', () => {
     const components = qing.econ.gdpComponents
     expect(components.c).toBeGreaterThan(0)
     expect(components.g).toBeGreaterThan(0)
-    expect(components.nx).toBe(0)
+    // T1a: NX is now part of GDP. A freshly calibrated world has no flows yet,
+    // so this is the reconcile check rather than a hard zero.
+    expect(
+      Math.abs(qing.econ.gdp - (components.c + components.i + components.g + components.nx)),
+    ).toBeLessThan(1e-6)
     const sum = components.c + components.i + components.g
     expect(Math.abs(qing.econ.gdp - sum)).toBeLessThan(1e-6)
 
