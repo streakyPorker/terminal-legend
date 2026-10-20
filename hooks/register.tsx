@@ -126,9 +126,9 @@ function statusText(world: WorldState): string {
   }
   const player = world.countries[world.playerId]
   if (player !== undefined) {
-    const queue = player.econ.constructionQueue
     const load = constructionLoad(player)
     const schedule = constructionSchedule(player)
+    const queue = player.econ.constructionQueue
     const stateQueue = queue.filter(
       project => (project.owner ?? 'state') !== 'private',
     )

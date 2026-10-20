@@ -443,6 +443,8 @@ export type ConstructionSchedule = Record<
  * planning aid, not a promise.
  */
 export function constructionSchedule(country: Country): ConstructionSchedule {
+  ensureConstructionFields(country)
+  normalizeConstructionQueue(country)
   const state = country.econ.constructionQueue.filter(
     project => (project.owner ?? 'state') !== 'private',
   )
@@ -483,7 +485,7 @@ export function constructionSchedule(country: Country): ConstructionSchedule {
       const share = workload > 0 ? take / workload : 1
       let projectProgress = (progress.get(project.id) ?? 0) + share
       let remainingMonths = monthsLeft.get(project.id) ?? 1
-      while (projectProgress >= 1 && remainingMonths > 0) {
+      while (projectProgress >= 1 - 1e-9 && remainingMonths > 0) {
         projectProgress -= 1
         remainingMonths -= 1
       }
@@ -518,6 +520,8 @@ export type ConstructionLoad = {
  * consume the state's workshops (ADR 0010), so they are excluded here.
  */
 export function constructionLoad(country: Country): ConstructionLoad {
+  ensureConstructionFields(country)
+  normalizeConstructionQueue(country)
   const capacity = constructionCapacity(country)
   let remaining = capacity
   let requested = 0
@@ -1046,7 +1050,7 @@ function settleConstruction(
       const effective = workShare * Math.min(1, goldShare) * speed
       project.progress = Math.min(1, project.progress + effective)
     }
-    if (project.progress >= 1) {
+    if (project.progress >= 1 - 1e-9) {
       completeBuilding(country, project.building, project.count)
       log.push({
         date: { ...world.date },
