@@ -480,7 +480,10 @@ export function constructionSchedule(country: Country): ConstructionSchedule {
       const workload = projectWorkload(project)
       const remainingPoints =
         workload * Math.max(0, 1 - (progress.get(project.id) ?? 0))
-      const take = Math.min(monthCapacity, slotCap, remainingPoints)
+      // A slot only ever draws its own monthly need (`capacityCost`), not the
+      // full five-building slot ceiling: a one-building entry takes 1.5 points,
+      // and the spare capacity moves on to the next entry.
+      const take = Math.min(monthCapacity, need, slotCap, remainingPoints)
       monthCapacity -= take
       const share = workload > 0 ? take / workload : 1
       let projectProgress = (progress.get(project.id) ?? 0) + share

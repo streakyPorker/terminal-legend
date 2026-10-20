@@ -214,4 +214,28 @@ describe('construction schedule estimate', () => {
     expect(schedule.first?.turns ?? 0).toBeGreaterThan(1)
     expect(schedule.second?.turns ?? 0).toBeGreaterThan(schedule.first?.turns ?? 0)
   })
+
+  test('a one-building entry draws only its own need, not a full slot', async () => {
+    const world = newWorld(9307, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 10
+    qing.econ.constructionQueue = []
+    for (let i = 0; i < 5; i += 1) {
+      qing.econ.constructionQueue.push(
+        project(
+          { id: `slot-${i}`, building: 'workshops', count: 1, owner: 'state' },
+          world.date,
+        ),
+      )
+    }
+    normalizeConstructionQueue(qing)
+    const schedule = constructionSchedule(qing)
+    for (let i = 0; i < 5; i += 1) {
+      // Workload 15, monthly need 1.5 → ten months, all five in parallel.
+      expect(schedule[`slot-${i}`]?.turns ?? 0).toBe(10)
+      expect(
+        Math.abs((schedule[`slot-${i}`]?.currentShare ?? 0) - 1),
+      ).toBeLessThan(1e-6)
+    }
+  })
 })
