@@ -225,6 +225,14 @@ export type ThresholdEvents = {
 export function evaluateThresholds(country: Country): ThresholdEvents {
   const added: string[] = []
   const removed: string[] = []
+  // A rule that no longer exists must not leave its buff behind in old saves.
+  const known = new Set(THRESHOLD_RULES.map(rule => `threshold:${rule.id}`))
+  country.modifiers = country.modifiers.filter(modifier => {
+    if (!modifier.source.startsWith('threshold:')) return true
+    if (known.has(modifier.source)) return true
+    removed.push(modifier.label ?? modifier.source)
+    return false
+  })
   for (const rule of THRESHOLD_RULES) {
     const source = `threshold:${rule.id}`
     const active = country.modifiers.some(modifier => modifier.source === source)

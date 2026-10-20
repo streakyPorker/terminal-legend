@@ -6,7 +6,9 @@ import {
   DEBT_PRESSURE_START,
   fiscalLedger,
 } from '../engine/fiscal'
+import { addModifier } from '../engine/modifiers'
 import { advance, newWorld } from '../engine/sim'
+import { evaluateThresholds } from '../engine/thresholds'
 import type { ConstructionProject, Country, WorldState } from '../types'
 
 const countryOf = (world: WorldState, id: string): Country => {
@@ -96,5 +98,23 @@ describe('debt pressure is smooth, not a cliff (ADR 0007)', () => {
     if (kept === undefined) return
     expect(kept.lastSpend).toBeGreaterThan(0)
     expect(kept.progress).toBeGreaterThan(0)
+  })
+
+  test('a threshold rule removed from the catalogue no longer leaves its buff behind', async () => {
+    const world = newWorld(9203, 'QING')
+    const qing = countryOf(world, 'QING')
+    addModifier(qing, {
+      id: 'threshold:bankrupt:0',
+      label: '财政崩溃',
+      stat: 'income',
+      stack: 'percent',
+      value: -10,
+      source: 'threshold:bankrupt',
+    })
+    const events = evaluateThresholds(qing)
+    expect(events.removed).toContain('财政崩溃')
+    expect(
+      qing.modifiers.some(one => one.source === 'threshold:bankrupt'),
+    ).toBe(false)
   })
 })
