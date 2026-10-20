@@ -153,7 +153,7 @@ claude plugin test .
 .claude-plugin/plugin.json   清单、userConfig（AI 模型）
 hooks/hooks.json             单个 hooks 模块
 hooks/register.tsx           命令、工具、御前会议、秘书、系统提示、三层渲染
-types/index.d.ts             PluginState 契约与世界模型类型（world v2）
+types/index.d.ts             PluginState 契约与世界模型类型（world v5；v6 贸易 / v7 科技树规划中）
 engine/data.ts               国家/商品/建筑/科技/领袖/事件模板、官僚与失业派生
 engine/sim.ts                确定性月度模拟、建造队列、玩家行动、托管中断
 engine/ai.ts                 批量 AI 领袖决策提示与解析
@@ -168,3 +168,15 @@ statusline/install.mjs       状态行调度器安装脚本
 tests/game.test.tsx          引擎、命令与渲染测试
 tests/first-slice.test.ts    第一刀（M1–M6）引擎与命令测试
 ```
+
+## 路线图
+
+| 阶段 | 内容 | 状态 |
+| --- | --- | --- |
+| 0001 | 第一刀 M1–M6：御前会议、秘书、官僚、建造、天命、铁人 | ✅ 已实现 |
+| 0003 | 经济循环 E1–E5：支出法 GDP、Stone-Geary、私人投资、资源禀赋 | ✅ 已实现（World v5） |
+| 0004 | 贸易与外交 T1–T4：Top-6 双边流、NX、鸦片危机、战争目标 | 📝 已规划（World v6） |
+| 0005 | 科技树 K1–K4：三分支 + 通用时代线、跨分支溢出、国际扩散 | 📝 已规划（World v7） |
+| 0002 | 事件树 S1–S4：局势/提案/多国交互 | 📝 已规划 |
+
+规划文档在 `docs/plans/`；架构决策在 `docs/adr/`；术语以 `GLOSSARY.md` 为准。
