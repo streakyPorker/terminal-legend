@@ -142,8 +142,8 @@ describe('construction capacity (ADR 0010)', () => {
   })
 })
 
-describe('construction slot limits (ADR 0011)', () => {
-  test('a slot holds at most 15 buildings and has a 15× point ceiling', async () => {
+describe('construction slot limits (ADR 0012/0013)', () => {
+  test('a build order clamps to five buildings and prices the workload', async () => {
     const world = newWorld(9304, 'QING')
     const qing = countryOf(world, 'QING')
     qing.econ.buildings.workshops = 10
@@ -161,7 +161,7 @@ describe('construction slot limits (ADR 0011)', () => {
     expect(maxSlotCapacity('factories')).toBe(10)
   })
 
-  test('a legacy oversized slot is capped at 15 buildings worth of points', async () => {
+  test('a slot draws all idle capacity, not just its own monthly need', async () => {
     const world = newWorld(9305, 'QING')
     const qing = countryOf(world, 'QING')
     qing.econ.buildings.workshops = 12
@@ -178,16 +178,19 @@ describe('construction slot limits (ADR 0011)', () => {
         world.date,
       ),
     ]
-    const cap = maxSlotCapacity('factories')
     // Leave only one gold of debt room so the slot cannot finish this month.
     qing.econ.treasury = -qing.econ.gdp * 3 + 1
     const load = constructionLoad(qing)
-    expect(load.byProject.oversized).toBeLessThanOrEqual(cap)
+    // A five-factory slot's monthly need is 10 points; with the workshops idle
+    // it can take every point they produce this month.
+    expect(load.byProject.oversized ?? 0).toBeGreaterThan(
+      maxSlotCapacity('factories'),
+    )
     advance(world, 1, [], makeRngForWorld(world))
     const kept = qing.econ.constructionQueue.find(one => one.id === 'oversized')
     expect(kept).toBeDefined()
     if (kept === undefined) return
-    expect(kept.lastCapacity ?? 0).toBeLessThanOrEqual(cap)
+    expect(kept.lastCapacity ?? 0).toBeGreaterThan(maxSlotCapacity('factories'))
     expect(kept.progress).toBeGreaterThan(0)
     expect(kept.progress).toBeLessThan(1)
   })
@@ -215,7 +218,7 @@ describe('construction schedule estimate', () => {
     expect(schedule.second?.turns ?? 0).toBeGreaterThan(schedule.first?.turns ?? 0)
   })
 
-  test('a one-building entry draws only its own need, not a full slot', async () => {
+  test('a one-building entry takes the idle points and finishes at once', async () => {
     const world = newWorld(9307, 'QING')
     const qing = countryOf(world, 'QING')
     qing.econ.buildings.workshops = 10
@@ -229,13 +232,16 @@ describe('construction schedule estimate', () => {
       )
     }
     normalizeConstructionQueue(qing)
+    const load = constructionLoad(qing)
+    const capacity = load.capacity
+    // Workload 45 (1.5 monthly need × 30); its own monthly need is only 1.5,
+    // but the first entry in the queue may take everything idle.
+    expect(load.byProject['slot-0'] ?? 0).toBeGreaterThan(1.5)
     const schedule = constructionSchedule(qing)
-    for (let i = 0; i < 5; i += 1) {
-      // Workload 15, monthly need 1.5 → ten months, all five in parallel.
-      expect(schedule[`slot-${i}`]?.turns ?? 0).toBe(10)
-      expect(
-        Math.abs((schedule[`slot-${i}`]?.currentShare ?? 0) - 1),
-      ).toBeLessThan(1e-6)
-    }
+    const firstTurns = Math.max(1, Math.ceil(45 / capacity))
+    expect(schedule['slot-0']?.turns ?? 0).toBe(firstTurns)
+    expect(schedule['slot-0']?.currentShare ?? 0).toBe(1)
+    // Queue order: the later entries wait for the first one to finish.
+    expect(schedule['slot-4']?.turns ?? 0).toBeGreaterThan(firstTurns)
   })
 })

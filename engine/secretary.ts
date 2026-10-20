@@ -2,7 +2,7 @@ import type { WorldState } from '../types'
 import { BUILDINGS } from './data'
 import { fiscalLedger } from './fiscal'
 import { MODIFIER_STAT_NAMES, describeModifier } from './modifiers'
-import { constructionLoad } from './sim'
+import { constructionLoad, projectWorkload } from './sim'
 
 /**
  * System prompt for the secretary subagent. The delegation itself changes
@@ -92,7 +92,7 @@ export function monthlyBriefing(world: WorldState): string {
   )
   const load = constructionLoad(player)
   lines.push(
-    `建造能力：${load.capacity.toFixed(1)} 点/月（国有需求 ${load.requested.toFixed(1)}，已分配 ${load.allocated.toFixed(1)}，闲置 ${load.remaining.toFixed(1)}）；国有项目优先，私人项目自建 50%，可租用国有闲置点。`,
+    `建造能力：${load.capacity.toFixed(1)} 点/月（队列剩余工程量 ${load.requested.toFixed(1)}，已分配 ${load.allocated.toFixed(1)}，闲置 ${load.remaining.toFixed(1)}）；国有项目按队列顺序取用闲置建造力，私人项目自建 50%，可租用国有闲置点。`,
   )
   lines.push(
     `资源禀赋：农田 ${player.econ.resources.farmland}，林地 ${player.econ.resources.timber}，煤矿 ${player.econ.resources.coal}，铁矿 ${player.econ.resources.iron}`,
@@ -114,7 +114,7 @@ export function monthlyBriefing(world: WorldState): string {
         : queue
             .map(
               project =>
-                `${project.owner === 'private' ? '[私人]' : '[国有]'}${BUILDINGS[project.building].name}×${project.count}（剩余 ${project.monthsLeft} 月，进度 ${pct(project.progress)}）`,
+                `${project.owner === 'private' ? '[私人]' : '[国有]'}${BUILDINGS[project.building].name}×${project.count}（工程量 ${(projectWorkload(project) * (1 - project.progress)).toFixed(1)}/${projectWorkload(project).toFixed(1)} 点，进度 ${pct(project.progress)}）`,
             )
             .join('；')
     }`,

@@ -307,20 +307,22 @@ export const PRIVATE_OWN_CAPACITY_SHARE = 0.5
 /** Gold the state charges per rented construction point. */
 export const CONSTRUCTION_RENT_PER_POINT = 0.3
 /**
- * A slot may hold at most 5 buildings. Its construction-point ceiling is
- * `5 × CAPACITY_COST[building]`; every slot also has a ten-month base duration,
- * so full capacity controls how many slots can run, not how fast one finishes
- * (ADR 0012).
+ * A slot may hold at most 5 buildings. There is no monthly point ceiling per
+ * slot: the queue is the brake, and an entry may take every idle point up to
+ * its remaining workload (ADR 0013).
  */
 export const MAX_BUILDINGS_PER_SLOT = 5
 
 /**
  * Total construction workload per unit of monthly point requirement. A slot
- * with 22.5 points/month needs 225 workload; at full input it takes ten
- * months, at half input twenty. Duration is always workload / monthly points
- * (ADR 0012), never a stored month count.
+ * with one workshop (1.5 points of monthly need) carries 30 × 1.5 = 45 points
+ * of workload. A slot is not limited to its own monthly need: it can draw any
+ * idle state capacity, up to its remaining workload, so a small project
+ * finishes faster when the workshops are otherwise idle. Duration is always
+ * workload / points actually invested (ADR 0012/0013), never a stored month
+ * count.
  */
-export const WORKLOAD_MULTIPLIER = 10
+export const WORKLOAD_MULTIPLIER = 30
 
 export const capacityCost = (project: ConstructionProject): number =>
   (CAPACITY_COST[project.building] ?? 1) * project.count
@@ -461,13 +463,14 @@ export function constructionSchedule(country: Country): ConstructionSchedule {
   let left = capacity
   for (const project of state) {
     const need = capacityCost(project)
-    const slotCap = maxSlotCapacity(project.building)
-    const take = Math.min(left, need, slotCap)
+    const workload = projectWorkload(project)
+    const remainingWorkload = workload * Math.max(0, 1 - project.progress)
+    const take = Math.min(left, remainingWorkload)
     left -= take
     result[project.id] = {
       turns: 60,
-      currentShare: need > 0 ? take / need : 1,
-      remainingPoints: Math.max(0, need - take),
+      currentShare: need > 0 ? Math.min(1, take / need) : 1,
+      remainingPoints: Math.max(0, remainingWorkload - take),
     }
   }
 
@@ -475,15 +478,13 @@ export function constructionSchedule(country: Country): ConstructionSchedule {
     let monthCapacity = capacity
     for (const project of state) {
       if (!active.has(project.id)) continue
-      const need = capacityCost(project)
-      const slotCap = maxSlotCapacity(project.building)
       const workload = projectWorkload(project)
       const remainingPoints =
         workload * Math.max(0, 1 - (progress.get(project.id) ?? 0))
-      // A slot only ever draws its own monthly need (`capacityCost`), not the
-      // full five-building slot ceiling: a one-building entry takes 1.5 points,
-      // and the spare capacity moves on to the next entry.
-      const take = Math.min(monthCapacity, need, slotCap, remainingPoints)
+      // A slot may draw any idle capacity, not just its own monthly need: the
+      // queue is the only brake, so a one-building entry can finish at once
+      // when the workshops have nothing else to do.
+      const take = Math.min(monthCapacity, remainingPoints)
       monthCapacity -= take
       const share = workload > 0 ? take / workload : 1
       let projectProgress = (progress.get(project.id) ?? 0) + share
@@ -540,12 +541,12 @@ export function constructionLoad(country: Country): ConstructionLoad {
   const byProject: Record<string, number> = {}
   for (const project of country.econ.constructionQueue) {
     if ((project.owner ?? 'state') === 'private') continue
-    const need = capacityCost(project)
-    const slotNeed = Math.min(need, maxSlotCapacity(project.building))
     const remainingPoints =
       projectWorkload(project) * Math.max(0, 1 - project.progress)
-    requested += slotNeed
-    const take = Math.min(remaining, slotNeed, remainingPoints)
+    // The queue's demand is the work left, not a monthly slot ceiling: each
+    // entry can take everything the workshops can give until its work is done.
+    requested += remainingPoints
+    const take = Math.min(remaining, remainingPoints)
     remaining -= take
     allocated += take
     byProject[project.id] = take
@@ -983,9 +984,9 @@ export function completeBuilding(country: Country, building: BuildingId, count: 
 }
 
 /**
- * Bring legacy projects onto the ADR 0012 rules: ten-month slots with the
- * total cost spread evenly, and at most five buildings per slot (oversized
- * slots are split).
+ * Bring legacy projects onto the current workload rules (ADR 0012/0013):
+ * cost priced per workload point, and at most five buildings per slot
+ * (oversized slots are split).
  */
 export function normalizeConstructionQueue(country: Country): void {
   const queue = country.econ.constructionQueue
@@ -1132,9 +1133,8 @@ function settleConstruction(
     if ((project.owner ?? 'state') === 'private') continue
     const need = capacityCost(project)
     const workload = projectWorkload(project)
-    const slotNeed = Math.min(need, maxSlotCapacity(project.building))
     const remainingPoints = workload * Math.max(0, 1 - project.progress)
-    const capacityTake = Math.min(capacityLeft, slotNeed, remainingPoints)
+    const capacityTake = Math.min(capacityLeft, remainingPoints)
     capacityLeft -= capacityTake
     runProject(
       project,
@@ -2749,7 +2749,7 @@ export function applyDecision(
       country.econ.constructionQueue.push(draft)
       return {
         ok: true,
-        text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列（工程量 ${(capacityCost(draft) * WORKLOAD_MULTIPLIER).toFixed(1)} 点；满额投入 ${capacityCost(draft).toFixed(1)} 点/月，总造价 ${constructionTotalCost(draft).toFixed(1)} 金，每月 ${draft.monthlyCost.toFixed(2)} 金）`,
+        text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列（工程量 ${projectWorkload(draft).toFixed(1)} 点；按队列顺序取用闲置建造力，一次最多投入剩余工程量；总造价 ${constructionTotalCost(draft).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft).toFixed(2)} 金）`,
       }
     }
     case 'tax': {

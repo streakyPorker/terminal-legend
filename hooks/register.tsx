@@ -8,13 +8,13 @@ import {
   applyDecision,
   applyEventOption,
   applyPolicy,
-  capacityCost,
   clamp,
   clone,
   CONSTRUCTION_COST_PER_POINT,
   CONSTRUCTION_RENT_PER_POINT,
   constructionLoad,
   constructionSchedule,
+  constructionTotalCost,
   councilInterrupt,
   projectWorkload,
   newWorld,
@@ -179,14 +179,14 @@ function statusText(world: WorldState): string {
       }`,
       `私人资本 ${fmtNumber(Math.max(0, player.econ.privateCapital))} · 私人外债 ${fmtMoney(ledger.privateDebt)} · 投资信心 ${player.econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(player.econ.investmentConfidence)} · 闲置利润 ${fmtNumber(player.econ.idleProfits)} · 劳动原始利用率 ${(player.econ.laborRawUtilization * 100).toFixed(1)}%（需求 ${fmtPop(player.econ.laborDemand)} / 劳动力 ${fmtPop(player.econ.laborForce)}）`,
       `资源禀赋：农田 ${player.econ.resources.farmland} · 林地 ${player.econ.resources.timber} · 煤矿 ${player.econ.resources.coal} · 铁矿 ${player.econ.resources.iron}`,
-      `建造能力 ${fmtNumber(load.capacity)} 点/月（国有需求 ${fmtNumber(load.requested)}，已分配 ${fmtNumber(load.allocated)}，闲置 ${fmtNumber(load.remaining)}；每点工程量造价 ${CONSTRUCTION_COST_PER_POINT} 金）`,
+      `建造能力 ${fmtNumber(load.capacity)} 点/月（队列剩余工程量 ${fmtNumber(load.requested)}，已分配 ${fmtNumber(load.allocated)}，闲置 ${fmtNumber(load.remaining)}；每点工程量造价 ${CONSTRUCTION_COST_PER_POINT} 金）`,
       `国有建造队列：${
         stateQueue.length === 0
           ? '空'
           : stateQueue
               .map(
                 project =>
-                  `${BUILDINGS[project.building].name}×${project.count}（工程量 ${fmtNumber(projectWorkload(project) * (1 - project.progress))}/${fmtNumber(projectWorkload(project))} 点，已完成 ${Math.round(project.progress * 100)}%，本月投入 ${fmtNumber(load.byProject[project.id] ?? 0)}/${fmtNumber(capacityCost(project))} 点，预计 ${schedule[project.id]?.turns ?? '—'} 回合，每月 ${fmtNumber(project.monthlyCost)} 金）`,
+                  `${BUILDINGS[project.building].name}×${project.count}（工程量 ${fmtNumber(projectWorkload(project) * (1 - project.progress))}/${fmtNumber(projectWorkload(project))} 点，已完成 ${Math.round(project.progress * 100)}%，本月投入 ${fmtNumber(load.byProject[project.id] ?? 0)} 点，预计 ${schedule[project.id]?.turns ?? '—'} 回合，总造价 ${fmtNumber(constructionTotalCost(project))} 金）`,
               )
               .join('；')
       }`,
