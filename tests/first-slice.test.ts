@@ -872,3 +872,45 @@ describe('modifier stock/flow semantics', () => {
     expect(Math.abs(boostedGrowth - plainGrowth * 2)).toBeLessThan(1e-9)
   })
 })
+
+// ---------------------------------------------------------------- v3_manual
+
+describe('v3_manual tool surface', () => {
+  test(
+    'returns the handbook text when the doc exists',
+    async ($, on) => {
+      const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
+      const handbook = `# 终末传奇 GM 手册\n${'规则口径说明。'.repeat(40)}`
+      setupSurface(anyOn, {
+        'fs.exists': (_$: any, e: any) => ({
+          value: String(e.path).endsWith('docs/gm-handbook.md'),
+        }),
+        'fs.read': (_$: any, e: any) => ({
+          value: String(e.path).endsWith('docs/gm-handbook.md') ? handbook : '',
+        }),
+      })
+      await startCampaign($ as any)
+      const result = (await ($.tool.call as unknown as (e: unknown) => Promise<{
+        result?: string
+        deny?: string
+      }>)({ tool: 'mcp__terminal-legend__v3_manual' }))
+      expect(result.result ?? '').toContain('GM 手册')
+      expect((result.result ?? '').length).toBeGreaterThan(100)
+    },
+  )
+
+  test(
+    'falls back to a tool and section list when the doc is missing',
+    async ($, on) => {
+      const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
+      setupSurface(anyOn)
+      await startCampaign($ as any)
+      const result = (await ($.tool.call as unknown as (e: unknown) => Promise<{
+        result?: string
+        deny?: string
+      }>)({ tool: 'mcp__terminal-legend__v3_manual' }))
+      expect(result.result ?? '').toContain('v3_inspect')
+      expect(result.result ?? '').toContain('rankings')
+    },
+  )
+})

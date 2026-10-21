@@ -137,9 +137,10 @@ Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplo
 
 | 工具 | 用途 |
 | --- | --- |
-| `v3_status` | 完整世界状态、各国对比、待决事件、战争、官僚与建造队列 |
-| `v3_inspect` | 只读明细：economy/fiscal/labor/trade/construction/military/history |
+| `v3_status` | 完整世界状态、本国财政/人口/军力/科技、待决事件、战争、官僚与建造队列（各国对比见 `v3_inspect rankings`） |
+| `v3_inspect` | 只读明细：economy/market/fiscal/labor/trade/routes/buildings/construction/military/pops/diplomacy/tech/modifiers/rankings/log/history |
 | `v3_forecast` | 下月现金流预估（收入、支出、净额、结算后国库） |
+| `v3_manual` | 返回 GM 机制手册（`docs/gm-handbook.md`），无需打开文件 |
 | `v3_advance` | 批准推进一月；months>1 视为托管并检测中断 |
 | `v3_cheat` | 天命：金钱/科技点/建筑/关系/战争分数/日期/事件/领袖（铁人禁用） |
 | `v3_action` | 建造（入队）、税基税率（`tax base`）、关税、支出、研究、征兵、法案 |
@@ -181,8 +182,10 @@ node statusline/install.mjs
 1. **`docs/plans/0007-economy-polish.md`（当前优先）**：世界贸易校准（农产品没有全球
    bid）、支付能力可见化、建造队列公平、GDP/科技/劳动力口径。先让经济可解释、可操作。
 2. `docs/plans/0006-gm-engine-interface.md`：GM 与引擎的交互**全部走 MCP 工具**，禁止读
-   `.terminal-legend/save.json`。`v3_inspect`（economy/fiscal/labor/trade/construction/
-   military/history）与 `v3_forecast` 已实现（ADR 0016）；后续补外交与世界市场的更细视图。
+   `.terminal-legend/save.json`。`v3_inspect` 的 16 个分区（economy/market/fiscal/labor/
+   trade/routes/buildings/construction/military/pops/diplomacy/tech/modifiers/rankings/
+   log/history）、`v3_forecast` 与 `v3_manual` 均已实现（ADR 0016）；每个事实只在一个分区
+   出现（逐建筑行在 `buildings`、路线在 `routes`、各国对比在 `rankings`）。
    GM 的机制参考（工具、经济、贸易、财政、口径 FAQ）见 `docs/gm-handbook.md`。
 3. `docs/plans/0005-tech-tree.md`：科技树 v8：工业/行政/军事三分支 + 通用时代线、跨分支
    溢出、国际扩散。**等 0007-E5 校准后再排期。**
@@ -281,7 +284,7 @@ tests/first-slice.test.ts    第一刀（M1–M6）引擎与命令测试
 | ADR 0023 | 四税基：土地 / 逐建筑企业利润 / 最终消费 / 关税，GDP 退为派生指标 | ✅ 已实现（World v10，0008 B4） |
 | 0005 | 科技树 K1–K4：三分支 + 通用时代线、跨分支溢出、国际扩散 | 📝 已规划（等经济打磨后） |
 | 0002 | 事件树 S1–S4：局势/提案/多国交互 | ⏸ 暂缓（先打磨经济） |
-| 0006 | GM ⇄ 引擎接口：查询/预测全部走 MCP，禁止读存档 | 📝 已规划 |
+| 0006 | GM ⇄ 引擎接口：查询/预测全部走 MCP，禁止读存档 | ✅ 已实现（v3_inspect 16 分区 + v3_forecast + v3_manual；ADR 0016） |
 | 0007 | 经济打磨：世界贸易校准、支付能力可见化、建造队列、GDP/科技/劳动力 | 🔧 当前优先（E1 第一轮已校准，32e624b） |
 | ADR 0026 / 0011 | 建筑扩张与统一基础设施：拆矿场/工厂为单产建筑、加学校/运河/电报/要塞/船坞、`steel` 商品、统一基础设施（供给/需求/线性 debuff/维护）、`unlock` 前向字段 | 🔧 进行中（F1 已实现：`iron`→铁矿石、新增 `steel`、World v11；F2–F7 待做） |
 

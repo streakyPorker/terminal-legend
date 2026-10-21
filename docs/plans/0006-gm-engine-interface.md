@@ -1,6 +1,6 @@
 # GM ⇄ 引擎接口：查询与预测全部走 MCP
 
-- Status: partially implemented（`v3_inspect` 七个分区与 `v3_forecast` 已随 ADR 0016 落地）
+- Status: implemented（`v3_inspect` 十六个只读分区、`v3_forecast` 与 `v3_manual` 已落地；ADR 0016 落地七分区，其余分区在 GM 接口补全中补齐）。每个事实只在一个分区出现：逐建筑行在 `buildings`（不在 `economy`）、贸易路线在 `routes`（不在 `trade`）、各国对比在 `rankings`（不在 `v3_status`）。
 - Depends on: ADR 0003（确定性引擎 / LLM 判断边界）、ADR 0005（不做存档兼容）
 - Scope: 让主模型（GM）与引擎的所有交互都通过 `$.tool.register` 暴露的 MCP 工具完成；`save.json` 只用于持久化，不再作为 GM 的数据源。世界版本不变。
 

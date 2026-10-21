@@ -320,6 +320,8 @@ describe('terminal-legend drawing', () => {
       expect(await ui.find({ type: 'Text', text: /经济/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /人口与社会/ })).toBeDefined()
       expect(await ui.find({ type: 'Text', text: /军事/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /科技与行政/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /外交与威望/ })).toBeDefined()
       await ui.unmount()
     }
   })

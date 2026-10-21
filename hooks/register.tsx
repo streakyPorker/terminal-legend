@@ -30,7 +30,12 @@ import {
   type Decision,
 } from '../engine/sim'
 import { CURRENT_WORLD_VERSION, loadGame, saveGame } from '../engine/save'
-import { forecastWorld, inspectWorld } from '../engine/inspect'
+import {
+  forecastWorld,
+  inspectWorld,
+  INSPECT_SECTIONS,
+  type InspectOptions,
+} from '../engine/inspect'
 import { fiscalLedger } from '../engine/fiscal'
 import { applyCheat, type CheatParams } from '../engine/cheat'
 import { SECRETARY_PROMPT, monthlyBriefing } from '../engine/secretary'
@@ -50,7 +55,6 @@ import {
   countryTag,
   fmtDate,
   fmtDateLong,
-  fmtGdp,
   fmtMoney,
   fmtNumber,
   fmtPop,
@@ -81,6 +85,7 @@ const SECRETARY_TOOLS = [
   'mcp__terminal-legend__v3_status',
   'mcp__terminal-legend__v3_inspect',
   'mcp__terminal-legend__v3_forecast',
+  'mcp__terminal-legend__v3_manual',
   'mcp__terminal-legend__v3_advance',
   'mcp__terminal-legend__v3_cheat',
   'mcp__terminal-legend__v3_action',
@@ -130,6 +135,25 @@ async function activeWorld(
   return { world, ui }
 }
 
+/**
+ * Repo root for reading repo docs at runtime (the GM handbook). Mirrors the
+ * save/load path resolution; it never touches `.terminal-legend/save.json`.
+ */
+async function readProjectDoc($: EngineInterface, relativePath: string): Promise<string | undefined> {
+  const root = await (async (): Promise<string> => {
+    try {
+      return await $.session.root()
+    } catch {
+      return await $.session.cwd()
+    }
+  })()
+  const path = `${root}/${relativePath}`
+  const exists = await $.fs.exists(path)
+  if (!exists) return undefined
+  const text = await $.fs.read(path)
+  return typeof text === 'string' && text.trim() !== '' ? text : undefined
+}
+
 // ---------------------------------------------------------------- text
 
 function pendingOf(world: WorldState) {
@@ -137,13 +161,9 @@ function pendingOf(world: WorldState) {
 }
 
 function statusText(world: WorldState): string {
-  const lines = [describeWorldForNarrator(world), '', '各国状态：']
-  for (const country of Object.values(world.countries)) {
-    const playerMark = country.isPlayer ? '★' : ' '
-    lines.push(
-      `${playerMark}[${country.flag}]${country.name}(${country.id}) 净资产${fmtMoney(country.econ.treasury)} GDP${fmtGdp(country.econ.gdp)} 合法性${Math.round(country.government.legitimacy)} 激进${Math.round(country.pops.radicals)} 陆军${fmtNumber(country.military.army)}万 海军${fmtNumber(country.military.navy)} 科技${country.tech.level}`,
-    )
-  }
+  // Cross-country comparison lives in `v3_inspect rankings` (context economy);
+  // status keeps the narrator summary plus the player country's detail.
+  const lines = [describeWorldForNarrator(world), '各国对比见 v3_inspect rankings。']
   const player = world.countries[world.playerId]
   if (player !== undefined) {
     const load = constructionLoad(player)
@@ -219,7 +239,6 @@ function statusText(world: WorldState): string {
               .join('；')
       }`,
       `秘书委托：内政${world.secretary.delegation.internal ? '开' : '关'}，外交${world.secretary.delegation.diplomacy ? '开' : '关'}${world.secretary.lastReport === '' ? '' : `｜上次报告：${world.secretary.lastReport.slice(0, 200)}`}`,
-      `国策修正：${player.modifiers.length === 0 ? '无' : player.modifiers.map(modifier => modifier.label).join('、')}`,
     )
   }
   const pending = pendingOf(world)
@@ -858,28 +877,34 @@ const TOOL_SPECS: {
   {
     name: 'v3_status',
     description:
-      '终末传奇：读取当前世界状态（玩家国家、财政、人口、军力、科技、各国对比、待决事件、战争）。在回答任何需要具体数字的问题前先调用它。',
+      '终末传奇：读取当前世界状态（玩家国家、财政、人口、军力、科技、待决事件、战争；各国对比用 v3_inspect rankings）。在回答任何需要具体数字的问题前先调用它。',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
     name: 'v3_inspect',
     description:
-      '终末传奇：只读明细查询。section 取 economy（GDP 分解/物价/缺口）、market（商品市场供需与对外贸易/伙伴）、fiscal（收支/债务/税率）、labor（失业分解/工资）、trade（分商品进出口/伙伴）、construction（建造力/队列/租金）、military（军力/战争）、history（近 12 个月序列）。遇到“为什么变了”先用它，不要读存档或源码。',
+      '终末传奇：只读明细查询。section 取 economy（GDP 分解/物价/缺口）、market（商品市场供需与对外贸易/伙伴）、fiscal（收支/债务/税率）、labor（失业分解/工资）、trade（分商品进出口/伙伴）、routes（贸易路线：商品/起止/等级/运量/利差）、buildings（建筑类型配方/造价/工程量/建造点与逐建筑经营利润/存量）、construction（建造力/队列/租金）、military（军力/战争）、pops（人口阶级结构/识字/生活水平/激进忠诚）、diplomacy（关系/盟友/对手/禁运/贸易张力/局势）、tech（科技等级/点数/研究率分解）、modifiers（生效修正：来源/stat/栈/值/到期）、rankings（列强五维排名数据）、log（最近编年史，可用 kind/country/limit 过滤）、history（近 12 个月序列）。遇到“为什么变了”先用它，不要读存档或源码。',
     inputSchema: {
       type: 'object',
       properties: {
         section: {
           type: 'string',
-          enum: [
-            'economy',
-            'market',
-            'fiscal',
-            'labor',
-            'trade',
-            'construction',
-            'military',
-            'history',
-          ],
+          enum: [...INSPECT_SECTIONS],
+          description: '缺省 economy。',
+        },
+        kind: {
+          type: 'string',
+          description: '仅 log 分区：按日志类型过滤（economy/diplomacy/war/tech/politics/leader/event/system）。',
+        },
+        country: {
+          type: 'string',
+          description: '仅 log 分区：按国家 id 过滤（如 GBR）。',
+        },
+        limit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 100,
+          description: '仅 log 分区：返回的最近条数，缺省 20。',
         },
       },
       additionalProperties: false,
@@ -889,6 +914,12 @@ const TOOL_SPECS: {
     name: 'v3_forecast',
     description:
       '终末传奇：预估下月现金流（收入、支出、净额、结算后国库、建造力分配与租金）。它是计划值，遇贸易/事件会偏移。',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'v3_manual',
+    description:
+      '终末传奇：返回 GM 机制手册（docs/gm-handbook.md）全文，供查阅规则口径，无需打开文件。只读，不读存档。',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
@@ -1667,9 +1698,22 @@ export const register: Register = (on, options) => {
       const args = e as unknown as Args
       const section =
         typeof args.section === 'string' ? args.section : 'economy'
-      return toolOk(inspectWorld(current.world, section))
+      const options: InspectOptions = {}
+      if (typeof args.kind === 'string') options.kind = args.kind
+      if (typeof args.country === 'string') options.country = args.country.toUpperCase()
+      if (typeof args.limit === 'number') options.limit = args.limit
+      return toolOk(inspectWorld(current.world, section, options))
     } catch (error) {
       return toolFail(`明细查询失败：${String(error)}`)
+    }
+  })
+
+  on('tool.call', { tool: 'mcp__terminal-legend__v3_manual' }, async $ => {
+    try {
+      const text = await readProjectDoc($, 'docs/gm-handbook.md')
+      return toolOk(text ?? manualFallback())
+    } catch (error) {
+      return toolFail(`读取手册失败：${String(error)}`)
     }
   })
 
@@ -2081,4 +2125,13 @@ export const register: Register = (on, options) => {
 
 function statusHint(): string {
   return '终末传奇：还没有进行中的游戏。\n/v3 new [国家] 开一局（默认 QING 大清）\n/v3 load 读取存档\n/v3 help 查看全部命令'
+}
+
+function manualFallback(): string {
+  return [
+    '（未找到 docs/gm-handbook.md；以下为工具与分区速查）',
+    '工具：v3_status / v3_inspect / v3_forecast / v3_manual / v3_advance / v3_action / v3_policy / v3_diplomacy / v3_situation / v3_event / v3_leader / v3_play / v3_save / v3_cheat',
+    `v3_inspect 分区（section）：${INSPECT_SECTIONS.join(' / ')}`,
+    '规则：查询状态只走 MCP 工具，绝不读取 .terminal-legend/save.json。',
+  ].join('\n')
 }

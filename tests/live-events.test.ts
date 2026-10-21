@@ -313,7 +313,7 @@ const liveIds = (text: string): string[] =>
   [...text.matchAll(/\[(live-[^\]]+)\]/g)].map(match => match[1] as string)
 
 const liveRadicals = (text: string): number | undefined => {
-  const match = /激进(\d+)/.exec(text)
+  const match = /激进\s*(\d+)/.exec(text)
   return match === null ? undefined : Number(match[1])
 }
 
