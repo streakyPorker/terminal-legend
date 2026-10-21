@@ -44,8 +44,9 @@ const storedUtilization = (c: Country, id: BuildingId): number => {
  * Frozen copy of the pre-C5 `computeProduction` gate math. The only difference
  * from the shipped engine is the hardcoded tech factor (`1 + level × 0.07`) —
  * exactly the literal C5 moved into `tech:multiplier`. Every other multiplier
- * is the pre-C5 literal too (`0.55 + access × 0.9`, `0.6 + transport / 160`,
- * `clamp(avg, 0.7, 1.3)`), so this is a true oracle.
+ * is the pre-C5 literal too (`0.55 + access × 0.9`, `clamp(avg, 0.7, 1.3)`),
+ * except F5's unified infrastructure multiplier (clamp(level / 100, 0.35, 1))
+ * which replaced the retired per-recipe `infrastructure` gate.
  */
 function oracleProduction(c: Country): Record<GoodId, number> {
   ensureConstructionFields(c)
@@ -53,7 +54,7 @@ function oracleProduction(c: Country): Record<GoodId, number> {
   const marketAccess = applyModifiers(c, 'marketAccess', c.econ.marketAccess)
   const access = 0.55 + marketAccess * 0.9
   const transport = applyModifiers(c, 'transportInfrastructure', c.econ.transportInfrastructure)
-  const infra = 0.6 + transport / 160
+  const infra = clamp(transport / 100, 0.35, 1)
   const b = c.econ.buildings
   const resources = resourceFactors(c)
   const industrial = clamp((resources.coal + resources.iron) / 2, 0.7, 1.3)
@@ -67,9 +68,9 @@ function oracleProduction(c: Country): Record<GoodId, number> {
       const gates = recipe.outputGates?.[good] ?? recipe.gates
       let value = count * coef
       if (gates?.tech) value *= tech
-      if (gates?.infrastructure) value *= infra
       if (gates?.access) value *= access
       if (gates?.industrial) value *= industrial
+      value *= infra
       if (modifier !== undefined) value = applyModifiers(c, modifier, value)
       raw[good] += value
     }

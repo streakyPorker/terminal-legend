@@ -5,6 +5,7 @@ import {
   deriveBureaucracy,
   deriveUnemployment,
   industrialBuildingCount,
+  refreshInfrastructure,
   successorFor,
   techCost,
   techName,
@@ -170,10 +171,12 @@ export function simulateCountry(
     )
   }
   // Rails, ports, offices and universities wear out too; their infrastructure
-  // bonuses must not outlive the buildings that produced them.
-  country.econ.transportInfrastructure *= 1 - DEPRECIATION_PER_MONTH
+  // bonuses must not outlive the buildings that produced them. The unified
+  // infrastructure level is derived from the (now decayed) building counts, so
+  // it is simply refreshed rather than decayed independently (plan 0011 F5).
   country.econ.marketAccess *= 1 - DEPRECIATION_PER_MONTH
   country.econ.administrativeCapacity *= 1 - DEPRECIATION_PER_MONTH
+  refreshInfrastructure(country)
 
   // Pops: growth, urbanisation, standard of living.
   const growthRate = applyModifiers(

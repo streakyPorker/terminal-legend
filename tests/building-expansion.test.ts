@@ -5,6 +5,8 @@ import {
   BUILDING_OUTPUT,
   BUILDING_RECIPES,
   BUILDING_TIME,
+  INFRA_SUPPLY,
+  infrastructureSupply,
   INVESTMENT_DEMAND,
   makeRngForWorld,
 } from '../engine/data'
@@ -108,7 +110,7 @@ describe('F4 building expansion: schools / canals / telegraphs / forts / navalYa
     }
   })
 
-  test('completion side effects apply (schools literacy; canals/telegraphs transport + market access)', () => {
+  test('completion side effects apply (schools literacy; canals/telegraphs supply + market access)', () => {
     const world = newWorld(9100, 'QING')
     const qing = countryOf(world, 'QING')
 
@@ -116,17 +118,21 @@ describe('F4 building expansion: schools / canals / telegraphs / forts / navalYa
     completeBuilding(qing, 'schools', 5)
     close(qing.pops.literacy, literacyBefore + 5 * 0.002)
 
-    const transportBefore = qing.econ.transportInfrastructure
+    // Plan 0011 F5: canals/telegraphs no longer bump a transport scalar; they
+    // supply the unified infrastructure pool, while keeping their market access.
     const accessBefore = qing.econ.marketAccess
+    const supplyBefore = infrastructureSupply(qing)
     completeBuilding(qing, 'canals', 3)
-    close(qing.econ.transportInfrastructure, transportBefore + 3 * 2)
     close(qing.econ.marketAccess, accessBefore + 3 * 0.01)
+    close(infrastructureSupply(qing), supplyBefore + 3 * (INFRA_SUPPLY.canals ?? 0))
 
-    const transport2 = qing.econ.transportInfrastructure
     const access2 = qing.econ.marketAccess
     completeBuilding(qing, 'telegraphs', 4)
-    close(qing.econ.transportInfrastructure, transport2 + 4 * 0.8)
     close(qing.econ.marketAccess, access2 + 4 * 0.005)
+    close(
+      infrastructureSupply(qing),
+      supplyBefore + 3 * (INFRA_SUPPLY.canals ?? 0) + 4 * (INFRA_SUPPLY.telegraphs ?? 0),
+    )
 
     // Counts advanced too.
     expect(qing.econ.buildings.schools).toBe(5)

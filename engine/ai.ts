@@ -19,7 +19,7 @@ const SYSTEM = `你是 19 世纪大战略游戏的世界决策引擎。你为每
 - 每个元素形如 {"country":"GBR","action":"build","params":{"building":"textileMills","count":1},"narrative":"一句符合该领袖性格的行动描述"}
 - 每个国家最多 1 条；只为他国（非玩家国）决策。
 - action 只能是：build, tax, tariff, spending, research, conscript, law, diplomacy, invest, situation。
-- build 的 building 只能是：farms, coalMines, ironMines, lumberMills, textileMills, furnitureWorks, distilleries, machineryWorks, steelMills, arsenals, luxuryWorks, schools, canals, telegraphs, forts, navalYards, railroads, ports, universities, barracks, offices；params.count 为 1..20 的数字。官署提供行政能力与官僚上限；学校育才促识字；运河/电报是交通基础设施；要塞/船坞是军事建造。
+- build 的 building 只能是：farms, coalMines, ironMines, lumberMills, textileMills, furnitureWorks, distilleries, machineryWorks, steelMills, arsenals, luxuryWorks, schools, canals, telegraphs, forts, navalYards, railroads, ports, universities, barracks, offices；params.count 为 1..20 的数字。官署提供行政能力与官僚上限；学校育才促识字；铁路/港口/运河/电报供给统一基础设施；要塞/船坞是军事建造。
 - tax 用 params.base（land=土地税, profit=企业所得税, consumption=消费税, tariff=关税）与 params.rate（0..60）；tariff 用 params.rate（0..60，可选 params.exportRate）；spending 用 params.category（army/navy/bureaucracy/education/welfare/construction）与 params.amount（0..50）；数值必须是 JSON 数字，不能写成字符串。
 - invest 调整投资信心：params.amount 取 -3..3，结果被限制在该国基准上下 10 点内。
 - diplomacy 需要 params.target（国家代码）与 params.move（improve, insult, alliance, rival, gift, war, peace, embargo, unembargo, tension）。

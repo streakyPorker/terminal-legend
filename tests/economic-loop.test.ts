@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { decideForAi } from '../engine/ai'
-import { deriveLabor, makeRngForWorld, resourceMultiplier } from '../engine/data'
+import { deriveLabor, makeRngForWorld, refreshInfrastructure, resourceMultiplier } from '../engine/data'
 import {
   advance,
   applyDecision,
@@ -708,12 +708,11 @@ describe('Round 3 regressions', () => {
     expect(qing.modifiers.some(one => one.source.startsWith('policy:'))).toBe(false)
   })
 
-  test('infrastructure decays with the buildings that produced it', async () => {
+  test('market access decays and the unified infrastructure level tracks its providers', async () => {
     const world = newWorld(137, 'QING')
     const qing = world.countries.QING
     expect(qing).toBeDefined()
     if (qing === undefined) return
-    qing.econ.transportInfrastructure = 100
     qing.econ.marketAccess = 1
     // Isolate decay from new construction: no public works, no private
     // savings, and no queued projects.
@@ -722,8 +721,15 @@ describe('Round 3 regressions', () => {
     qing.econ.privateCapital = 0
     qing.politicalEconomy.savingsRate = 0
     advance(world, 60, [], makeRngForWorld(world))
-    expect(qing.econ.transportInfrastructure).toBeLessThan(95)
     expect(qing.econ.marketAccess).toBeLessThan(0.95)
+    // Plan 0011 F5: the unified infrastructure level is derived from the provider
+    // stock, so it no longer decays on its own — it tracks the (decaying) stock.
+    // Removing the ports that carry it collapses the level.
+    const standing = qing.econ.transportInfrastructure
+    qing.econ.buildings.ports = 0
+    qing.econ.buildings.railroads = 0
+    refreshInfrastructure(qing)
+    expect(qing.econ.transportInfrastructure).toBeLessThan(standing)
   })
 
   test('a state project can be cancelled but a private one cannot', async () => {

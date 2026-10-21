@@ -17,7 +17,7 @@
   起草并执行计划，提交「已执行 / 建议 / 风险」报告；越权（推进时间、宣战、停战、天命）
   会被记录并提示，但不会被打断。
 - **官僚效能**：0–100 的派生分数，决定每月行动预算、资金效率、工期延迟与信息失真；
-  官署抬高上限，交通基础设施与行政能力各管一摊。
+  官署抬高上限，基础设施与行政能力各管一摊。
 - **修正叠算**：政策、法案、事件、阈值与天命都通过 `engine/modifiers.ts` 给同一批
   数值入口挂 buff/debuff；按 flat → percent → multiply 固定顺序结算，支持持续时间与
   来源，同一 `id` 覆盖而不是无限叠加（ADR 0004）。
@@ -49,8 +49,13 @@
   产出价值占比守恒、投入复现旧工厂的每厂篮子，种子按同一占比拆座数（总工业座数 516 守恒），
   机械/军械/家具改吃 `steel`；参考点 7 大国产量加权聚合工业毛利 ≈ 16%。World v11 F4 再加**五类建筑**
   （名册 17→22）——学校 `schools`（初等教育，产服务、建成促识字）、运河 `canals` 与电报 `telegraphs`
-  （无货产出的基建成本中心，F4 暂走旧 `transportInfrastructure` 标量，统一基础设施留 F5）、要塞 `forts`
+  （无货产出的基建成本中心，各给少量市场接入）、要塞 `forts`
   （产少量军械）与船坞 `navalYards`（产少量机械）；五类种子起步 0 座、私人投资不自动投建，不扰动物价基线。
+  World v11 F5 把旧的「交通基础设施」升级为**唯一的国家级基础设施池**：铁路/港口/运河/电报**供给**，
+  每类建筑按 `infrastructureNeed` **需求**（重工业高、服务低、农场 0），`ratio = 供给/需求` 不足时对
+  **所有建筑产出**施加 `clamp(ratio, 0.35, 1)` 的**线性短缺 debuff**（只罚不奖），基建自身每月消耗
+  木材/煤/服务（维护）。旧 `transportInfrastructure` 字段名保留但改为**派生值**（`clamp(100×ratio,0,100)`），
+  World 仍为 v11。详见 ADR 0026、plan 0011 §7.6。
 - **双向关税与到岸价**：`tariff` 是进口税率，`exportTariff` 可选、缺省与进口同率（旧行为）。
   到岸价 = 出口国国内价 × (1 + 出口关税) × (1 + 进口关税) × 运输 / 接入 / 风险；进口国私人付
   边境价 + 进口税，出口国国库收出口税，进口国国库收进口税。`v3_action tariff` 可用 `rate`
@@ -203,7 +208,7 @@ node statusline/install.mjs
    `docs/plans/0010-live-events.md`（ADR 0025）承接。
 5. `docs/plans/0009-config-refactor.md`（ADR 0024，取代 ADR 0004）：配置分层（`engine/config/` + `engine/data/`）与统一「配置块」乘数机制，增量 TDD、第一刀行为保持。
 6. `docs/plans/0010-live-events.md`（ADR 0025）：AI 生成的逐回合实时事件，引擎按经济/政治/外交/民生挑显著题材，LLM 现场生成 0 至 2 个可交互事件，效果编译回既有事件结构并持久化。**proposed，待批准实现。**
-7. `docs/plans/0011-building-expansion.md`（ADR 0026）：建筑扩张与统一基础设施——矿场拆成煤矿/铁矿/伐木场、工厂拆成七个单产工业建筑、加学校/运河/电报/要塞/船坞，新增 `steel` 商品（`iron` 转为「铁矿石」），把「交通基础设施」升级为统一的「基础设施」（供给/需求/线性短缺 debuff/维护），建筑加 `unlock` 前向字段。**进行中（F1、F2、F3、F4 已实现，World v11；F5–F7 待做）。**
+7. `docs/plans/0011-building-expansion.md`（ADR 0026）：建筑扩张与统一基础设施——矿场拆成煤矿/铁矿/伐木场、工厂拆成七个单产工业建筑、加学校/运河/电报/要塞/船坞，新增 `steel` 商品（`iron` 转为「铁矿石」），把「交通基础设施」升级为统一的「基础设施」（供给/需求/线性短缺 debuff/维护），建筑加 `unlock` 前向字段。**进行中（F1、F2、F3、F4、F5 已实现，World v11；F6–F7 待做）。**
 
 已完成、作为参考：`0003-economic-loop.md`（World v5）、`0004-trade-diplomacy.md`（World v6）、
 ADR 0006（World v7 净资产财政）、ADR 0020（World v8 持久贸易航线）、
@@ -295,6 +300,6 @@ tests/first-slice.test.ts    第一刀（M1–M6）引擎与命令测试
 | 0002 | 事件树 S1–S4：局势/提案/多国交互 | ⏸ 暂缓（先打磨经济） |
 | 0006 | GM ⇄ 引擎接口：查询/预测全部走 MCP，禁止读存档 | ✅ 已实现（v3_inspect 16 分区 + v3_forecast + v3_manual；ADR 0016） |
 | 0007 | 经济打磨：世界贸易校准、支付能力可见化、建造队列、GDP/科技/劳动力 | 🔧 当前优先（E1 第一轮已校准，32e624b） |
-| ADR 0026 / 0011 | 建筑扩张与统一基础设施：拆矿场/工厂为单产建筑、加学校/运河/电报/要塞/船坞、`steel` 商品、统一基础设施（供给/需求/线性 debuff/维护）、`unlock` 前向字段 | 🔧 进行中（F1、F2、F3 已实现：`iron`→铁矿石 + 新增 `steel`；`mines`→`coalMines`/`ironMines`/`lumberMills`；`factories`→七个工业建筑；World v11；F5–F7 待做） |
+| ADR 0026 / 0011 | 建筑扩张与统一基础设施：拆矿场/工厂为单产建筑、加学校/运河/电报/要塞/船坞、`steel` 商品、统一基础设施（供给/需求/线性 debuff/维护）、`unlock` 前向字段 | 🔧 进行中（F1、F2、F3、F4、F5 已实现：`iron`→铁矿石 + 新增 `steel`；`mines`→`coalMines`/`ironMines`/`lumberMills`；`factories`→七个工业建筑；统一基础设施（`transportInfrastructure` 派生）；World v11；F6–F7 待做） |
 
 规划文档在 `docs/plans/`；架构决策在 `docs/adr/`；术语以 `GLOSSARY.md` 为准；GM 机制参考见 `docs/gm-handbook.md`。

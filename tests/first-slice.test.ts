@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { deriveBureaucracy, deriveUnemployment, initialUi, spawnEvent } from '../engine/data'
+import {
+  deriveBureaucracy,
+  deriveUnemployment,
+  initialUi,
+  INFRA_SUPPLY,
+  infrastructureSupply,
+  spawnEvent,
+} from '../engine/data'
 import { applyCheat } from '../engine/cheat'
 import { statusLine } from '../view/format'
 import {
@@ -42,7 +49,10 @@ describe('M1 types, data and migration', () => {
       diplomacy: false,
       months: 1,
     })
-    expect(qing.econ.transportInfrastructure).toBe(25)
+    // Plan 0011 F5: the field is now the DERIVED unified infrastructure level
+    // (clamp(100 × supply/demand, 0, 100)), not a seed scalar. QING's seed supply
+    // (21, from 14 ports) exceeds its demand (15.8), so it starts at full level.
+    expect(qing.econ.transportInfrastructure).toBe(100)
     expect(qing.econ.administrativeCapacity).toBe(20 + 0.12 * 40 + 4 * 2)
     expect(qing.econ.buildings.offices).toBe(4)
     expect(qing.econ.constructionQueue).toEqual([])
@@ -181,18 +191,20 @@ describe('M2 construction queue and economy fixes', () => {
     expect(gbr).toBeDefined()
     if (gbr === undefined) return
 
-    const transportBefore = gbr.econ.transportInfrastructure
+    const supplyBefore = infrastructureSupply(gbr)
     const administrativeBefore = gbr.econ.administrativeCapacity
 
     completeBuilding(gbr, 'railroads', 2)
-    expect(gbr.econ.transportInfrastructure).toBe(transportBefore + 6)
+    // Plan 0011 F5: railroads no longer bump a scalar — they raise infrastructure
+    // SUPPLY, and the derived level tracks it. Offices only move admin capacity.
+    expect(infrastructureSupply(gbr)).toBe(supplyBefore + 2 * (INFRA_SUPPLY.railroads ?? 0))
     expect(gbr.econ.administrativeCapacity).toBe(administrativeBefore)
     const productionAfterRail = inspectEconomy(gbr).production.grain
 
     completeBuilding(gbr, 'offices', 3)
     completeBuilding(gbr, 'universities', 2)
     expect(gbr.econ.administrativeCapacity).toBe(administrativeBefore + 3 + 1)
-    expect(gbr.econ.transportInfrastructure).toBe(transportBefore + 6)
+    expect(infrastructureSupply(gbr)).toBe(supplyBefore + 2 * (INFRA_SUPPLY.railroads ?? 0))
     expect(inspectEconomy(gbr).production.grain).toBe(productionAfterRail)
   })
 
@@ -550,11 +562,13 @@ describe('M6 destiny and ironman', () => {
     expect(applyCheat(world, { action: 'building', building: 'farms', count: 3 }).ok).toBe(true)
     expect(qing.econ.buildings.farms).toBe(farms + 3)
 
-    const transport = qing.econ.transportInfrastructure
+    // Plan 0011 F5: cheat building edits go through `completeBuilding`, which
+    // now moves infrastructure SUPPLY (railroads no longer bump a scalar).
+    const supply = infrastructureSupply(qing)
     expect(applyCheat(world, { action: 'building', building: 'railroads', count: 2 }).ok).toBe(true)
-    expect(qing.econ.transportInfrastructure).toBe(transport + 6)
+    expect(infrastructureSupply(qing)).toBe(supply + 2 * (INFRA_SUPPLY.railroads ?? 0))
     expect(applyCheat(world, { action: 'building', building: 'railroads', count: -2 }).ok).toBe(true)
-    expect(qing.econ.transportInfrastructure).toBe(transport)
+    expect(infrastructureSupply(qing)).toBe(supply)
 
     expect(applyCheat(world, { action: 'date', year: 1840, month: 6 }).ok).toBe(true)
     expect(world.date).toEqual({ year: 1840, month: 6 })

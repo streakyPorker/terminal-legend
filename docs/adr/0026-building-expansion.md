@@ -1,6 +1,6 @@
 # 建筑扩张与统一基础设施
 
-- Status: proposed（待用户批准实现）
+- Status: accepted（F1–F5 已实现，World v11：F5 统一基础设施见下 §3 与 plan 0011 §7.6；F6–F7 待做）
 - Fixes: 建筑名册过窄、工厂一包七货导致**逐建筑利润率读不清**；基础设施「交通」含义不清、只有铁路/港口两来源。
 - Depends on: `docs/plans/0011-building-expansion.md`、ADR 0021（建筑配方单一真源）、ADR 0022（利用率与利润投资）、ADR 0010/0012/0013（营造所与建造能力）、ADR 0005（不做存档兼容）
 
@@ -118,7 +118,8 @@ ratio = 供给 / max(ε, 需求)
 - **统一池**：一个国家级 `infrastructure` 供给对全部建筑的类型需求求和，**没有分池**。
 - **线性**：供给只有一半 → 乘数 0.5；供给充足（≥ 需求）→ 无 debuff（=1）。
 - **存储**：月末由建筑数算出 `基础设施水平 = clamp(100 × ratio, 0, 100)`，写入
-  `econ.transportInfrastructure`（或改名 `econ.infrastructure`，命名**待定**），生产在
+  `econ.transportInfrastructure`（**F5 已定：字段名与 ModifierStat 保留，仅显示名改「基础设施」**——
+  避免 v11 存档形状断裂；该字段从此是**派生**值，不再累加），生产在
   **下月**读取，沿用 ADR 0022 的「生产读存储值、留一个月滞后」纪律（建筑数是结构量，
   本身不读当月价，滞后只为与利用率一致）。
 - **旧门控退场**：逐配方的 `gates.infrastructure` 标志与旧的 `0.6 + 交通/160` 曲线

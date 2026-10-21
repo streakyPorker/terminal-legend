@@ -22,7 +22,11 @@ import {
   WAGE_ALLOCATION,
   deriveLabor,
   effectiveCount,
+  infrastructureMultiplier,
+  infrastructureStats,
+  infrastructureUpkeep,
   resourceMultiplier,
+  type InfrastructureStats,
   type LaborStats,
 } from './data'
 import {
@@ -62,6 +66,8 @@ export type EconomySnapshot = {
   taxBaseQty: TaxBaseQuantities
   buildingProfits: Record<BuildingId, BuildingProfit>
   labor: LaborStats
+  /** Unified national infrastructure pool readings (plan 0011 F5). */
+  infrastructure: InfrastructureStats
 }
 
 const zeroGoods = (): Record<GoodId, number> => {
@@ -150,12 +156,16 @@ function computeProduction(country: Country): Record<GoodId, number> {
   const tech = techMultiplier(country)
   const marketAccess = applyModifiers(country, 'marketAccess', country.econ.marketAccess)
   const access = curveOutput(PRODUCTION_GATE_CURVES.access, marketAccess)
-  const transport = applyModifiers(
+  // Plan 0011 F5: the per-recipe `infrastructure` gate retires in favour of ONE
+  // unified multiplier for every building. It reads the stored level (written at
+  // month end, so it lags one month like utilization, ADR 0022) and never
+  // rewards a surplus (ratio ≥ 1 → 1).
+  const infraLevel = applyModifiers(
     country,
     'transportInfrastructure',
     country.econ.transportInfrastructure,
   )
-  const infra = curveOutput(PRODUCTION_GATE_CURVES.infrastructure, transport)
+  const infra = infrastructureMultiplier(infraLevel)
   const b = country.econ.buildings
   const resources = resourceFactors(country)
   // Coal and iron are industrial inputs: a country poor in both runs its
@@ -191,9 +201,10 @@ function computeProduction(country: Country): Record<GoodId, number> {
       const gates = recipe.outputGates?.[good] ?? recipe.gates
       let value = count * coef
       if (gates?.tech) value *= tech
-      if (gates?.infrastructure) value *= infra
       if (gates?.access) value *= access
       if (gates?.industrial) value *= industrial
+      // The unified infrastructure debuff applies to every building's output.
+      value *= infra
       if (modifier !== undefined) value = applyModifiers(country, modifier, value)
       raw[good] += value
     }
@@ -328,6 +339,13 @@ function computeDemand(country: Country): DemandBreakdown {
   // every country holding a permanent grain mountain.
   intermediate.coal += popFactor * 1.2
   intermediate.iron += popFactor * 0.6
+  // Plan 0011 F5: the infrastructure network is itself an intermediate consumer
+  // — throughput materials scale with supply, administration with the level, and
+  // offices/universities/schools already supply the services it burns.
+  const infraUpkeep = infrastructureUpkeep(country)
+  for (const [good, quantity] of Object.entries(infraUpkeep) as [GoodId, number][]) {
+    if (quantity !== 0) intermediate[good] += quantity
+  }
   // Heavy industry buys worked STEEL, not raw ore (plan 0011 F1). Scaling it by
   // population keeps the steel market two-sided: populous, factory-light
   // economies (QING, RUS) bid, factory-dense ones (GBR, FRA, PRU) offer. The
@@ -598,6 +616,7 @@ export function computeEconomy(
     taxBaseQty,
     buildingProfits,
     labor,
+    infrastructure: infrastructureStats(country),
   }
 }
 

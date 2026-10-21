@@ -48,9 +48,17 @@ const oracleGate = {
 }
 
 /**
+ * Plan 0011 F5 replaced the per-recipe `infrastructure` gate with ONE unified
+ * shortfall multiplier applied to every building: `clamp(level / 100, 0.35, 1)`,
+ * where the level is the stored 0..100 pool reading. This is the oracle form.
+ */
+const oracleInfraMultiplier = (level: number): number => clamp(level / 100, 0.35, 1)
+
+/**
  * Frozen copy of the pre-C7 `computeProduction` gate math; the four gate
  * multipliers are the pre-C7 literals. The only difference from the shipped
- * engine is where the factors come from (literals vs config curves).
+ * engine is where the factors come from (literals vs config curves), plus F5's
+ * unified infrastructure multiplier applied to every building.
  */
 function oracleProduction(c: Country): Record<GoodId, number> {
   ensureConstructionFields(c)
@@ -58,7 +66,7 @@ function oracleProduction(c: Country): Record<GoodId, number> {
   const marketAccess = applyModifiers(c, 'marketAccess', c.econ.marketAccess)
   const access = oracleGate.access(marketAccess)
   const transport = applyModifiers(c, 'transportInfrastructure', c.econ.transportInfrastructure)
-  const infra = oracleGate.infrastructure(transport)
+  const infra = oracleInfraMultiplier(transport)
   const b = c.econ.buildings
   const resources = resourceFactors(c)
   const industrial = oracleGate.industrial((resources.coal + resources.iron) / 2)
@@ -72,9 +80,9 @@ function oracleProduction(c: Country): Record<GoodId, number> {
       const gates = recipe.outputGates?.[good] ?? recipe.gates
       let value = count * coef
       if (gates?.tech) value *= tech
-      if (gates?.infrastructure) value *= infra
       if (gates?.access) value *= access
       if (gates?.industrial) value *= industrial
+      value *= infra
       if (modifier !== undefined) value = applyModifiers(c, modifier, value)
       raw[good] += value
     }

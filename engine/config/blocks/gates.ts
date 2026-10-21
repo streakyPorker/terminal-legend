@@ -34,7 +34,7 @@ export const PRODUCTION_GATE_SPECS: ProductionGateSpec[] = [
   { id: 'tech', label: '科技门控', stat: 'techLevel', curve: TECH_MULTIPLIER_CURVE },
   {
     id: 'infrastructure',
-    label: '交通基础设施门控',
+    label: '基础设施门控（已退役，供给—需求 debuff 取代）',
     stat: 'transportInfrastructure',
     curve: { kind: 'linear', slope: 1, divisor: 160, offset: 0.6 },
   },

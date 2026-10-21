@@ -526,7 +526,14 @@ export type Economy = {
   buildings: Record<BuildingId, number>
   goods: Record<GoodId, number>
   prices: Record<GoodId, number>
-  /** 0..100 transport conditions; drives the production multiplier. */
+  /**
+   * 0..100 unified infrastructure level (plan 0011 F5). DERIVED, not accumulated:
+   * it stores `clamp(100 × supply/demand, 0, 100)` where supply is the
+   * railroads/ports/canals/telegraphs pool and demand is Σ `infrastructureNeed`.
+   * Production reads it (one-month lag) for the shortfall debuff; trade reads it
+   * for transport cost. The field name is kept from the old "transport" scalar to
+   * avoid a save-shape break (World stays v11).
+   */
   transportInfrastructure: number
   /** 0..100 administrative conditions; feeds the bureaucracy score. */
   administrativeCapacity: number

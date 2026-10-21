@@ -5,6 +5,8 @@ import {
   BUILDING_RECIPES,
   GOODS,
   GOOD_IDS,
+  infrastructureStats,
+  infrastructureUpkeep,
   techCost,
   techName,
   type RecipeIO,
@@ -135,6 +137,16 @@ function economySection(world: WorldState, country: Country): string[] {
     lines.push(`最大盈余：${surpluses.map(row => `${GOODS[row.id].name} ${n(-row.gap, 2)}`).join('，')}`)
   }
   lines.push(`工资 ${n(country.econ.wages)} / 利润 ${n(country.econ.profits)}，劳动份额 ${pct(country.econ.laborShare)}`)
+  const inf = snap.infrastructure
+  const upkeep = (
+    Object.entries(infrastructureUpkeep(country)) as [GoodId, number][]
+  )
+    .filter(([, quantity]) => quantity !== 0)
+    .map(([good, quantity]) => `${GOODS[good].name} ${n(quantity, 2)}`)
+    .join('、')
+  lines.push(
+    `统一基础设施：供给 ${n(inf.supply)} ÷ 需求 ${n(inf.demand)} = ratio ${n(inf.ratio, 2)}，水平 ${n(inf.level, 0)}/100，产出乘数 ${pct(inf.multiplier)}（≥1 无罚；<1 线性，下限 35%）${upkeep === '' ? '' : `；本月经维护消耗 ${upkeep}`}`,
+  )
   // Per-building profit lines moved to `v3_inspect buildings` (context economy).
   lines.push('逐建筑经营利润见 v3_inspect buildings。')
   return lines
@@ -335,7 +347,7 @@ function buildingsSection(country: Country): string[] {
     }
   }
   lines.push(
-    '说明：本版 22 类建筑均开局解锁；`unlock`（F6）与 `infrastructureNeed`（F5）字段待后续落地。',
+    '说明：本版 22 类建筑均开局解锁；`infrastructureNeed`（F5）已落地并计入统一基础设施需求；`unlock`（F6）待后续落地。',
   )
   return lines
 }
@@ -651,11 +663,13 @@ export function forecastWorld(world: WorldState): string {
     subsidy
   const net = income - expense
   const treasury = country.econ.treasury + net
+  const inf = infrastructureStats(country)
   const lines = [
     `[${country.flag}] ${country.name} · 下月现金流预估（${world.date.year}.${String(world.date.month).padStart(2, '0')} 结算后）`,
     `收入约 ${n(income)} = 上月的 ${n(ledger.income.total)} − 上月「其他」${n(ledger.income.other)} + 预计租金 ${n(rent)}`,
     `支出约 ${n(expense)} = 上月 ${n(ledger.expense.total)} − 上月国有建设 ${n(ledger.expense.construction)} − 补贴 ${n(ledger.expense.constructionSubsidy)} + 本月建造点 ${n(load.allocated)}×0.2 + 补贴 ${n(subsidy)}`,
     `净额约 ${signed(net)} 金；结算后国库约 ${signed(treasury)}${treasury < 0 ? '（转国债）' : treasury > 0 ? '（主权基金）' : ''}`,
+    `统一基础设施：水平 ${n(inf.level, 0)}/100，供给 ${n(inf.supply)} ÷ 需求 ${n(inf.demand)} = ${n(inf.ratio, 2)}，下月产出乘数约 ${pct(inf.multiplier)}`,
     `建造力 ${n(load.capacity)}，已分配 ${n(load.allocated)}，私人租用 ${n(load.privateRented + load.privateMarket)}，闲置 ${n(load.remaining)}`,
     '这是计划值：贸易量、事件、关税与私人租金都会让它偏移。',
   ]

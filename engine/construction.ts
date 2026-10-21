@@ -12,6 +12,8 @@ import {
   INVESTMENT_DEMAND,
   deriveBureaucracy,
   effectiveCount,
+  infrastructureMultiplier,
+  refreshInfrastructure,
 } from './data'
 import {
   CONSTRUCTION_SUBSIDY_POINTS_PER_LEVEL,
@@ -183,12 +185,15 @@ export function constructionCapacity(country: Country): number {
   const workshops = country.econ.buildings.workshops ?? 0
   if (workshops <= 0) return 0
   const access = 0.55 + applyModifiers(country, 'marketAccess', country.econ.marketAccess) * 0.9
-  const transport = applyModifiers(
-    country,
-    'transportInfrastructure',
-    country.econ.transportInfrastructure,
+  // Plan 0011 F5: workshops ride the unified infrastructure multiplier like
+  // every other building (the old `0.6 + transport / 160` curve retired).
+  const infra = infrastructureMultiplier(
+    applyModifiers(
+      country,
+      'transportInfrastructure',
+      country.econ.transportInfrastructure,
+    ),
   )
-  const infra = 0.6 + transport / 160
   const gross =
     effectiveCount(workshops) *
       WORKSHOP_CAPACITY_OUTPUT *
@@ -397,39 +402,24 @@ export function completeBuilding(country: Country, building: BuildingId, count: 
     (country.econ.buildings[building] ?? 0) + count,
   )
   if (building === 'railroads') {
-    country.econ.transportInfrastructure = clamp(
-      country.econ.transportInfrastructure + count * 3,
-      0,
-      100,
-    )
     country.econ.marketAccess = clamp(country.econ.marketAccess + count * 0.02, 0, 1)
   }
   if (building === 'ports') {
     country.econ.marketAccess = clamp(country.econ.marketAccess + count * 0.01, 0, 1)
   }
-  // Plan 0011 F4. schools resolve the plan's §10 待定 ("建成时加识字率"): a
-  // completed primary school raises literacy on the spot (mirroring universities'
-  // education role). canals/telegraphs get the transitional railroad-style
-  // transport side effect now; F5 replaces it with the unified infrastructure
-  // supply (canals 2.0, telegraphs 0.8). forts/navalYards have no completion side
-  // effect — their effect is their small military output (plan §10).
+  // Plan 0011 F4/F5. schools resolves the plan's §10 待定 ("建成时加识字率"): a
+  // completed primary school raises literacy on the spot. canals/telegraphs keep
+  // their market-access side effect, but their transport side effect retires:
+  // infrastructure is now the unified supply/demand pool (railroads/ports/canals/
+  // telegraphs supply it), refreshed below from the building counts. forts/
+  // navalYards have no completion side effect beyond their small output.
   if (building === 'schools') {
     country.pops.literacy = clamp(country.pops.literacy + count * 0.002, 0, 1)
   }
   if (building === 'canals') {
-    country.econ.transportInfrastructure = clamp(
-      country.econ.transportInfrastructure + count * 2,
-      0,
-      100,
-    )
     country.econ.marketAccess = clamp(country.econ.marketAccess + count * 0.01, 0, 1)
   }
   if (building === 'telegraphs') {
-    country.econ.transportInfrastructure = clamp(
-      country.econ.transportInfrastructure + count * 0.8,
-      0,
-      100,
-    )
     country.econ.marketAccess = clamp(country.econ.marketAccess + count * 0.005, 0, 1)
   }
   if (building === 'universities') {
@@ -447,6 +437,7 @@ export function completeBuilding(country: Country, building: BuildingId, count: 
     )
   }
   country.bureaucracy = deriveBureaucracy(country, true)
+  refreshInfrastructure(country)
 }
 
 /**

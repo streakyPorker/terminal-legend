@@ -57,7 +57,7 @@ export const MODIFIER_STAT_NAMES: Record<ModifierStat, string> = {
   bureaucracyCeiling: '官僚上限',
   constructionSpeed: '建造速度',
   marketAccess: '市场接入',
-  transportInfrastructure: '交通基础设施',
+  transportInfrastructure: '基础设施',
   administrativeCapacity: '行政能力',
   privateInvestment: '私人投资',
   laborShare: '劳动份额',

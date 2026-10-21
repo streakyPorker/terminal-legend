@@ -301,7 +301,11 @@ export type RecipeIO = Partial<Record<GoodId, number>>
 export type RecipeGates = {
   /** Country tech level multiplier (1 + level × 0.07). */
   tech?: boolean
-  /** Transport-infrastructure multiplier (0.6 + transport / 160). */
+  /**
+   * Retired as a per-recipe gate by plan 0011 F5: infrastructure is now the
+   * single unified pool multiplier in `computeProduction`, applied to every
+   * building, not a flag a recipe opts into. Field kept for forward compatibility.
+   */
   infrastructure?: boolean
   /** Market-access multiplier (0.55 + marketAccess × 0.9). */
   access?: boolean
@@ -347,7 +351,7 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     output: { grain: 0.3, wood: 0.04, opium: 0.004 },
     input: {},
     labor: 0.3,
-    gates: { tech: true, infrastructure: true, access: true },
+    gates: { tech: true, access: true },
     outputGates: { wood: {} },
     outputModifier: 'farmOutput',
   },
@@ -522,29 +526,38 @@ export const ARTISAN_OUTPUT: Partial<Record<GoodId, number>> = {
 /** Artisan service output per ten-thousand artisans (national term). */
 export const ARTISAN_SERVICE_OUTPUT = 0.01
 
-export const BUILDINGS: Record<BuildingId, { name: string; cost: number; note: string }> = {
-  farms: { name: '农场', cost: 1.5, note: '粮食与原料，吸纳农业人口' },
-  coalMines: { name: '煤矿', cost: 2.5, note: '煤炭，工业与钢铁的燃料' },
-  ironMines: { name: '铁矿', cost: 2.5, note: '铁矿石，钢铁厂的原料' },
-  lumberMills: { name: '伐木场', cost: 2, note: '木材，建造与家具的原料' },
-  textileMills: { name: '纺织厂', cost: 4, note: '布料与成衣，轻工业的起点' },
-  furnitureWorks: { name: '家具厂', cost: 3.5, note: '家具，木材与钢铁的下游' },
-  distilleries: { name: '酿酒厂', cost: 3.5, note: '酒类，粮食的下游消费' },
-  machineryWorks: { name: '机械厂', cost: 5, note: '机械，钢铁与煤的下游' },
-  steelMills: { name: '钢铁厂', cost: 5, note: '钢铁，铁矿石与煤的冶炼' },
-  arsenals: { name: '兵工厂', cost: 4.5, note: '军械，钢铁与机械的军工' },
-  luxuryWorks: { name: '奢侈品厂', cost: 5, note: '奢侈品，布料与煤的高端制造' },
-  schools: { name: '学校', cost: 2, note: '初等教育，产出服务并在建成时提升识字率' },
-  canals: { name: '运河', cost: 6, note: '内河航运，提供交通基础设施（统一基础设施见 F5）' },
-  telegraphs: { name: '电报', cost: 4, note: '电报通信，提供交通基础设施与市场接入（统一基础设施见 F5）' },
-  forts: { name: '要塞', cost: 4, note: '国防工事，产少量军械' },
-  navalYards: { name: '船坞', cost: 5, note: '造舰产能，产少量机械' },
-  railroads: { name: '铁路', cost: 7, note: '交通基础设施与市场接入' },
-  ports: { name: '港口', cost: 3, note: '市场接入与关税收入' },
-  universities: { name: '大学', cost: 5, note: '科技点数、识字率与行政能力' },
-  barracks: { name: '兵营', cost: 2.5, note: '军械产出' },
-  offices: { name: '官署', cost: 3, note: '行政能力与官僚效能上限' },
-  workshops: { name: '营造所', cost: 3, note: '消耗木材、粮食与铁，产出建造点' },
+export const BUILDINGS: Record<
+  BuildingId,
+  { name: string; cost: number; note: string; infrastructureNeed: number }
+> = {
+  // Plan 0011 F5: `infrastructureNeed` is the per-building monthly draw on the
+  // unified national infrastructure pool (ADR 0026 §3). Heavy industry draws the
+  // most, light industry less, and subsistence agriculture draws none (a single
+  // QING seed carries ~3000 farms, so even a small per-farm need would swamp the
+  // national pool — the plan's draft 0.4 produced a 0.016 ratio). All values are
+  // the F5 calibration; F7 re-tunes.
+  farms: { name: '农场', cost: 1.5, note: '粮食与原料，吸纳农业人口', infrastructureNeed: 0 },
+  coalMines: { name: '煤矿', cost: 2.5, note: '煤炭，工业与钢铁的燃料', infrastructureNeed: 0.15 },
+  ironMines: { name: '铁矿', cost: 2.5, note: '铁矿石，钢铁厂的原料', infrastructureNeed: 0.15 },
+  lumberMills: { name: '伐木场', cost: 2, note: '木材，建造与家具的原料', infrastructureNeed: 0.12 },
+  textileMills: { name: '纺织厂', cost: 4, note: '布料与成衣，轻工业的起点', infrastructureNeed: 0.18 },
+  furnitureWorks: { name: '家具厂', cost: 3.5, note: '家具，木材与钢铁的下游', infrastructureNeed: 0.15 },
+  distilleries: { name: '酿酒厂', cost: 3.5, note: '酒类，粮食的下游消费', infrastructureNeed: 0.12 },
+  machineryWorks: { name: '机械厂', cost: 5, note: '机械，钢铁与煤的下游', infrastructureNeed: 0.18 },
+  steelMills: { name: '钢铁厂', cost: 5, note: '钢铁，铁矿石与煤的冶炼', infrastructureNeed: 0.22 },
+  arsenals: { name: '兵工厂', cost: 4.5, note: '军械，钢铁与机械的军工', infrastructureNeed: 0.15 },
+  luxuryWorks: { name: '奢侈品厂', cost: 5, note: '奢侈品，布料与煤的高端制造', infrastructureNeed: 0.09 },
+  schools: { name: '学校', cost: 2, note: '初等教育，产出服务并在建成时提升识字率', infrastructureNeed: 0.03 },
+  canals: { name: '运河', cost: 6, note: '内河航运，供给统一基础设施与市场接入', infrastructureNeed: 0.05 },
+  telegraphs: { name: '电报', cost: 4, note: '电报通信，供给统一基础设施与市场接入', infrastructureNeed: 0.06 },
+  forts: { name: '要塞', cost: 4, note: '国防工事，产少量军械', infrastructureNeed: 0.05 },
+  navalYards: { name: '船坞', cost: 5, note: '造舰产能，产少量机械', infrastructureNeed: 0.15 },
+  railroads: { name: '铁路', cost: 7, note: '统一基础设施的主要供给与市场接入', infrastructureNeed: 0.08 },
+  ports: { name: '港口', cost: 3, note: '统一基础设施供给、市场接入与关税收入', infrastructureNeed: 0.12 },
+  universities: { name: '大学', cost: 5, note: '科技点数、识字率与行政能力', infrastructureNeed: 0.05 },
+  barracks: { name: '兵营', cost: 2.5, note: '军械产出', infrastructureNeed: 0.09 },
+  offices: { name: '官署', cost: 3, note: '行政能力与官僚效能上限', infrastructureNeed: 0.08 },
+  workshops: { name: '营造所', cost: 3, note: '消耗木材、粮食与铁，产出建造点', infrastructureNeed: 0.12 },
 }
 
 /** Months a project of each kind takes, before bureaucratic delay. */
@@ -577,6 +590,100 @@ export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[]
 
 export function buildOf(id: string): BuildingId | undefined {
   return (BUILDING_IDS as string[]).includes(id) ? (id as BuildingId) : undefined
+}
+
+// ---------------------------------------------------------------- infrastructure
+// Plan 0011 F5 / ADR 0026: ONE national infrastructure pool. The old
+// accumulated `transportInfrastructure` scalar becomes a DERIVED reading of this
+// model — the same field now stores the unified level `clamp(100 × supply/demand,
+// 0, 100)`, recomputed from building counts.
+
+/** Infrastructure each provider building adds per month (plan §4.1). */
+export const INFRA_SUPPLY: Partial<Record<BuildingId, number>> = {
+  railroads: 3.0,
+  ports: 1.5,
+  canals: 2.0,
+  telegraphs: 0.8,
+}
+
+/** Shortfall-multiplier floor: a linear debuff cannot bite harder than this. */
+export const INFRA_MULT_FLOOR = 0.35
+
+/** Infrastructure running costs: throughput scales with supply, admin with level. */
+export const INFRA_UPKEEP: {
+  throughput: Partial<Record<GoodId, number>>
+  admin: Partial<Record<GoodId, number>>
+} = {
+  throughput: { wood: 0.01, coal: 0.015, services: 0.02 },
+  admin: { services: 0.01 },
+}
+
+export type InfrastructureStats = {
+  supply: number
+  demand: number
+  ratio: number
+  multiplier: number
+  level: number
+}
+
+/** Σ provider buildings × supply coefficient. */
+export function infrastructureSupply(country: Country): number {
+  let supply = 0
+  for (const id of BUILDING_IDS) {
+    const coefficient = INFRA_SUPPLY[id]
+    if (coefficient === undefined) continue
+    supply += (country.econ.buildings[id] ?? 0) * coefficient
+  }
+  return supply
+}
+
+/** Σ all buildings × `infrastructureNeed`. */
+export function infrastructureDemand(country: Country): number {
+  let demand = 0
+  for (const id of BUILDING_IDS) {
+    demand += (country.econ.buildings[id] ?? 0) * BUILDINGS[id].infrastructureNeed
+  }
+  return demand
+}
+
+export function infrastructureStats(country: Country): InfrastructureStats {
+  const supply = infrastructureSupply(country)
+  const demand = infrastructureDemand(country)
+  const ratio = demand > 0 ? supply / demand : 1
+  return {
+    supply,
+    demand,
+    ratio,
+    multiplier: ratio >= 1 ? 1 : clampValue(ratio, INFRA_MULT_FLOOR, 1),
+    level: clampValue(100 * ratio, 0, 100),
+  }
+}
+
+/** Production multiplier read from the *stored* level (one-month lag, ADR 0022). */
+export function infrastructureMultiplier(level: number): number {
+  const bounded = clampValue(level, 0, 100)
+  return bounded >= 100 ? 1 : clampValue(bounded / 100, INFRA_MULT_FLOOR, 1)
+}
+
+/** Writes the derived unified level back onto the country (month end / completion). */
+export function refreshInfrastructure(country: Country): void {
+  country.econ.transportInfrastructure = infrastructureStats(country).level
+}
+
+/** Goods the infrastructure network consumes this month. */
+export function infrastructureUpkeep(country: Country): Partial<Record<GoodId, number>> {
+  const { supply, level } = infrastructureStats(country)
+  const out: Partial<Record<GoodId, number>> = {}
+  for (const [good, perSupply] of Object.entries(INFRA_UPKEEP.throughput) as [
+    GoodId,
+    number,
+  ][]) {
+    out[good] = (out[good] ?? 0) + supply * perSupply
+  }
+  for (const [good, perLevel] of Object.entries(INFRA_UPKEEP.admin) as [GoodId, number][]) {
+    out[good] = (out[good] ?? 0) + (level / 100) * perLevel
+  }
+  return out
 }
 
 /**
@@ -733,7 +840,6 @@ type CountrySeed = {
   tariff: number
   spending: Spending
   buildings: Record<BuildingId, number>
-  transportInfrastructure: number
   marketAccess: number
   unemployment: number
   resources: Resources
@@ -800,7 +906,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     tariff: 8,
     spending: spending(6, 0.8, 4, 1, 0.5, 1.5),
     buildings: buildings({ farms: 3000, coalMines: 18, ironMines: 15, lumberMills: 2, textileMills: 9, furnitureWorks: 2, distilleries: 1, machineryWorks: 4, steelMills: 1, arsenals: 2, luxuryWorks: 1, railroads: 0, ports: 14, universities: 4, barracks: 40, offices: 4, workshops: 12 }),
-    transportInfrastructure: 25,
     marketAccess: 0.45,
     unemployment: 6,
     resources: resources(85, 60, 65, 40),
@@ -856,7 +961,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     tariff: 5,
     spending: spending(4, 6, 2.5, 1.2, 1.5, 2),
     buildings: buildings({ farms: 110, coalMines: 47, ironMines: 40, lumberMills: 3, textileMills: 67, furnitureWorks: 17, distilleries: 12, machineryWorks: 35, steelMills: 6, arsenals: 12, luxuryWorks: 11, railroads: 25, ports: 60, universities: 18, barracks: 20, offices: 14, workshops: 24 }),
-    transportInfrastructure: 85,
     marketAccess: 0.9,
     unemployment: 8,
     resources: resources(45, 25, 100, 95),
@@ -912,7 +1016,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     tariff: 12,
     spending: spending(5, 3, 2.5, 1, 1.2, 1.8),
     buildings: buildings({ farms: 260, coalMines: 29, ironMines: 24, lumberMills: 2, textileMills: 39, furnitureWorks: 10, distilleries: 7, machineryWorks: 21, steelMills: 4, arsenals: 7, luxuryWorks: 7, railroads: 8, ports: 30, universities: 12, barracks: 30, offices: 10, workshops: 16 }),
-    transportInfrastructure: 60,
     marketAccess: 0.75,
     unemployment: 7,
     resources: resources(70, 55, 55, 60),
@@ -968,7 +1071,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     tariff: 8,
     spending: spending(4.5, 0.5, 1.8, 1.1, 0.8, 1.5),
     buildings: buildings({ farms: 180, coalMines: 36, ironMines: 31, lumberMills: 3, textileMills: 26, furnitureWorks: 6, distilleries: 4, machineryWorks: 13, steelMills: 2, arsenals: 5, luxuryWorks: 4, railroads: 6, ports: 10, universities: 11, barracks: 22, offices: 8, workshops: 10 }),
-    transportInfrastructure: 55,
     marketAccess: 0.7,
     unemployment: 5,
     resources: resources(60, 45, 80, 70),
@@ -1024,7 +1126,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     tariff: 15,
     spending: spending(6, 1.2, 3, 0.3, 0.4, 1),
     buildings: buildings({ farms: 900, coalMines: 36, ironMines: 31, lumberMills: 3, textileMills: 14, furnitureWorks: 4, distilleries: 3, machineryWorks: 8, steelMills: 1, arsenals: 3, luxuryWorks: 2, railroads: 2, ports: 12, universities: 6, barracks: 50, offices: 6, workshops: 8 }),
-    transportInfrastructure: 20,
     marketAccess: 0.5,
     unemployment: 4,
     resources: resources(80, 90, 40, 55),
@@ -1080,7 +1181,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     tariff: 10,
     spending: spending(4, 0.6, 2.2, 0.6, 0.7, 1),
     buildings: buildings({ farms: 420, coalMines: 31, ironMines: 26, lumberMills: 3, textileMills: 18, furnitureWorks: 5, distilleries: 3, machineryWorks: 10, steelMills: 2, arsenals: 4, luxuryWorks: 3, railroads: 4, ports: 5, universities: 8, barracks: 30, offices: 7, workshops: 10 }),
-    transportInfrastructure: 45,
     marketAccess: 0.65,
     unemployment: 6,
     resources: resources(65, 65, 50, 45),
@@ -1136,7 +1236,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     tariff: 20,
     spending: spending(1.5, 1.2, 1.2, 0.8, 0.5, 1.5),
     buildings: buildings({ farms: 300, coalMines: 29, ironMines: 24, lumberMills: 2, textileMills: 23, furnitureWorks: 6, distilleries: 4, machineryWorks: 12, steelMills: 2, arsenals: 4, luxuryWorks: 4, railroads: 6, ports: 25, universities: 10, barracks: 12, offices: 8, workshops: 8 }),
-    transportInfrastructure: 50,
     marketAccess: 0.7,
     unemployment: 5,
     resources: resources(90, 85, 75, 70),
@@ -1192,7 +1291,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     tariff: 5,
     spending: spending(2.5, 0.6, 1.5, 0.5, 0.3, 0.8),
     buildings: buildings({ farms: 380, coalMines: 11, ironMines: 10, lumberMills: 1, textileMills: 5, furnitureWorks: 1, distilleries: 1, machineryWorks: 3, steelMills: 0, arsenals: 1, luxuryWorks: 1, railroads: 0, ports: 10, universities: 4, barracks: 15, offices: 4, workshops: 3 }),
-    transportInfrastructure: 22,
     marketAccess: 0.4,
     unemployment: 3,
     resources: resources(45, 55, 20, 15),
@@ -1248,7 +1346,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     tariff: 12,
     spending: spending(3, 0.8, 2, 0.3, 0.3, 0.6),
     buildings: buildings({ farms: 420, coalMines: 13, ironMines: 11, lumberMills: 1, textileMills: 6, furnitureWorks: 1, distilleries: 1, machineryWorks: 3, steelMills: 1, arsenals: 1, luxuryWorks: 1, railroads: 0, ports: 12, universities: 3, barracks: 22, offices: 4, workshops: 4 }),
-    transportInfrastructure: 18,
     marketAccess: 0.45,
     unemployment: 8,
     resources: resources(55, 45, 35, 30),
@@ -1304,7 +1401,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     tariff: 12,
     spending: spending(2, 0.8, 1.5, 0.4, 0.4, 0.6),
     buildings: buildings({ farms: 220, coalMines: 16, ironMines: 13, lumberMills: 1, textileMills: 9, furnitureWorks: 2, distilleries: 1, machineryWorks: 4, steelMills: 1, arsenals: 2, luxuryWorks: 1, railroads: 2, ports: 14, universities: 6, barracks: 14, offices: 4, workshops: 4 }),
-    transportInfrastructure: 35,
     marketAccess: 0.55,
     unemployment: 10,
     resources: resources(55, 40, 35, 45),
@@ -1590,7 +1686,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         buildings: { ...seedRow.buildings },
         goods: zeroGoods(),
         prices: basePrices(),
-        transportInfrastructure: seedRow.transportInfrastructure,
+        transportInfrastructure: 100,
         administrativeCapacity: administrativeCapacityFor(
           seedRow.pops.literacy,
           seedRow.spending.bureaucracy,
@@ -1672,6 +1768,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
       modifiers: [],
     }
     country.bureaucracy = deriveBureaucracy(country, false)
+    refreshInfrastructure(country)
     countries[seedRow.id] = country
   }
 
