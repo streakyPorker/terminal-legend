@@ -327,7 +327,13 @@ function computeDemand(country: Country): DemandBreakdown {
   // industrial economies on opposite sides of the grain trade instead of
   // every country holding a permanent grain mountain.
   intermediate.coal += popFactor * 1.2
-  intermediate.iron += popFactor * 0.8
+  intermediate.iron += popFactor * 0.6
+  // Heavy industry buys worked STEEL, not raw ore (plan 0011 F1). Scaling it by
+  // population keeps the steel market two-sided: populous, factory-light
+  // economies (QING, RUS) bid, factory-dense ones (GBR, FRA, PRU) offer. The
+  // ore is consumed only by the factories that smelt it, so `iron` is the
+  // single input of the ore→steel chain.
+  intermediate.steel += popFactor * 0.2
   intermediate.fabric += popFactor * 0.5
   intermediate.wood += popFactor * 0.3
   for (const good of GOOD_IDS) {

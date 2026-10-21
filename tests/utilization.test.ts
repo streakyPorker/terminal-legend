@@ -29,7 +29,7 @@ describe('utilization feedback (ADR 0022 B3)', () => {
     // output) and re-pin it each month: `computeEconomy` smooths prices back
     // toward base, so a one-off crash would recover on its own.
     const crashFactory = (): void => {
-      for (const good of ['fabric', 'clothes', 'liquor', 'furniture', 'machinery', 'arms', 'luxury'] as const) {
+      for (const good of ['fabric', 'clothes', 'liquor', 'furniture', 'machinery', 'arms', 'luxury', 'steel'] as const) {
         gbr.econ.prices[good] = GOODS[good].basePrice * 0.25
       }
       for (const good of ['grain', 'coal', 'iron', 'wood'] as const) {
@@ -71,7 +71,7 @@ describe('utilization feedback (ADR 0022 B3)', () => {
     // profitable (dear outputs, cheap inputs) and re-run the settlement.
     gbr.econ.buildingProfits.factories.utilization = UTIL_IDLE_FLOOR
     const pinPrices = (): void => {
-      for (const good of ['fabric', 'clothes', 'liquor', 'furniture', 'machinery', 'arms', 'luxury'] as const) {
+      for (const good of ['fabric', 'clothes', 'liquor', 'furniture', 'machinery', 'arms', 'luxury', 'steel'] as const) {
         gbr.econ.prices[good] = GOODS[good].basePrice * 4
       }
       for (const good of ['grain', 'coal', 'iron', 'wood'] as const) {
@@ -148,7 +148,7 @@ describe('utilization feedback (ADR 0022 B3)', () => {
     // B5's factories carry a smaller material bill than the pre-B5 row, so the
     // crash must be a little deeper for the loss to reach the deep-shrink path.
     const crashFactory = (country: typeof lossGbr): void => {
-      for (const good of ['fabric', 'clothes', 'liquor', 'furniture', 'machinery', 'arms', 'luxury'] as const) {
+      for (const good of ['fabric', 'clothes', 'liquor', 'furniture', 'machinery', 'arms', 'luxury', 'steel'] as const) {
         country.econ.prices[good] = GOODS[good].basePrice * 0.2
       }
       for (const good of ['grain', 'coal', 'iron', 'wood'] as const) {

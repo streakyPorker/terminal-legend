@@ -1,7 +1,10 @@
 // Type contract for terminal-legend.
 // Self-contained by design: the engine loads it as the plugin's `types` entry
 // and type-checks every `$.state` key the hooks module names against it.
-// World model v10: taxes come from four real bases (land / per-building profit /
+// World model v11: on top of v10's design, `iron` is raw ore (铁矿石) and a new
+// `steel` (钢铁) good carries the worked metal — factories smelt ore + coal into
+// steel and the heavy consumers (construction, railroads, investment) buy it
+// (plan 0011 F1). v10: taxes come from four real bases (land / per-building profit /
 // final consumption / tariff, `Economy.taxes` + `Economy.taxBaseQty`), never
 // from GDP (ADR 0023). Every building type carries a declarative production
 // recipe (`BUILDING_RECIPES`, engine/data.ts) that is the single source of truth
@@ -18,6 +21,7 @@ export type GoodId =
   | 'wood'
   | 'coal'
   | 'iron'
+  | 'steel'
   | 'fabric'
   | 'clothes'
   | 'liquor'

@@ -1,6 +1,6 @@
 # 建筑扩张与统一基础设施（Building Expansion + Infrastructure）
 
-- Status: proposed（待用户批准实现；本文件只描述，不改引擎/测试）
+- Status: **F1 已实现**（World v11：`iron`→铁矿石、新增 `steel`；详见 §7.2）；F2–F7 待做。其余章节仍为提案（本文件描述，F2+ 再改引擎/测试）
 - Depends on: ADR 0026（本计划对应的决策）、ADR 0021（建筑配方单一真源）、ADR 0022（利用率与利润投资）、ADR 0010/0012/0013（营造所与建造能力）、ADR 0005（不做存档兼容）
 - Scope: 把建筑名册从 9 类扩到 **22 类**（拆矿场、拆工厂、加 5 类）；引入 `steel` 商品与「铁矿石」语义；把「交通基础设施」升级为**统一基础设施**（供给/需求/线性 debuff/维护）；给建筑加前瞻 `unlock` 字段。世界版本升到 **v11**。
 - 来源：用户口述。核心诉求：「建筑盈利能力要读得清 → 单产/少产建筑」；「基础设施是一个统一的东西，铁路/港口/运河/电报都产它，所有建筑都要用它」；「商品按需加，先维护一个最小可用集」。
@@ -223,7 +223,7 @@ type BuildingDef = {
 
 | 里程碑 | 内容 | 行为 / 风险 | 护栏测试 |
 | --- | --- | --- | --- |
-| **F1 商品：加 `steel` + `iron`→铁矿石** | `GOODS`（+steel，iron 改名）、`SUBSISTENCE`/`INCOME_ELASTICITY` 补键、`GOVERNMENT_DEMAND.construction` iron→steel、`TRADABLE_GOODS` 加 steel；`GoodId` 扩项 | `Record<GoodId,number>` 漏键会编译失败；改基价会挪动物价中心 | `GOODS.steel` 存在且 `iron.name='铁矿石'`；`SUBSISTENCE/INCOME_ELASTICITY` 含 `steel:0`；`zeroGoods`/`basePrices` 覆盖 steel；`steel` 可贸易、非消费品 |
+| **F1 商品：加 `steel` + `iron`→铁矿石** ✅ | `GOODS`（+steel，iron 改名）、`SUBSISTENCE`/`INCOME_ELASTICITY` 补键、`GOVERNMENT_DEMAND.construction` iron→steel、`TRADABLE_GOODS` 加 steel；`GoodId` 扩项 | `Record<GoodId,number>` 漏键会编译失败；改基价会挪动物价中心 | `GOODS.steel` 存在且 `iron.name='铁矿石'`；`SUBSISTENCE/INCOME_ELASTICITY` 含 `steel:0`；`zeroGoods`/`basePrices` 覆盖 steel；`steel` 可贸易、非消费品 |
 | **F2 拆矿场** | `mines` → `coalMines`/`ironMines`/`lumberMills`（名册/配方/时间/建造点/投资/输出/种子） | 漏改任一 `Record<BuildingId,…>` 或派生消费点即编译失败；种子座数分配改变产出总量 | 每个新矿只产 1 货；`steelMills` 吃 `iron`+`coal`；全仓无 `mines` 残留；种子座数总和守恒或按资源禀赋可解释 |
 | **F3 拆工厂** | `factories` → 7 个工业建筑；机械/军械/铁路/家具改吃 `steel` | 链条断裂（无 `steel` 来源）会让重工业停摆；`deriveUnemployment`/`boom` 事件读 `factories` 需改 | 每个工业建筑 output 键数 ≤2；`steelMills`/`machineryWorks`/`arsenals` 配方正确；`buildingProfits` 逐类可算；无 `factories` 残留 |
 | **F4 加 5 类建筑** | `schools`/`canals`/`telegraphs`/`forts`/`navalYards`（名册/配方/时间/建造点/投资/输出/种子） | 每个 `Record<BuildingId,…>` 都要补 5 键；运河/电报无产出需特判为成本中心 | 5 个 id 出现在全部 `Record<BuildingId,…>` 表；`canals`/`telegraphs` output 空且供给 >0；`completeBuilding` 对新增的可建筑无遗漏（或明确无副作用） |
@@ -236,6 +236,36 @@ type BuildingDef = {
 F2/F3/F4 都是 `BuildingId` 联合类型变更，**一次改全**（类型 + 全部 `Record<BuildingId,…>` +
 派生消费点 + 种子）才能编译；建议**每类拆分单独一个 commit**，用「先加新 id、旧 id 暂时保留、
 再把旧 id 的座数与配方迁走、最后删旧 id」的方式控红时间（旧 id 的临时双声明**同一 commit 内完成删除**）。
+
+### 7.2 F1 已落地的安排（World v11）
+
+F1 只做「商品 + 最小链条」，**不动名册**（矿场/工厂仍打包，F2/F3 才拆）。实际落地：
+
+- **商品**：`iron` 保留 id，显示名 `钢铁`→**`铁矿石`**、`basePrice` 2.2→**1.0**；新增
+  **`steel`（钢铁）**，`basePrice` **2.2**（取旧 `iron` 的价，使改吃钢的下游真实成本不变）。
+  `SUBSISTENCE`/`INCOME_ELASTICITY` 补 `steel: 0`；`TRADABLE_GOODS` 含 `steel`；`ModifierStat`
+  文案 `ironOutput/ironDemand`→铁矿石，新增 `steelOutput/steelDemand`。
+- **链条（F1 打包版）**：`factories` **投入** `iron`(铁矿石，0.2→**0.45**) + `coal`，**产出**
+  `steel 0.09`（唯一来源）。`railroads.input` `iron→steel 0.5`；`INVESTMENT_DEMAND`
+  的 `iron` 全部改 `steel`；`GOVERNMENT_DEMAND.construction` `iron→steel`（该块当前
+  `governmentGold.construction = 0`，是登记用、不影响当期需求）。`BUILDING_OUTPUT.factories`
+  补 `steel`（私人投资评分代理）。
+- **两侧市场**：`engine/economy.ts` 的全国工业中间篮子把 `iron` 项从 `popFactor×0.8` 降到
+  **`popFactor×0.6`**，并新增 **`steel: popFactor×0.2`**——按人口缩放使钢铁市场天然双侧
+  （人口多、工厂少的经济体买钢，工厂密集的经济体卖钢），同时把铁矿石需求留给炼钢的工厂。
+- **为何这样选**：goal 要求「工厂吃铁矿石 + 煤产钢、重工业改吃钢、投资与政府需求改吃钢」。
+  F1 不拆工厂，故 `machinery/arms/furniture` 的用钢**不单列**（它们仍打包在工厂产出里）；
+  工厂的钢投入通过`INVESTMENT_DEMAND`/中间篮子/铁路体现。曾试验「把整篮子 iron→steel」
+  与「工厂内部再消费 steel」两种排法：前者使 QING（人口占 65 中约 40、工厂仅 20）出现巨大
+  钢缺口，进口钢挤压支付能力、**压掉了鸦片进口门**；后者让每个工厂国自给、钢无贸易。
+  现值在 24 月基线上 `iron`/`steel` **双侧均 >0**、`steel` 出现于进出口流，且鸦片门（≥2/月、
+  ≥20% 来自英国）保持。
+- **不变量**：`C+I+G+NX===GDP`、金币守恒、60/120 月确定性、工资分摊恒等式、鸦片门、
+  以及 `tests/economy-recipe-calibration.test.ts` 全部 9 项 gate 均绿（334 pass / 0 fail）。
+  工厂毛利带仍在 5–20%（工厂新增钢收入、铁矿石变便宜，合价后落带内）。
+- **可调数字（F7 统一校准）**：`GOODS.iron.basePrice`、`GOODS.steel.basePrice`、
+  `factories.input.iron=0.45`、`factories.output.steel=0.09`、中间篮子的 `0.6/0.2`。
+  参考点仍是 plan 0008 §5 的「七大国产量加权聚合」。
 
 ## 8. 验收
 

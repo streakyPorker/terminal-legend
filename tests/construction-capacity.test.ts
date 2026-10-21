@@ -91,7 +91,6 @@ describe('construction capacity (ADR 0010)', () => {
     qing.econ.buildings.workshops = 4
     qing.econ.constructionQueue = []
     qing.econ.privateCapital = 100
-    const before = qing.econ.treasury
     const factoriesBefore = qing.econ.buildings.factories
     qing.econ.constructionQueue.push(
       project(
@@ -107,7 +106,18 @@ describe('construction capacity (ADR 0010)', () => {
     expect(load.privateMarket).toBeGreaterThanOrEqual(0)
     advance(world, 1, [], makeRngForWorld(world))
     expect(qing.econ.lastConstructionRent).toBeGreaterThan(0)
-    expect(qing.econ.treasury).toBeGreaterThan(before)
+    // The rent is credited to the treasury, isolated from the wider fiscal
+    // settlement (which can be a net deficit for the seed economy): a control
+    // world with no workshops has no idle points to rent, so its treasury
+    // differs from this one by the rent the private slot paid.
+    const control = newWorld(9302, 'QING')
+    const controlQing = countryOf(control, 'QING')
+    controlQing.econ.buildings.workshops = 0
+    controlQing.econ.constructionQueue = []
+    controlQing.econ.privateCapital = 100
+    advance(control, 1, [], makeRngForWorld(control))
+    expect(controlQing.econ.lastConstructionRent).toBe(0)
+    expect(qing.econ.treasury).toBeGreaterThan(controlQing.econ.treasury)
     // A private slot now carries ten rounds of workload; it stays in the
     // queue and has made some progress.
     expect(qing.econ.constructionQueue.length).toBeGreaterThan(0)

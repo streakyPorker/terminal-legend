@@ -40,7 +40,14 @@ export const GOODS: Record<GoodId, { name: string; basePrice: number }> = {
   grain: { name: '粮食', basePrice: 1 },
   wood: { name: '木材', basePrice: 1.2 },
   coal: { name: '煤炭', basePrice: 1.6 },
-  iron: { name: '钢铁', basePrice: 2.2 },
+  // `iron` is now raw ORE (铁矿石): a cheap raw material whose ONLY industrial
+  // use is feeding the steel chain. `steel` (钢铁, below) is the worked metal
+  // the heavy consumers (construction, railroads, machinery/arms) actually buy.
+  // The id `iron` is kept to minimise cross-table churn (plan 0011 F1).
+  iron: { name: '铁矿石', basePrice: 1 },
+  // Priced at the OLD `iron` base price so every downstream consumer that switched
+  // from `iron` to `steel` sees its real input cost unchanged. Tunable — F7 tunes.
+  steel: { name: '钢铁', basePrice: 2.2 },
   fabric: { name: '布料', basePrice: 2 },
   clothes: { name: '成衣', basePrice: 3 },
   liquor: { name: '酒类', basePrice: 2.6 },
@@ -170,6 +177,7 @@ export const SUBSISTENCE: Record<GoodId, number> = {
   wood: 0,
   coal: 0,
   iron: 0,
+  steel: 0,
   fabric: 0,
   machinery: 0,
   arms: 0,
@@ -193,6 +201,7 @@ export const INCOME_ELASTICITY: Record<GoodId, number> = {
   wood: 0,
   coal: 0,
   iron: 0,
+  steel: 0,
   fabric: 0,
   machinery: 0,
   arms: 0,
@@ -206,20 +215,20 @@ export const GOVERNMENT_DEMAND: Record<SpendingCategory, Partial<Record<GoodId, 
   bureaucracy: { services: 0.8, furniture: 0.2 },
   education: { services: 0.7, furniture: 0.3 },
   welfare: { grain: 0.6, clothes: 0.4 },
-  construction: { wood: 0.4, iron: 0.35, machinery: 0.25 },
+  construction: { wood: 0.4, steel: 0.35, machinery: 0.25 },
 }
 
 /** Investment goods required per project-month, per building (plan 0003 §2.2). */
 export const INVESTMENT_DEMAND: Record<BuildingId, Partial<Record<GoodId, number>>> = {
   farms: { wood: 0.12, furniture: 0.02 },
-  mines: { iron: 0.18, machinery: 0.03 },
-  factories: { iron: 0.22, machinery: 0.1, wood: 0.1 },
-  railroads: { iron: 0.5, machinery: 0.16, wood: 0.4 },
-  ports: { wood: 0.3, iron: 0.1 },
+  mines: { steel: 0.18, machinery: 0.03 },
+  factories: { steel: 0.22, machinery: 0.1, wood: 0.1 },
+  railroads: { steel: 0.5, machinery: 0.16, wood: 0.4 },
+  ports: { wood: 0.3, steel: 0.1 },
   universities: { furniture: 0.12, wood: 0.05 },
   barracks: { wood: 0.1, furniture: 0.05 },
   offices: { furniture: 0.1, wood: 0.05 },
-  workshops: { wood: 0.3, iron: 0.2, furniture: 0.05 },
+  workshops: { wood: 0.3, steel: 0.2, furniture: 0.05 },
 }
 
 /**
@@ -240,6 +249,7 @@ export const BUILDING_OUTPUT: Record<BuildingId, Partial<Record<GoodId, number>>
     machinery: 0.09,
     arms: 0.07,
     luxury: 0.035,
+    steel: 0.09,
   },
   railroads: {},
   ports: {},
@@ -329,8 +339,14 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
       machinery: 0.18,
       arms: 0.07,
       luxury: 0.035,
+      // F1: the bundled factory smelts ore into steel (split into `steelMills`
+      // in F3); it is the only source of `steel`.
+      steel: 0.09,
     },
-    input: { grain: 0.5, coal: 0.18, iron: 0.2, fabric: 0.2, wood: 0.1, machinery: 0.18 },
+    // `iron` is ore: the furnace burns a large quantity of it (plus coal) to
+    // yield a little steel. Machinery/arms/furniture (bundled here) buy their
+    // steel from the national heavy-industry pool, not from this recipe.
+    input: { grain: 0.5, coal: 0.18, iron: 0.45, fabric: 0.2, wood: 0.1, machinery: 0.18 },
     labor: 1.0,
     gates: { tech: true, industrial: true },
     outputGates: { liquor: { industrial: true } },
@@ -338,7 +354,7 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
   },
   railroads: {
     output: {},
-    input: { iron: 0.5, wood: 0.4 },
+    input: { steel: 0.5, wood: 0.4 },
     labor: 0.2,
   },
   ports: {
@@ -393,7 +409,7 @@ export const ARTISAN_SERVICE_OUTPUT = 0.01
 
 export const BUILDINGS: Record<BuildingId, { name: string; cost: number; note: string }> = {
   farms: { name: '农场', cost: 1.5, note: '粮食与原料，吸纳农业人口' },
-  mines: { name: '矿场', cost: 2.5, note: '煤炭与钢铁，工业的起点' },
+  mines: { name: '矿场', cost: 2.5, note: '煤炭与铁矿石，工业的起点' },
   factories: { name: '工厂', cost: 4, note: '工业品产能，推动城市化' },
   railroads: { name: '铁路', cost: 7, note: '交通基础设施与市场接入' },
   ports: { name: '港口', cost: 3, note: '市场接入与关税收入' },
@@ -1504,7 +1520,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
   }
 
   return {
-    version: 10,
+    version: 11,
     seed,
     date: { year: START_YEAR, month: START_MONTH },
     tick: 0,

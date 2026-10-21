@@ -35,7 +35,7 @@ describe('M1 types, data and migration', () => {
     expect(qing).toBeDefined()
     if (qing === undefined) return
 
-    expect(world.version).toBe(10)
+    expect(world.version).toBe(11)
     expect(world.ironman).toBe(false)
     expect(world.secretary.delegation).toEqual({
       internal: false,

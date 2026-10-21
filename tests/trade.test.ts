@@ -40,11 +40,11 @@ const marketsFor = (
   return out
 }
 
-describe('T1a world schema (v10)', () => {
-  test('the world is version 10 and carries region, trade and opium', async () => {
+describe('T1a world schema (v11)', () => {
+  test('the world is version 11 and carries region, trade and opium', async () => {
     const world = newWorld(9001, 'QING')
     const qing = world.countries.QING
-    expect(world.version).toBe(10)
+    expect(world.version).toBe(11)
     expect(qing).toBeDefined()
     if (qing === undefined) return
     expect(qing.region).toBe('eastAsia')
@@ -59,9 +59,12 @@ describe('T1a world schema (v10)', () => {
   })
 
   test('opium is a tradable good and services is not', async () => {
-    expect(Object.keys(GOODS).length).toBe(13)
+    expect(Object.keys(GOODS).length).toBe(14)
     expect(GOODS.opium.basePrice).toBe(2.5)
+    expect(GOODS.steel.basePrice).toBeGreaterThan(GOODS.iron.basePrice)
+    expect(GOODS.iron.name).toBe('铁矿石')
     expect(TRADABLE_GOODS).toContain('opium')
+    expect(TRADABLE_GOODS).toContain('steel')
     expect(TRADABLE_GOODS).not.toContain('services')
   })
 
