@@ -6,7 +6,9 @@ import type {
   WorldState,
 } from '../types'
 import { addModifier } from './modifiers'
-import { atWar, clamp, declareWar, inspectEconomy, strength } from './sim'
+import { atWar, declareWar, strength } from './diplomacy'
+import { inspectEconomy } from './economy'
+import { clamp } from './internal'
 import type { Rng } from './rng'
 
 /**

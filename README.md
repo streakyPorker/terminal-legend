@@ -217,7 +217,16 @@ hooks/hooks.json             单个 hooks 模块
 hooks/register.tsx           命令、工具、御前会议、秘书、系统提示、三层渲染
 types/index.d.ts             PluginState 契约与世界模型类型（world v9：建筑配方与逐建筑利润；科技树规划中）
 engine/data.ts               国家/商品/建筑/科技/领袖/事件模板、官僚与失业派生
-engine/sim.ts                确定性月度模拟、建造队列、玩家行动、托管中断
+engine/sim.ts                门面（barrel）：原样再导出下列模块，保持公共导入面不变
+engine/internal.ts           跨模块共享的小工具：clamp、日期、GOOD 校验、v7 建造字段补齐
+engine/economy.ts            产出/需求/价格形成、支出法 GDP、逐建筑利润、税基量与利用率反馈
+engine/construction.ts       建造能力、工程量/造价、队列排程与负载、完工与结算
+engine/investment.ts         私人资本投资评分、资本门槛与私人项目节奏
+engine/diplomacy.ts          关系漂移、贸易冷暖/敏感拖累、禁运到期、宣战/停战与战争目标
+engine/events.ts             事件选项结算与月度事件抽取（AI 自动抉择 / 玩家待决）
+engine/country.ts            单国月度结算：人口/就业/生活水平/合法性/科技/军力
+engine/actions.ts            玩家与 AI 行动：v3_action 处理、政策、随机决策、托管中断
+engine/world.ts              世界创建与校准、航线引导、月度 advance 主循环
 engine/fiscal.ts             国库收支账：收入来源与支出用途拆分（GDP ≠ 财政）
 engine/trade.ts              区域运输矩阵、Top-6 双边数量清算、有效供给
 engine/ai.ts                 批量 AI 领袖决策提示与解析
