@@ -43,11 +43,18 @@
 - `view/panels/index.tsx` — 桶，重导出旧 `panels.tsx` 的全部 14 个公共符号（7 类型 + `Panel`/`Band`/`Report`/`PanePlaceholder`/`helpText` + 从 `view/format` 转出的 `eventSummary`/`clampText`），`import ... from '../view/panels'` 路径不变。
 - 完成后：`claude plugin test .` 388 pass / 0 fail（含 11 标签 × 2 surface 的渲染测试），`validate` 通过（警告与拆分前一致）；24 个具名函数体 + `TABS` + `playerOf` 经规范化 diff 与旧文件逐字节一致，导出集无缺无多，渲染零改动。最大文件 `economy.tsx` 240 行（远低于 600 软警）。
 
-### S4 `engine/actions.ts` → `engine/actions/`
-- 按 action 拆（build / tax / tariff / spending / research / conscript / law / route …）+ `policy` / `randomDecision`；桶重导出。
+### S4 ✅ `engine/actions.ts` → `engine/actions/`
+- 实际布局：`engine/actions/{types,build,tax,tariff,spending,research,invest,conscript,law,diplomacy,route,situation,event,play,policy,random,interrupt,decision}.ts` + `index.ts` 桶；原 `engine/actions.ts` 已删除（`moduleResolution: bundler` 下 `./actions` 解析到 `actions/index.ts`）。
+- 按 action 拆分：build（含 cancel）/ tax（含 `taxMenuText`）/ tariff / spending / research / invest / conscript / law（含 `installLawModifier`、`LAW_AUTHORITY_COST`）/ diplomacy（含 `relationLine`）/ route / situation / event / play；`policy.ts`（`applyPolicy` + `POLICY_FLAT_SCALE`/`flatScale`）、`random.ts`（`randomDecision`）、`interrupt.ts`（`councilInterrupt`）。
+- `decision.ts` — `applyDecision` 调度器（保留 `country === undefined` 守卫与未知行动兜底），逐 action 转发到对应处理器；`types.ts` 为叶模块（处理器共享的 `ActionResult`/`ActionParams`）。
+- `index.ts` — 桶，重导出旧 `actions.ts` 的全部 6 个公共符号（`FREE_TRADE_TARIFF_FLOOR`/`taxMenuText`/`applyDecision`/`applyPolicy`/`randomDecision`/`councilInterrupt`），`import ... from './actions'` 路径不变。
+- 完成后：`claude plugin test .` 388 pass / 0 fail，`validate` 通过（警告与拆分前一致）；14 个 action case body 经「去缩进 + 剔除重算的 tag 行」规范化 diff 与旧文件逐字节一致，`relationLine`/`installLawModifier`/`taxMenuText`/`applyPolicy`/`flatScale`/`randomDecision`/`councilInterrupt` 与 `LAW_AUTHORITY_COST`/`POLICY_FLAT_SCALE` 逐字节一致（`applyPolicy` 仅返回类型标注由 `{ ok: boolean; text: string }` 改为等价别名 `ActionResult`），导出集无缺无多，World 仍 v11，行为零改动。
 
-### S5 `engine/inspect.ts` → `engine/inspect/`
-- 每分区一个文件 + `engine/inspect/index.ts` 桶（`INSPECT_SECTIONS` / `inspectWorld` 保留）。
+### S5 ✅ `engine/inspect.ts` → `engine/inspect/`
+- 实际布局：`engine/inspect/{shared,economy,fiscal,labor,trade,market,construction,military,history,pops,diplomacy,tech,modifiers,log,buildings,routes,rankings,forecast}.ts` + `index.ts`；原 `engine/inspect.ts` 已删除（`./inspect` 解析到 `inspect/index.ts`）。
+- 每分区一个文件（16 个 `v3_inspect` 分区各一）；`shared.ts` 为叶共享层（`n`/`signed`/`pct`/`monthsBefore`/`fmtDate`/`warFor`/`warBetween`/`basket` 与 `InspectOptions`）；`forecast.ts` 承载 `forecastWorld`。
+- `index.ts` — 保留 `INSPECT_SECTIONS` / `InspectSection` 与 `inspectWorld` 调度器，并重导出 `forecastWorld` / `InspectOptions`；旧 `inspect.ts` 的全部 5 个公共符号（`INSPECT_SECTIONS`/`InspectSection`/`InspectOptions`/`forecastWorld`/`inspectWorld`）导出集无缺无多，`import ... from '../engine/inspect'` 路径不变。
+- 完成后：`claude plugin test .` 388 pass / 0 fail，`validate` 通过（警告与拆分前一致）；16 个 section 函数 + `forecastWorld` + `inspectWorld` + 8 个 `shared` 助手经规范化 diff 与旧文件逐字节一致，World 仍 v11，行为零改动。最大文件 `index.ts` 121 行（远低于 600 软警）。
 
 ### S6 测试拆分
 - `tests/first-slice.test.ts` / `tests/economic-loop.test.ts` 按关注点拆分（引擎/命令/渲染分开）。

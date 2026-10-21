@@ -272,7 +272,25 @@ engine/investment.ts         私人资本投资评分、资本门槛与私人项
 engine/diplomacy.ts          关系漂移、贸易冷暖/敏感拖累、禁运到期、宣战/停战与战争目标
 engine/events.ts             事件选项结算与月度事件抽取（AI 自动抉择 / 玩家待决）
 engine/country.ts            单国月度结算：人口/就业/生活水平/合法性/科技/军力
-engine/actions.ts            玩家与 AI 行动：v3_action 处理、政策、随机决策、托管中断
+engine/actions/index.ts      桶：原样再导出旧 engine/actions.ts 的 6 个公共符号，`./actions` 导入路径不变
+engine/actions/decision.ts   applyDecision 调度器：未知国家守卫 + 未知行动兜底，按 action 分发到各处理器
+engine/actions/types.ts      处理器共享的 ActionResult / ActionParams 类型
+engine/actions/build.ts      建造入队与取消（build / cancel）
+engine/actions/tax.ts        四税基税率与税基菜单（tax / taxMenuText）
+engine/actions/tariff.ts     进出口关税（tariff）
+engine/actions/spending.ts   支出类别调整（spending）
+engine/actions/research.ts   研究方向（research）
+engine/actions/invest.ts     投资信心（invest）
+engine/actions/conscript.ts  征兵（conscript）
+engine/actions/law.ts        法案与 installLawModifier（law）
+engine/actions/diplomacy.ts  外交动作与 relationLine（diplomacy）
+engine/actions/route.ts      贸易航线动作（route）
+engine/actions/situation.ts  危机提案（situation）
+engine/actions/event.ts      事件选项结算（event）
+engine/actions/play.ts       切换玩家国家（play）
+engine/actions/policy.ts     政策提案与权威计价（applyPolicy）
+engine/actions/random.ts     确定性随机决策回退（randomDecision）
+engine/actions/interrupt.ts  托管中断判定（councilInterrupt）
 engine/world.ts              世界创建与校准、航线引导、月度 advance 主循环
 engine/fiscal.ts             国库收支账：收入来源与支出用途拆分（GDP ≠ 财政）
 engine/trade.ts              区域运输矩阵、Top-6 双边数量清算、有效供给
@@ -282,6 +300,25 @@ engine/modifiers.ts          buff/debuff 叠算入口与到期结算
 engine/thresholds.ts         状态阈值触发的修正规则
 engine/cheat.ts              天命工具
 engine/save.ts               存档、版本校验与状态行激活文件
+engine/inspect/index.ts      桶 + INSPECT_SECTIONS / InspectSection 与 inspectWorld 调度器，`./inspect` 导入路径不变
+engine/inspect/shared.ts     inspect 共享助手（n/signed/pct、日期、战争、配方篮）与 InspectOptions
+engine/inspect/economy.ts    v3_inspect economy 分区
+engine/inspect/market.ts     v3_inspect market 分区
+engine/inspect/fiscal.ts     v3_inspect fiscal 分区
+engine/inspect/labor.ts      v3_inspect labor 分区
+engine/inspect/trade.ts      v3_inspect trade 分区
+engine/inspect/routes.ts     v3_inspect routes 分区
+engine/inspect/buildings.ts  v3_inspect buildings 分区
+engine/inspect/construction.ts v3_inspect construction 分区
+engine/inspect/military.ts   v3_inspect military 分区
+engine/inspect/pops.ts       v3_inspect pops 分区
+engine/inspect/diplomacy.ts  v3_inspect diplomacy 分区
+engine/inspect/tech.ts       v3_inspect tech 分区
+engine/inspect/modifiers.ts  v3_inspect modifiers 分区
+engine/inspect/rankings.ts   v3_inspect rankings 分区
+engine/inspect/log.ts        v3_inspect log 分区
+engine/inspect/history.ts    v3_inspect history 分区
+engine/inspect/forecast.ts   forecastWorld 下月现金流预估
 view/format.ts               数字、进度条、火花线、状态行
 view/panels/index.tsx        桶：原样再导出旧 view/panels.tsx 的全部公共符号，`./panels` 导入路径不变
 view/panels/shared.tsx       面板共享层：UiKit/控制类型、Heading/StatLine/Meter/TableRow、playerOf/pendingOf/partnerTotals、SituationCard、PanePlaceholder、helpText
