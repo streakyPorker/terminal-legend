@@ -9,6 +9,16 @@ import type {
   WorldState,
 } from '../types'
 import { addModifier, applyModifiers } from './modifiers'
+import { installBlock, validateBlockConfig } from './blocks'
+import {
+  compileWarBlock,
+  instantiateWarBlock,
+  warBlockFor,
+  warModifierId,
+  warSource,
+  warSpecsFor,
+  type WarSide,
+} from './config/blocks/war'
 import { embargoed, type TradeBlocker } from './trade'
 import { advanceDate, clamp, dateDistance } from './internal'
 import type { Rng } from './rng'
@@ -273,11 +283,46 @@ export type ReparationTerms = {
 }
 
 /**
+ * Installs a war goal's modifiers on `country` through the block engine
+ * (ADR 0024). The runtime block is rebound to `source = war:<warId>` and its
+ * modifier id restored to the pre-C6 shape (`war:<warId>:<goal>:<slot>`). A
+ * validation failure — which cannot happen for the derived static registry —
+ * falls back to the legacy direct install, so behaviour cannot change.
+ */
+function installWarModifiers(
+  country: Country,
+  warId: string,
+  goal: WarGoal,
+  side: WarSide,
+): void {
+  for (const spec of warSpecsFor(goal, side)) {
+    const template = warBlockFor(spec) ?? compileWarBlock(spec)
+    const installed = instantiateWarBlock(template, warId)
+    if (validateBlockConfig([installed]).length === 0) {
+      installBlock(country, installed, {
+        modifierId: () => warModifierId(warId, spec),
+      })
+      continue
+    }
+    addModifier(country, {
+      id: warModifierId(warId, spec),
+      label: spec.label,
+      stat: spec.stat,
+      stack: spec.stack,
+      value: spec.value,
+      monthsLeft: spec.months,
+      source: warSource(warId),
+    })
+  }
+}
+
+/**
  * Peace terms for one war (plan 0004 §5). The goal owner's side winning applies
  * the victory column, its side losing the defeat column; effects land on every
- * country of a side, mirroring the belligerent loop in `endWar`.
+ * country of a side, mirroring the belligerent loop in `endWar`. Exported so
+ * the C6 migration test can compare it against a frozen pre-C6 oracle.
  */
-function applyWarGoal(
+export function applyWarGoal(
   world: WorldState,
   war: War,
   goalOwnerWon: boolean,
@@ -379,28 +424,12 @@ function applyWarGoal(
         if (loser === undefined) continue
         loser.econ.tariff = clamp(loser.econ.tariff - 10, 0, 60)
         loser.government.legitimacy = clamp(loser.government.legitimacy - 4, 0, 100)
-        addModifier(loser, {
-          id: `war:${war.id}:openMarket:access`,
-          label: '门户开放',
-          stat: 'marketAccess',
-          stack: 'flat',
-          value: 0.15,
-          monthsLeft: 24,
-          source: `war:${war.id}`,
-        })
+        installWarModifiers(loser, war.id, 'openMarket', 'loser')
       }
       for (const id of winnerIds) {
         const winner = world.countries[id]
         if (winner === undefined) continue
-        addModifier(winner, {
-          id: `war:${war.id}:openMarket:income`,
-          label: '通商特权',
-          stat: 'income',
-          stack: 'percent',
-          value: 5,
-          monthsLeft: 24,
-          source: `war:${war.id}`,
-        })
+        installWarModifiers(winner, war.id, 'openMarket', 'winner')
       }
       break
     }
@@ -411,15 +440,7 @@ function applyWarGoal(
         for (const loserId of loserIds) {
           if (!winner.diplo.sphere.includes(loserId)) winner.diplo.sphere.push(loserId)
         }
-        addModifier(winner, {
-          id: `war:${war.id}:sphere:access`,
-          label: '势力范围',
-          stat: 'marketAccess',
-          stack: 'flat',
-          value: 0.05,
-          monthsLeft: 24,
-          source: `war:${war.id}`,
-        })
+        installWarModifiers(winner, war.id, 'sphere', 'winner')
       }
       // Both sides fall an extra 10 beyond the belligerent relation decline.
       for (const id of winnerIds) {

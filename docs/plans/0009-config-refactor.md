@@ -79,7 +79,7 @@
 | **C3** ✅ | `events` 的 `effects.modifiers` 迁到块 | 是 | 迁移等价：事件选项结算产生的修正与旧路径一致；重复触发不无限叠加 |
 | **C4** ✅ | `situations` 迁到块 | 是 | 迁移等价：局势结果包的效果落账一致 |
 | **C5** | `tech` 迁到块 | 是 | 迁移等价：科技解锁/加成路径产生的修正一致 |
-| **C6** | `war`（战争目标）与 `laws` 迁到块 | 是 | 迁移等价：宣战/停战/法案各自安装的修正集合一致 |
+| **C6** ✅ | `war`（战争目标）与 `laws` 迁到块 | 是 | 迁移等价：宣战/停战/法案各自安装的修正集合一致 |
 | **C7** | **非修正入口的乘数迁移**（见下） | **混合**（见下） | 逐项：能等价则等价测试；若有行为变更则记录并加新基线 |
 
 **C7 明细（必须是谨慎的、单独测试的迁移）**
@@ -125,6 +125,18 @@
 - `engine/situations.ts` 的 `applySituationResult` `compromise` 分支：两处内联 `addModifier` 换成新增的本地 `installSituationResultModifiers(country, situationId, resultId)`——按 pack 从注册表取块、`instantiateSituationBlock` 重绑到 `source = situation:opium-crisis`、`installBlock(..., { modifierId })` 恢复旧 id。**逐位保持**旧行为：`source = situation:opium-crisis`、`id = situation:opium-crisis:compromise:access|income`、`monthsLeft = 24`、`stack`/`value`/`label` 不变；校验失败回退旧直接安装。直达效果（legitimacy/authority/prestige/embargo/`declareWar`，以及 compromise 的 tariff/legitimacy/radicals/relation）**原样未改**；触发窗口、仲裁、`fallbackResult` 未动。ADR-0004 叠算（`applyModifiers`/`addModifier`）未动。
 - `WorldState.version` **未**提升（仍为 10）。`engine/blocks.ts` **未改**（复用 `installBlock`/`validateBlockConfig`）。
 - 新增 `tests/situation-migration.test.ts`（10 例）：用**冻结的旧 `applySituationResult` 副本**作 oracle，对四个结果包（`qing-crackdown`/`compromise`/`war-open-market`/`war-reparations`）逐位比对两国 modifier 元组（id\|source\|stat\|stack\|value\|label\|monthsLeft）、日志与**整世界深等**（含 embargo/战争/关系/记录）；另有旧 id/source 形状断言、纯函数可复现断言、以及 **drift guard**（`SITUATION_MODIFIER_PACKS` 比对冻结 spec、每 pack 恰一条块且无多余项、`validateBlockConfig` 为空、compile/instantiate/modifierId 形状稳定）。`tests/config-blocks.test.ts` 的不变量测试纳入 situation 块（9 + 4 + 2）。`claude plugin test .` **286 pass / 0 fail**（C3 基线 276 + 新增 10）。
+
+**C6 完成记录（本切片）**
+
+- 新增静态注册表 `engine/config/blocks/laws.ts`：`LAW_MODIFIER_SPECS`（6 条，六法案各一条**永久**修正）+ 由其派生的 `LAW_BLOCKS`（`kind: 'law'`、`potential_trigger: []`、`scales_with: []`、`lifecycle: 'once'`、无 `months`），效果与旧 `addModifier` 条目 **1:1**（stat/stack/value/label）。同模块导出 `lawBlockId`/`lawSource`（`law:<name>`）、`compileLawBlock`、`lawBlockFor`、`lawSpecFor`；块 id 即 `source`，旧 modifier id（部分带槽位后缀，如 `law:自由贸易:income`、`law:保护关税:factory`）由 `spec.modifierId` 单独保存。
+- 新增静态注册表 `engine/config/blocks/war.ts`：`WAR_MODIFIER_SPECS`（3 条：`openMarket` 败方 `marketAccess` flat 0.15/24mo「门户开放」、`openMarket` 胜方 `income` percent 5/24mo「通商特权」、`sphere` 胜方 `marketAccess` flat 0.05/24mo「势力范围」）+ 派生的 `WAR_BLOCKS`（`kind: 'war'`、`potential_trigger: []`、`scales_with: []`、`lifecycle: 'once'`、每条 effect 自带 `months`）。同模块导出 `warBlockId`（`war:<goal>:<side>:<slot>`）、`warSource`（`war:<warId>`）、`warModifierId`（`war:<warId>:<goal>:<slot>`，即旧 modifier id）、`compileWarBlock`、`instantiateWarBlock`（rebind 到运行时 source）、`warBlockFor`、`warSpecsFor`。
+- `engine/config/blocks.ts` 的 `BLOCK_REGISTRY` 并入 `LAW_BLOCKS` 与 `WAR_BLOCKS`（9 + 4 + 2 + 6 + 3 = 24），供全局不变量校验。config 模块只依赖 `types`（`WarGoal` 为 type-only import），**不** import 引擎模块，避免初始化环。
+- `engine/actions.ts` 的 `law` 分支：六处内联 `addModifier` 换成新增的本地 `installLawModifier(country, law)`——按法案从注册表取块、`installBlock(..., { modifierId })` 恢复旧 id。**逐位保持**旧行为：`source = law:<name>`、旧 id 形状、永久（`monthsLeft` 缺省）、同 id 覆盖。直达效果（识字/支出/民怨/关税/市场接入/人力/合法性）与 `LAW_AUTHORITY_COST` 计价、权威不足拒绝 **原样未改**。
+- `engine/diplomacy.ts` 的 `applyWarGoal`：三处内联 `addModifier` 换成新增的本地 `installWarModifiers(country, warId, goal, side)`——按 (goal, side) 从注册表取块、`instantiateWarBlock` 重绑 `source = war:<warId>`、`installBlock(..., { modifierId })` 恢复旧 id。**逐位保持**旧行为：`source = war:<warId>`、旧 id 形状、`monthsLeft = 24`、同 id 覆盖。直达效果（关税/合法性/势力范围/关系/赔款/威望）**原样未改**；`applyWarGoal` 仅由 `function` 改为 `export function`（供 C6 等价测试比对，无行为变更）。
+- `engine/blocks.ts` **未改**（复用既有 `installBlock`/`validateBlockConfig`）；ADR-0004 叠算（`applyModifiers`/`addModifier`）未动；`WorldState.version` **未**提升（仍为 10）。
+- 新增 `tests/law-migration.test.ts`（13 例）：用**冻结的旧 `law` 分支副本**作 oracle，对六法案逐位比对返回文本、权威扣费与**整国深等**（含 modifier 元组 `id|source|stat|stack|value|label|monthsLeft`）；另有旧 id/source 形状与永久性断言、重复推行同 id 覆盖、权威不足零副作用，以及 **drift guard**（`LAW_MODIFIER_SPECS` 比对冻结 spec、每法案恰一条块且无多余项、`validateBlockConfig` 为空）。
+- 新增 `tests/war-migration.test.ts`（12 例）：用**冻结的旧 `applyWarGoal` 副本**作 oracle，对（openMarket 胜 / sphere 胜 / reparations 胜 ± 显式 terms / humiliation 胜 / 四目标败方列）逐位比对**整世界深等**（含 modifier 元组、赔款日程、关系、势力范围与威望）；另有 openMarket/sphere 的旧 id/source 形状断言、重复应用同 id 覆盖，以及 **drift guard**（`WAR_MODIFIER_SPECS` 比对冻结 spec、每规格恰一条块且无多余项、`validateBlockConfig` 为空、compile/instantiate/modifierId 形状稳定）。`tests/config-blocks.test.ts` 的不变量测试纳入 law + war 块（9 + 4 + 2 + 6 + 3 = 24）。
+- `claude plugin test .` **311 pass / 0 fail**（C4 基线 286 + 新增 25）；`claude plugin validate .` 通过（仅既有警告）。
 
 ## 5. 验收
 

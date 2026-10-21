@@ -18,6 +18,12 @@ import { MODIFIER_STATS, MODIFIER_STAT_NAMES, addModifier } from './modifiers'
 import { installBlock, validateBlockConfig } from './blocks'
 import { compilePolicyBlock } from './config/blocks/policies'
 import {
+  compileLawBlock,
+  lawBlockFor,
+  lawSource,
+  lawSpecFor,
+} from './config/blocks/laws'
+import {
   EMBARGO_MONTHS_MAX,
   SENSITIVE_GOODS,
   TRADE_RELATION_ENVELOPE,
@@ -60,6 +66,31 @@ const LAW_AUTHORITY_COST: Record<string, number> = {
   保护关税: 10,
   征兵制: 15,
   宗教宽容: 5,
+}
+
+/**
+ * Installs a law's modifier through the block engine (ADR 0024). The registered
+ * block's id is `law:<name>` (the pre-C6 `source`); the modifier id is restored
+ * to the pre-C6 shape (some laws carry a slot suffix like `law:自由贸易:income`).
+ * A validation failure — which cannot happen for the derived static registry —
+ * falls back to the legacy direct install, so behaviour cannot change.
+ */
+function installLawModifier(country: Country, law: string): void {
+  const spec = lawSpecFor(law)
+  if (spec === undefined) return
+  const template = lawBlockFor(law) ?? compileLawBlock(spec)
+  if (validateBlockConfig([template]).length === 0) {
+    installBlock(country, template, { modifierId: () => spec.modifierId })
+    return
+  }
+  addModifier(country, {
+    id: spec.modifierId,
+    label: spec.label,
+    stat: spec.stat,
+    stack: spec.stack,
+    value: spec.value,
+    source: lawSource(law),
+  })
 }
 
 /** The four-base tax menu, shown when `v3_action tax` omits `base` (ADR 0023). */
@@ -202,27 +233,13 @@ export function applyDecision(
         教育改革: () => {
           country.pops.literacy = clamp(country.pops.literacy + 0.04, 0, 1)
           country.econ.spending.education += 0.5
-          addModifier(country, {
-            id: 'law:教育改革',
-            label: '教育改革',
-            stat: 'literacy',
-            stack: 'percent',
-            value: 10,
-            source: 'law:教育改革',
-          })
+          installLawModifier(country, '教育改革')
           return `${tag} 推行教育改革，识字率上升`
         },
         福利改革: () => {
           country.pops.radicals = clamp(country.pops.radicals - 6, 0, 100)
           country.econ.spending.welfare += 0.5
-          addModifier(country, {
-            id: 'law:福利改革',
-            label: '福利改革',
-            stat: 'radicals',
-            stack: 'flat',
-            value: -2,
-            source: 'law:福利改革',
-          })
+          installLawModifier(country, '福利改革')
           return `${tag} 推行福利改革，民怨稍减`
         },
         自由贸易: () => {
@@ -238,14 +255,7 @@ export function applyDecision(
             60,
           )
           country.econ.marketAccess = clamp(country.econ.marketAccess + 0.08, 0, 1)
-          addModifier(country, {
-            id: 'law:自由贸易:income',
-            label: '自由贸易',
-            stat: 'income',
-            stack: 'percent',
-            value: 8,
-            source: 'law:自由贸易',
-          })
+          installLawModifier(country, '自由贸易')
           return `${tag} 推行自由贸易，进口关税 ${country.econ.tariff.toFixed(0)}%、出口关税 ${country.econ.exportTariff.toFixed(0)}%（下限 ${FREE_TRADE_TARIFF_FLOOR}%），市场接入提高`
         },
         保护关税: () => {
@@ -253,40 +263,19 @@ export function applyDecision(
           country.econ.tariff = clamp(country.econ.tariff + 8, 0, 60)
           country.econ.exportTariff = clamp(exportRate + 8, 0, 60)
           country.econ.marketAccess = clamp(country.econ.marketAccess - 0.04, 0, 1)
-          addModifier(country, {
-            id: 'law:保护关税:factory',
-            label: '保护关税',
-            stat: 'factoryOutput',
-            stack: 'percent',
-            value: 12,
-            source: 'law:保护关税',
-          })
+          installLawModifier(country, '保护关税')
           return `${tag} 推行保护关税，国库与工厂受益`
         },
         征兵制: () => {
           country.military.manpower = clamp(country.military.manpower + 10, 0, country.pops.total * 0.06)
           country.pops.radicals = clamp(country.pops.radicals + 3, 0, 100)
-          addModifier(country, {
-            id: 'law:征兵制',
-            label: '征兵制',
-            stat: 'armyStrength',
-            stack: 'percent',
-            value: 10,
-            source: 'law:征兵制',
-          })
+          installLawModifier(country, '征兵制')
           return `${tag} 推行征兵制，人力池扩大`
         },
         宗教宽容: () => {
           country.pops.radicals = clamp(country.pops.radicals - 4, 0, 100)
           country.government.legitimacy = clamp(country.government.legitimacy + 2, 0, 100)
-          addModifier(country, {
-            id: 'law:宗教宽容',
-            label: '宗教宽容',
-            stat: 'legitimacy',
-            stack: 'flat',
-            value: 2,
-            source: 'law:宗教宽容',
-          })
+          installLawModifier(country, '宗教宽容')
           return `${tag} 推行宗教宽容，社会稳定`
         },
       }
