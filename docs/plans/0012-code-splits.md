@@ -19,12 +19,17 @@
 
 ## 1. 拆分目标（每项 = 一个独立提交）
 
-### S1 `hooks/register.tsx` → `hooks/`
-- `hooks/tools.ts` — `TOOL_SPECS` + `tool.call` handlers + 白名单。
-- `hooks/council.ts` — `advanceGame` / 御前 / 托管 / 中断 / 秘书 spawn。
-- `hooks/render.tsx` — `ui.render` 挂载（Band / Report / Pane）。
-- `hooks/prompt.ts` — `prompt.compose` 与系统提示拼装。
-- `register.tsx` → 入口 + 桶重导出（保持 `register` 导出）。
+### S1 ✅ `hooks/register.tsx` → `hooks/`
+- 实际布局：`hooks/{register.tsx,internal.ts,tools.ts,council.ts,render.tsx,prompt.ts,commands.ts}`。
+- `hooks/internal.ts` — 共享插件状态与 UI 管线：`getWorld/setWorld/getUi/setUi/patchUi/activeWorld`、`refreshStatus/openPane`、`readProjectDoc`、`pendingOf`、常量（`PANE`/`SECRETARY_AGENT`/超时）、共享标志（`secretaryAnswers`、托管运行标志 getter/setter）。作为各关注点模块的最小依赖层（对应 `engine/internal.ts` 的角色），避免循环依赖。
+- `hooks/tools.ts` — `TOOL_SPECS`（14 个 `v3_*` schema，与原文件逐字节相同）+ `tool.call` 处理器 + 白名单（`SECRETARY_TOOLS` 与各 handler 参数 allow-list，**schema 与白名单同文件**，避免历史上「参数漏加白名单」的回归）。
+- `hooks/council.ts` — `advanceGame` / `resolveEvent` / 御前与托管循环（`startDelegated`/`runDelegated`/`interruptReason`）/ 秘书 spawn（`askSecretary`/`startSecretary`/`finishSecretary`）/ 越权审计 / `controlGame`/`councilAction`。
+- `hooks/render.tsx` — 三个 `ui.render` 挂载（`Panel`/`Band`/`Report`）。
+- `hooks/prompt.ts` — `narratorPrompt`（系统提示拼装）与 `statusText`/`statusHint`。
+- `hooks/commands.ts` — `/v3` 命令分发（`runV3Command`，约 330 行）。
+- `register.tsx`（186 行）— 入口：**所有 `on(...)` 注册仍物理保留在本文件**，从各模块导入处理器接线，保持 `register` 导出；`agent.offer`/`ui.render{Pane}` 的 matcher 字面量内联，使 `claude plugin validate` 仍能解析（导入常量会退化为 `?`）。
+- 完成后：`claude plugin test .` 388 pass / 0 fail，`validate` 通过（hook 集与 `.catch` 警告与拆分前一致），注册顺序/工具名/schema/handler 逻辑零改动；迁移函数体经规范化 diff 逐字节一致。
+- 软警例外：`hooks/tools.ts` 832 行（>600 软警、<900 硬拆）——schema 与白名单必须同文件（MUST），故不再拆。
 
 ### S2 ✅ `engine/data.ts` → `engine/data/`（与计划 0009 §1 一致）
 - 实际布局：`engine/data/{goods,buildings,tech,leaders,countries,events,derivations,world}.ts`；**无 `pops.ts`**（原文件无独立人口目录，人口数值在 `COUNTRY_SEEDS`、人口派生在 `derivations.ts`），`createWorld` 归 `world.ts`。

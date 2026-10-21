@@ -246,8 +246,14 @@ claude plugin test .
 
 ```
 .claude-plugin/plugin.json   清单、userConfig（AI 模型）
-hooks/hooks.json             单个 hooks 模块
-hooks/register.tsx           命令、工具、御前会议、秘书、系统提示、三层渲染
+hooks/hooks.json             单个 hooks 模块（入口指向 register.tsx）
+hooks/register.tsx           入口：注册命令/工具/御前/渲染并接线各关注点模块（保留 register 导出）
+hooks/internal.ts            共享插件状态与 UI 管线：state 读写、状态行、面板、常量、共享标志
+hooks/tools.ts               v3_* 工具 schema、tool.call 处理器与白名单（SECRETARY_TOOLS + 参数表）
+hooks/council.ts             推进/御前/托管/中断/秘书 spawn/事件结算
+hooks/render.tsx             ui.render 挂载（Panel / Band / Report）
+hooks/prompt.ts              系统提示拼装（narratorPrompt）与状态文本（statusText）
+hooks/commands.ts            /v3 命令分发
 types/index.d.ts             PluginState 契约与世界模型类型（world v11：建筑配方、逐建筑利润与四税基、铁矿石/钢铁；科技树规划中）
 engine/data/index.ts         桶：原样再导出全部公共符号，`./data` 导入路径不变
 engine/data/goods.ts         商品/资源禀赋/区域运输成本/消费需求参数

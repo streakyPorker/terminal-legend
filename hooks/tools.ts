@@ -1,0 +1,832 @@
+import type { EngineInterface } from 'claude-code'
+import type { PolicyProposal } from '../types'
+import { MODIFIER_STATS } from '../engine/modifiers'
+import { GOOD_IDS, makeRngForWorld } from '../engine/data'
+import { applyDecision, applyPolicy, clamp, clone } from '../engine/sim'
+import { saveGame } from '../engine/save'
+import { forecastWorld, inspectWorld, INSPECT_SECTIONS, type InspectOptions } from '../engine/inspect'
+import { applyCheat, type CheatParams } from '../engine/cheat'
+import { SITUATION_STANCES, recordSituationProposal } from '../engine/situations'
+import { countryTag } from '../view/format'
+import {
+  activeWorld,
+  isDelegatedRun,
+  patchUi,
+  pendingOf,
+  readProjectDoc,
+  refreshStatus,
+  setWorld,
+} from './internal'
+import { statusText } from './prompt'
+import {
+  advanceGame,
+  auditOverreach,
+  resolveEvent,
+  startDelegated,
+  startSecretary,
+} from './council'
+
+// Full toolset per ADR 0001: misuse is caught by the prompt and audited
+// afterwards, not prevented by withholding tools.
+export const SECRETARY_TOOLS = [
+  'mcp__terminal-legend__v3_status',
+  'mcp__terminal-legend__v3_inspect',
+  'mcp__terminal-legend__v3_forecast',
+  'mcp__terminal-legend__v3_manual',
+  'mcp__terminal-legend__v3_advance',
+  'mcp__terminal-legend__v3_cheat',
+  'mcp__terminal-legend__v3_action',
+  'mcp__terminal-legend__v3_policy',
+  'mcp__terminal-legend__v3_diplomacy',
+  'mcp__terminal-legend__v3_situation',
+  'mcp__terminal-legend__v3_event',
+  'mcp__terminal-legend__v3_leader',
+  'mcp__terminal-legend__v3_save',
+] as const
+
+// ---------------------------------------------------------------- tool specs
+
+export const TOOL_SPECS: {
+  name: string
+  description: string
+  inputSchema: Record<string, unknown>
+}[] = [
+  {
+    name: 'v3_status',
+    description:
+      '终末传奇：读取当前世界状态（玩家国家、财政、人口、军力、科技、待决事件、战争；各国对比用 v3_inspect rankings）。在回答任何需要具体数字的问题前先调用它。',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'v3_inspect',
+    description:
+      '终末传奇：只读明细查询。section 取 economy（GDP 分解/物价/缺口）、market（商品市场供需与对外贸易/伙伴）、fiscal（收支/债务/税率）、labor（失业分解/工资）、trade（分商品进出口/伙伴）、routes（贸易路线：商品/起止/等级/运量/利差）、buildings（建筑类型配方/造价/工程量/建造点与逐建筑经营利润/存量）、construction（建造力/队列/租金）、military（军力/战争）、pops（人口阶级结构/识字/生活水平/激进忠诚）、diplomacy（关系/盟友/对手/禁运/贸易张力/局势）、tech（科技等级/点数/研究率分解）、modifiers（生效修正：来源/stat/栈/值/到期）、rankings（列强五维排名数据）、log（最近编年史，可用 kind/country/limit 过滤）、history（近 12 个月序列）。遇到“为什么变了”先用它，不要读存档或源码。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        section: {
+          type: 'string',
+          enum: [...INSPECT_SECTIONS],
+          description: '缺省 economy。',
+        },
+        kind: {
+          type: 'string',
+          description: '仅 log 分区：按日志类型过滤（economy/diplomacy/war/tech/politics/leader/event/system）。',
+        },
+        country: {
+          type: 'string',
+          description: '仅 log 分区：按国家 id 过滤（如 GBR）。',
+        },
+        limit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 100,
+          description: '仅 log 分区：返回的最近条数，缺省 20。',
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'v3_forecast',
+    description:
+      '终末传奇：预估下月现金流（收入、支出、净额、结算后国库、建造力分配与租金）。它是计划值，遇贸易/事件会偏移。',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'v3_manual',
+    description:
+      '终末传奇：返回 GM 机制手册（docs/gm-handbook.md）全文，供查阅规则口径，无需打开文件。只读，不读存档。',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'v3_advance',
+    description:
+      '终末传奇：批准并推进一个月（打开下一次御前会议）。months>1 启动后台托管并立即返回，遇待决事件、新的战争/战争结束、秘书越权即中断。会先让各国 AI 领袖做决策，再确定性模拟经济、人口、科技、外交与战争。仅玩家可调用；秘书调用会被审计。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        months: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 24,
+          description: '推进的月数，默认 1。',
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'v3_cheat',
+    description:
+      '终末传奇（天命）：修改玩家国家的金钱、科技点、建筑、关系、战争分数、日期，或触发事件、更换领袖、施加修正、立即完成国有建造队列。铁人模式下拒绝。action 取值：treasury（amount）、techPoints（amount）、building（building/count）、finishProjects（完成全部国有在建项目）、relations（country/amount）、warScore（country/amount）、date（year/month）、event（kind 可选）、leader（name/title/persona）、modifier（stat/stack/value/months/label）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: [
+            'treasury',
+            'techPoints',
+            'building',
+            'finishProjects',
+            'relations',
+            'warScore',
+            'date',
+            'event',
+            'leader',
+            'modifier',
+          ],
+        },
+        amount: { type: 'number' },
+        building: {
+          type: 'string',
+          enum: [
+            'farms',
+            'coalMines',
+            'ironMines',
+            'lumberMills',
+            'textileMills',
+            'furnitureWorks',
+            'distilleries',
+            'machineryWorks',
+            'steelMills',
+            'arsenals',
+            'luxuryWorks',
+            'schools',
+            'canals',
+            'telegraphs',
+            'forts',
+            'navalYards',
+            'railroads',
+            'ports',
+            'universities',
+            'barracks',
+            'offices',
+            'workshops',
+          ],
+        },
+        count: { type: 'integer', minimum: -20, maximum: 20 },
+        country: { type: 'string' },
+        year: { type: 'integer', minimum: 1800, maximum: 2200 },
+        month: { type: 'integer', minimum: 1, maximum: 12 },
+        kind: { type: 'string' },
+        name: { type: 'string' },
+        title: { type: 'string' },
+        persona: { type: 'string' },
+        stat: { type: 'string', description: 'modifier 时必填，例如 production / income / radicals。' },
+        stack: { type: 'string', enum: ['flat', 'percent', 'multiply'] },
+        value: { type: 'number' },
+        months: { type: 'integer', minimum: 0, maximum: 240 },
+        label: { type: 'string' },
+        id: { type: 'string' },
+      },
+      required: ['action'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'v3_action',
+    description:
+      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count）、cancel（取消国有项目，需 projectId）、tax（调整某一税基的税率，需 base（land=土地/profit=企业所得税/consumption=消费税/tariff=关税）与 rate；缺省 base 返回税菜单）、tariff（关税：rate 为进口税率，可选 exportRate 单独设出口税率；省略则进出口同率）、spending（支出，需 category/amount）、research（研究方向，需 tech）、conscript（征兵，需 amount）、law（法案，需 name）、route（贸易路线：op 取 open/raise/lower/close，需 good 与 partner）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: [
+            'build',
+            'cancel',
+            'tax',
+            'tariff',
+            'spending',
+            'research',
+            'conscript',
+            'law',
+            'route',
+          ],
+        },
+        projectId: { type: 'string', description: 'cancel 时必填，建造队列中的项目 id。' },
+        building: {
+          type: 'string',
+          enum: [
+            'farms',
+            'coalMines',
+            'ironMines',
+            'lumberMills',
+            'textileMills',
+            'furnitureWorks',
+            'distilleries',
+            'machineryWorks',
+            'steelMills',
+            'arsenals',
+            'luxuryWorks',
+            'schools',
+            'canals',
+            'telegraphs',
+            'forts',
+            'navalYards',
+            'railroads',
+            'ports',
+            'universities',
+            'barracks',
+            'offices',
+            'workshops',
+          ],
+          description: 'build 时必填。',
+        },
+        count: { type: 'integer', minimum: 1, maximum: 5 },
+        rate: { type: 'number', minimum: 0, maximum: 60, description: '进口关税税率（tariff 时）或税基税率（tax 时，0..60）。' },
+        base: {
+          type: 'string',
+          enum: ['land', 'profit', 'consumption', 'tariff'],
+          description: 'tax 时必填：税基（land=土地税 / profit=企业所得税 / consumption=消费税 / tariff=关税）。缺省则返回税菜单。',
+        },
+        exportRate: {
+          type: 'number',
+          minimum: 0,
+          maximum: 60,
+          description: '出口关税税率（可选；省略则与进口同率）。',
+        },
+        category: {
+          type: 'string',
+          enum: ['army', 'navy', 'bureaucracy', 'education', 'welfare', 'construction'],
+        },
+        amount: { type: 'number', minimum: 0, maximum: 50 },
+        tech: { type: 'string' },
+        op: {
+          type: 'string',
+          enum: ['open', 'raise', 'lower', 'close'],
+          description: 'route 时必填：开通 / 提升 / 降低 / 关闭航线。',
+        },
+        good: { type: 'string', enum: [...GOOD_IDS], description: 'route 时必填，可贸易商品。' },
+        partner: { type: 'string', description: 'route 时必填，伙伴国家 id（如 GBR）。' },
+        name: {
+          type: 'string',
+          enum: [
+            '教育改革',
+            '福利改革',
+            '自由贸易',
+            '保护关税',
+            '征兵制',
+            '宗教宽容',
+          ],
+        },
+      },
+      required: ['action'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'v3_policy',
+    description:
+      '终末传奇：提交一项政策提议。政策由若干效果条目组成，每条把某个数值入口加上 buff/debuff；引擎校验单位与数值后按叠算规则结算，并消耗权威（默认 5，最多 40）。效果条目字段：stat（修正对象）、stack（flat/percent/multiply，默认 flat）、value、months（可选，持续月数）、label（可选）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '政策名称，例如「重商主义」。' },
+        description: { type: 'string' },
+        authorityCost: { type: 'integer', minimum: 0, maximum: 40 },
+        effects: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 12,
+          items: {
+            type: 'object',
+            properties: {
+              stat: { type: 'string', enum: MODIFIER_STATS },
+              stack: { type: 'string', enum: ['flat', 'percent', 'multiply'] },
+              value: { type: 'number' },
+              months: { type: 'integer', minimum: 1, maximum: 240 },
+              label: { type: 'string' },
+            },
+            required: ['stat', 'value'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['name', 'effects'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'v3_diplomacy',
+    description:
+      '终末传奇：执行外交行动。move 取值：improve（改善关系）、insult（交恶）、alliance（结盟）、rival（设为对手）、gift（赠礼）、war（宣战）、peace（停战；本方获胜时可用 indemnityTotal/indemnityMonths 声明赔款总额与最长分期月数）、embargo（禁运，可选定商品与月数）、unembargo（解除禁运）、tension（就敏感商品施加贸易张力）。target 是国家代码，例如 GBR、RUS、QING。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        target: { type: 'string', description: '目标国家代码，如 GBR。' },
+        move: {
+          type: 'string',
+          enum: [
+            'improve',
+            'insult',
+            'alliance',
+            'rival',
+            'gift',
+            'war',
+            'peace',
+            'embargo',
+            'unembargo',
+            'tension',
+          ],
+        },
+        amount: {
+          type: 'number',
+          minimum: -10,
+          maximum: 30,
+          description: 'improve/gift 的幅度；tension 时也可用作关系张力（-10..10）。',
+        },
+        good: {
+          type: 'string',
+          enum: [...GOOD_IDS],
+          description: 'embargo/unembargo/tension 的商品；tension 仅限 opium/arms/grain。',
+        },
+        months: {
+          type: 'number',
+          minimum: 1,
+          maximum: 60,
+          description: 'embargo 的持续月数，缺省为永久。',
+        },
+        relationDelta: {
+          type: 'number',
+          minimum: -10,
+          maximum: 10,
+          description: 'tension 的关系张力（-10..10）。',
+        },
+        reason: { type: 'string', description: '宣战/禁运/张力的理由，可选。' },
+        goal: {
+          type: 'string',
+          enum: ['reparations', 'openMarket', 'sphere', 'humiliation'],
+          description: 'war 的战争目标，决定停战时的和约条款；缺省 reparations。',
+        },
+        indemnityTotal: {
+          type: 'number',
+          minimum: 0,
+          maximum: 100000,
+          description:
+            'peace 且本方获胜时的赔款总额（金）；缺省为败方 GDP 的 10%，上限为败方 GDP 的 2 倍。败方自行决定一次付清多少、余款分几期。',
+        },
+        indemnityMonths: {
+          type: 'number',
+          minimum: 1,
+          maximum: 240,
+          description: 'peace 时允许的最长分期月数；缺省 60（5 年）。',
+        },
+      },
+      required: ['target', 'move'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'v3_situation',
+    description:
+      '终末传奇：就当前开启的局势（如鸦片危机）提交立场。action=submit 需要 stance（crackdown 禁烟 / compromise 妥协 / war 开战 / aid 求援 / neutral 观望）与 narrative（一句叙事）；action=abstain 表示弃权观望。提案只作仲裁上下文，不直接落账。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['submit', 'abstain'] },
+        stance: { type: 'string', enum: [...SITUATION_STANCES] },
+        narrative: { type: 'string', description: '一句提案叙事，submit 时必填。' },
+      },
+      required: ['action'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'v3_event',
+    description:
+      '终末传奇：处理待决事件。省略 eventId 时列出所有待决事件及其选项；给出 eventId 与 optionId 时执行该选项并返回结果。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        eventId: { type: 'string' },
+        optionId: { type: 'string' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'v3_leader',
+    description:
+      '终末传奇：记录玩家与某国领袖的一次交流，并调整该领袖的情绪与两国关系；同时暂停该国 12 个回合的后台 AI 决策，交给叙事者扮演。country 为国家代码。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        country: { type: 'string' },
+        message: { type: 'string', description: '玩家对这位领袖说的话或达成的约定。' },
+        mood: { type: 'number', minimum: -30, maximum: 30, description: '情绪变化量。' },
+        relation: {
+          type: 'number',
+          minimum: -30,
+          maximum: 30,
+          description: '两国关系变化量。',
+        },
+      },
+      required: ['country', 'message'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'v3_save',
+    description: '终末传奇：保存当前游戏。可选 name 指定存档名。',
+    inputSchema: {
+      type: 'object',
+      properties: { name: { type: 'string' } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'v3_play',
+    description: '终末传奇：切换玩家扮演的国家。country 为国家代码，例如 FRA。',
+    inputSchema: {
+      type: 'object',
+      properties: { country: { type: 'string' } },
+      required: ['country'],
+      additionalProperties: false,
+    },
+  },
+]
+
+type Args = Record<string, unknown>
+
+// A plugin tool's result may be a string, an array, or undefined — not an
+// object. The model reads the string as the tool's output.
+const toolOk = (text: string) => ({ result: text })
+
+// `{ deny }` is the tool.call refusal: the model receives the text as an
+// errored result.
+const toolFail = (text: string) => ({ deny: text })
+
+// ---------------------------------------------------------------- tool.call handlers
+
+export const handleV3Status = async ($: EngineInterface) => {
+  try {
+    const current = await activeWorld($)
+    if (current === undefined) return toolFail('还没有进行中的游戏。请让玩家先运行 /v3 new。')
+    return toolOk(statusText(current.world))
+  } catch (error) {
+    return toolFail(`读取状态失败：${String(error)}`)
+  }
+}
+
+export const handleV3Inspect = async ($: EngineInterface, e: any) => {
+  try {
+    const current = await activeWorld($)
+    if (current === undefined) return toolFail('还没有进行中的游戏。')
+    const args = e as unknown as Args
+    const section =
+      typeof args.section === 'string' ? args.section : 'economy'
+    const options: InspectOptions = {}
+    if (typeof args.kind === 'string') options.kind = args.kind
+    if (typeof args.country === 'string') options.country = args.country.toUpperCase()
+    if (typeof args.limit === 'number') options.limit = args.limit
+    return toolOk(inspectWorld(current.world, section, options))
+  } catch (error) {
+    return toolFail(`明细查询失败：${String(error)}`)
+  }
+}
+
+export const handleV3Manual = async ($: EngineInterface) => {
+  try {
+    const text = await readProjectDoc($, 'docs/gm-handbook.md')
+    return toolOk(text ?? manualFallback())
+  } catch (error) {
+    return toolFail(`读取手册失败：${String(error)}`)
+  }
+}
+
+export const handleV3Forecast = async ($: EngineInterface) => {
+  try {
+    const current = await activeWorld($)
+    if (current === undefined) return toolFail('还没有进行中的游戏。')
+    return toolOk(forecastWorld(current.world))
+  } catch (error) {
+    return toolFail(`预估失败：${String(error)}`)
+  }
+}
+
+export const handleV3Advance = async ($: EngineInterface, e: any) => {
+  try {
+    if (e.agentId !== undefined && (await auditOverreach($, '推进时间'))) {
+      return toolFail('秘书连续越权，推进时间的请求已被拒绝。')
+    }
+    const args = e as unknown as Args
+    const months = clamp(Math.floor(Number(args.months ?? 1)), 1, 24)
+    if (isDelegatedRun()) return toolFail('托管进行中，请等它结束。')
+    if (months <= 1) return toolOk(await advanceGame($, 1, true))
+    return toolOk(await startDelegated($, months))
+  } catch (error) {
+    return toolFail(`推进失败：${String(error)}`)
+  }
+}
+
+export const handleV3Cheat = async ($: EngineInterface, e: any) => {
+  try {
+    if (e.agentId !== undefined && (await auditOverreach($, '使用天命'))) {
+      return toolFail('秘书连续越权，天命的请求已被拒绝。')
+    }
+    // Read after the audit: the audit writes the incremented counter.
+    const current = await activeWorld($)
+    if (current === undefined) return toolFail('还没有进行中的游戏。')
+    const args = e as unknown as Args
+    const params: CheatParams = { action: String(args.action ?? '') }
+    for (const key of [
+      'building',
+      'count',
+      'country',
+      'amount',
+      'year',
+      'month',
+      'kind',
+      'name',
+      'title',
+      'persona',
+      'stat',
+      'stack',
+      'value',
+      'months',
+      'label',
+      'id',
+    ]) {
+      const value = args[key]
+      if (typeof value === 'string' || typeof value === 'number') params[key] = value
+    }
+    const world = clone(current.world)
+    const result = applyCheat(world, params)
+    if (!result.ok) return toolFail(result.text)
+    await setWorld($, world)
+    await saveGame($, world).catch(() => undefined)
+    await refreshStatus($)
+    await patchUi($, { notice: result.text })
+    return toolOk(result.text)
+  } catch (error) {
+    return toolFail(`天命失败：${String(error)}`)
+  }
+}
+
+export const handleV3Action = async ($: EngineInterface, e: any) => {
+  try {
+    const current = await activeWorld($)
+    if (current === undefined) return toolFail('还没有进行中的游戏。')
+    const args = e as unknown as Args
+    const world = clone(current.world)
+    const params: Record<string, string | number | boolean | undefined> = {}
+    for (const key of [
+      'building',
+      'count',
+      'rate',
+      'base',
+      'exportRate',
+      'category',
+      'amount',
+      'tech',
+      'name',
+      'projectId',
+      'op',
+      'good',
+      'partner',
+    ]) {
+      const value = args[key]
+      if (
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
+      ) {
+        params[key] = value
+      }
+    }
+    const result = applyDecision(
+      world,
+      {
+        countryId: world.playerId,
+        action: String(args.action ?? ''),
+        params,
+      },
+      makeRngForWorld(world),
+    )
+    if (!result.ok) return toolFail(result.text)
+    await setWorld($, world)
+    await saveGame($, world).catch(() => undefined)
+    await refreshStatus($)
+    await patchUi($, { notice: result.text })
+    return toolOk(result.text)
+  } catch (error) {
+    return toolFail(`行动失败：${String(error)}`)
+  }
+}
+
+export const handleV3Policy = async ($: EngineInterface, e: any) => {
+  try {
+    const current = await activeWorld($)
+    if (current === undefined) return toolFail('还没有进行中的游戏。')
+    const args = e as unknown as Args
+    const rawEffects = (args as { effects?: unknown }).effects
+    const proposal: PolicyProposal = {
+      name: String(args.name ?? ''),
+      description: typeof args.description === 'string' ? args.description : undefined,
+      authorityCost:
+        typeof args.authorityCost === 'number' ? args.authorityCost : undefined,
+      effects: Array.isArray(rawEffects)
+        ? (rawEffects as PolicyProposal['effects'])
+        : [],
+    }
+    const world = clone(current.world)
+    const result = applyPolicy(world, world.playerId, proposal)
+    if (!result.ok) return toolFail(result.text)
+    await setWorld($, world)
+    await saveGame($, world).catch(() => undefined)
+    await refreshStatus($)
+    await patchUi($, { notice: result.text })
+    return toolOk(result.text)
+  } catch (error) {
+    return toolFail(`政策失败：${String(error)}`)
+  }
+}
+
+export const handleV3Diplomacy = async ($: EngineInterface, e: any) => {
+  try {
+    const args = e as unknown as Args
+    const move = String(args.move ?? '')
+    if (e.agentId !== undefined && (move === 'war' || move === 'peace')) {
+      const blocked = await auditOverreach($, move === 'war' ? '宣战' : '停战')
+      if (blocked) return toolFail('秘书连续越权，宣战/停战的请求已被拒绝。')
+    }
+    // Read after the audit: the audit writes the incremented counter.
+    const current = await activeWorld($)
+    if (current === undefined) return toolFail('还没有进行中的游戏。')
+    const world = clone(current.world)
+    const params: Record<string, string | number | boolean | undefined> = {
+      target: String(args.target ?? '').toUpperCase(),
+      move,
+    }
+    if (typeof args.amount === 'number') params.amount = args.amount
+    if (typeof args.good === 'string') params.good = args.good
+    if (typeof args.months === 'number') params.months = args.months
+    if (typeof args.relationDelta === 'number') params.relationDelta = args.relationDelta
+    if (typeof args.reason === 'string') params.reason = args.reason
+    if (typeof args.goal === 'string') params.goal = args.goal
+    if (typeof args.indemnityTotal === 'number') {
+      params.indemnityTotal = args.indemnityTotal
+    }
+    if (typeof args.indemnityMonths === 'number') {
+      params.indemnityMonths = args.indemnityMonths
+    }
+    const result = applyDecision(
+      world,
+      { countryId: world.playerId, action: 'diplomacy', params },
+      makeRngForWorld(world),
+    )
+    if (!result.ok) return toolFail(result.text)
+    await setWorld($, world)
+    await saveGame($, world).catch(() => undefined)
+    await refreshStatus($)
+    await patchUi($, { notice: result.text })
+    return toolOk(result.text)
+  } catch (error) {
+    return toolFail(`外交行动失败：${String(error)}`)
+  }
+}
+
+export const handleV3Situation = async ($: EngineInterface, e: any) => {
+  try {
+    const current = await activeWorld($)
+    if (current === undefined) return toolFail('还没有进行中的游戏。')
+    const world = clone(current.world)
+    // The secretary may propose only under diplomacy authorisation (plan §4.2);
+    // war and peace stay the player's, which the diplomacy handler audits.
+    if (e.agentId !== undefined && !world.secretary.delegation.diplomacy) {
+      return toolFail('外交未授权，秘书不能提交局势提案。')
+    }
+    const args = e as unknown as Args
+    const action = String(args.action ?? 'submit')
+    const stance = action === 'abstain' ? 'neutral' : String(args.stance ?? '')
+    const narrative = action === 'abstain' ? '弃权观望' : String(args.narrative ?? '')
+    const result = recordSituationProposal(world, world.playerId, stance, narrative)
+    if (!result.ok) return toolFail(result.text)
+    await setWorld($, world)
+    await saveGame($, world).catch(() => undefined)
+    await refreshStatus($)
+    await patchUi($, { notice: result.text })
+    return toolOk(result.text)
+  } catch (error) {
+    return toolFail(`局势提案失败：${String(error)}`)
+  }
+}
+
+export const handleV3Event = async ($: EngineInterface, e: any) => {
+  try {
+    const current = await activeWorld($)
+    if (current === undefined) return toolFail('还没有进行中的游戏。')
+    const args = e as unknown as Args
+    const eventId = typeof args.eventId === 'string' ? args.eventId : ''
+    if (eventId === '') {
+      const pending = pendingOf(current.world)
+      if (pending.length === 0) return toolOk('没有待处理事件。')
+      return toolOk(
+        pending
+          .map(
+            event =>
+              `[${event.id}] ${event.title}：${event.text}\n选项：${event.options.map(option => `${option.id}=${option.label}`).join(' / ')}`,
+          )
+          .join('\n\n'),
+      )
+    }
+    const optionId = typeof args.optionId === 'string' ? args.optionId : ''
+    if (optionId === '') return toolFail('需要 optionId 才能处理事件。')
+    const text = await resolveEvent($, eventId, optionId)
+    return toolOk(text)
+  } catch (error) {
+    return toolFail(`事件处理失败：${String(error)}`)
+  }
+}
+
+export const handleV3Leader = async ($: EngineInterface, e: any) => {
+  try {
+    const current = await activeWorld($)
+    if (current === undefined) return toolFail('还没有进行中的游戏。')
+    const args = e as unknown as Args
+    const world = clone(current.world)
+    const countryId = String(args.country ?? '').toUpperCase()
+    const country = world.countries[countryId]
+    if (country === undefined) return toolFail(`未知国家 ${countryId}`)
+    const message = String(args.message ?? '').slice(0, 400)
+    const player = world.countries[world.playerId]
+    const speaker = player === undefined ? '玩家' : countryTag(player)
+    country.leader.memory.push(`${speaker}：${message}`)
+    if (country.leader.memory.length > 8) country.leader.memory.shift()
+    if (typeof args.mood === 'number') {
+      country.leader.mood = clamp(country.leader.mood + args.mood, -100, 100)
+    }
+    if (typeof args.relation === 'number' && player !== undefined) {
+      const forward = country.diplo.relations[player.id] ?? 0
+      country.diplo.relations[player.id] = clamp(forward + args.relation, -100, 100)
+      const back = player.diplo.relations[country.id] ?? 0
+      player.diplo.relations[country.id] = clamp(back + args.relation * 0.8, -100, 100)
+    }
+    world.ai.suspended[countryId] = world.tick + 12
+    await setWorld($, world)
+    await saveGame($, world).catch(() => undefined)
+    await refreshStatus($)
+    const sheet = [
+      `${country.flag}${country.name} · ${country.leader.title}${country.leader.name}`,
+      `人格：${country.leader.persona}`,
+      `特质：${country.leader.traits.join('、')}`,
+      `议程：${country.leader.agenda}`,
+      `情绪：${Math.round(country.leader.mood)}`,
+      `记忆：${country.leader.memory.slice(-4).join('；')}`,
+    ]
+    return toolOk(sheet.join('\n'))
+  } catch (error) {
+    return toolFail(`领袖交流失败：${String(error)}`)
+  }
+}
+
+export const handleV3Save = async ($: EngineInterface, e: any) => {
+  try {
+    const current = await activeWorld($)
+    if (current === undefined) return toolFail('还没有进行中的游戏。')
+    const args = e as unknown as Args
+    const name = typeof args.name === 'string' ? args.name : undefined
+    if (current.world.ironman && name !== undefined) {
+      return toolFail('铁人模式只保留自动存档，不能命名存档。')
+    }
+    const path = await saveGame($, current.world, name)
+    return toolOk(`已保存到 ${path}`)
+  } catch (error) {
+    return toolFail(`保存失败：${String(error)}`)
+  }
+}
+
+export const handleV3Play = async ($: EngineInterface, e: any) => {
+  try {
+    if (isDelegatedRun()) return toolFail('托管进行中，请等它结束再切换国家。')
+    const current = await activeWorld($)
+    if (current === undefined) return toolFail('还没有进行中的游戏。')
+    const args = e as unknown as Args
+    const target = String(args.country ?? '').toUpperCase()
+    const world = clone(current.world)
+    const result = applyDecision(
+      world,
+      { countryId: world.playerId, action: 'play', params: { country: target } },
+      makeRngForWorld(world),
+    )
+    if (!result.ok) return toolFail(result.text)
+    await setWorld($, world)
+    await saveGame($, world).catch(() => undefined)
+    await refreshStatus($)
+    return toolOk(result.text)
+  } catch (error) {
+    return toolFail(`切换国家失败：${String(error)}`)
+  }
+}
+
+function manualFallback(): string {
+  return [
+    '（未找到 docs/gm-handbook.md；以下为工具与分区速查）',
+    '工具：v3_status / v3_inspect / v3_forecast / v3_manual / v3_advance / v3_action / v3_policy / v3_diplomacy / v3_situation / v3_event / v3_leader / v3_play / v3_save / v3_cheat',
+    `v3_inspect 分区（section）：${INSPECT_SECTIONS.join(' / ')}`,
+    '规则：查询状态只走 MCP 工具，绝不读取 .terminal-legend/save.json。',
+  ].join('\n')
+}
