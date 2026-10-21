@@ -6,7 +6,7 @@ import type {
   LogEntry,
   WorldState,
 } from '../types'
-import { BUILDINGS, BUILDING_OUTPUT, GOODS, resourceMultiplier } from './data'
+import { BUILDINGS, BUILDING_OUTPUT, GOODS, INDUSTRIAL_BUILDING_IDS, resourceMultiplier } from './data'
 import { nationalDebt } from './fiscal'
 import { totalsFor } from './modifiers'
 import {
@@ -43,7 +43,10 @@ export function investmentScore(
   let potentialSum = 0
   for (const [id, quantity] of Object.entries(outputs) as [GoodId, number][]) {
     const resource = resourceMultiplier(country.econ.resources, id)
-    const potential = building === 'factories' ? resource * industrial : resource
+    const potential =
+      (INDUSTRIAL_BUILDING_IDS as BuildingId[]).includes(building)
+        ? resource * industrial
+        : resource
     const weight = quantity * GOODS[id].basePrice
     const ratio = clamp(demand[id] / Math.max(0.01, production[id]), 0.3, 2)
     weightSum += weight

@@ -45,18 +45,18 @@ describe('terminal-legend engine', () => {
     expect(prussia).toBeDefined()
     if (prussia === undefined) return
     const beforeTreasury = prussia.econ.treasury
-    const beforeFactories = prussia.econ.buildings.factories
+    const beforeTextiles = prussia.econ.buildings.textileMills
     const result = applyDecision(
       world,
       {
         countryId: 'PRU',
         action: 'build',
-        params: { building: 'factories', count: 1 },
+        params: { building: 'textileMills', count: 1 },
       },
       makeRngForWorld(world),
     )
     expect(result.ok).toBe(true)
-    expect(prussia.econ.buildings.factories).toBe(beforeFactories)
+    expect(prussia.econ.buildings.textileMills).toBe(beforeTextiles)
     expect(prussia.econ.treasury).toBe(beforeTreasury)
     expect(prussia.econ.constructionQueue.length).toBe(1)
   })

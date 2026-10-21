@@ -1,6 +1,6 @@
 # 建筑扩张与统一基础设施（Building Expansion + Infrastructure）
 
-- Status: **F1、F2 已实现**（World v11：F1 `iron`→铁矿石、新增 `steel`，详见 §7.2；F2 `mines`→`coalMines`/`ironMines`/`lumberMills`，详见 §7.3）；F3–F7 待做。其余章节仍为提案（本文件描述，F2+ 再改引擎/测试）
+- Status: **F1、F2、F3 已实现**（World v11：F1 `iron`→铁矿石、新增 `steel`，详见 §7.2；F2 `mines`→`coalMines`/`ironMines`/`lumberMills`，详见 §7.3；F3 `factories`→七个单产工业建筑，详见 §7.4）；F4–F7 待做。其余章节仍为提案（本文件描述，F2+ 再改引擎/测试）
 - Depends on: ADR 0026（本计划对应的决策）、ADR 0021（建筑配方单一真源）、ADR 0022（利用率与利润投资）、ADR 0010/0012/0013（营造所与建造能力）、ADR 0005（不做存档兼容）
 - Scope: 把建筑名册从 9 类扩到 **22 类**（拆矿场、拆工厂、加 5 类）；引入 `steel` 商品与「铁矿石」语义；把「交通基础设施」升级为**统一基础设施**（供给/需求/线性 debuff/维护）；给建筑加前瞻 `unlock` 字段。世界版本升到 **v11**。
 - 来源：用户口述。核心诉求：「建筑盈利能力要读得清 → 单产/少产建筑」；「基础设施是一个统一的东西，铁路/港口/运河/电报都产它，所有建筑都要用它」；「商品按需加，先维护一个最小可用集」。
@@ -225,7 +225,7 @@ type BuildingDef = {
 | --- | --- | --- | --- |
 | **F1 商品：加 `steel` + `iron`→铁矿石** ✅ | `GOODS`（+steel，iron 改名）、`SUBSISTENCE`/`INCOME_ELASTICITY` 补键、`GOVERNMENT_DEMAND.construction` iron→steel、`TRADABLE_GOODS` 加 steel；`GoodId` 扩项 | `Record<GoodId,number>` 漏键会编译失败；改基价会挪动物价中心 | `GOODS.steel` 存在且 `iron.name='铁矿石'`；`SUBSISTENCE/INCOME_ELASTICITY` 含 `steel:0`；`zeroGoods`/`basePrices` 覆盖 steel；`steel` 可贸易、非消费品 |
 | **F2 拆矿场** ✅ | `mines` → `coalMines`/`ironMines`/`lumberMills`（名册/配方/时间/建造点/投资/输出/种子） | 漏改任一 `Record<BuildingId,…>` 或派生消费点即编译失败；种子座数分配改变产出总量 | 每个新矿只产 1 货；`steelMills` 吃 `iron`+`coal`；全仓无 `mines` 残留；种子座数总和守恒或按资源禀赋可解释 |
-| **F3 拆工厂** | `factories` → 7 个工业建筑；机械/军械/铁路/家具改吃 `steel` | 链条断裂（无 `steel` 来源）会让重工业停摆；`deriveUnemployment`/`boom` 事件读 `factories` 需改 | 每个工业建筑 output 键数 ≤2；`steelMills`/`machineryWorks`/`arsenals` 配方正确；`buildingProfits` 逐类可算；无 `factories` 残留 |
+| **F3 拆工厂** ✅ | `factories` → 7 个工业建筑；机械/军械/铁路/家具改吃 `steel` | 链条断裂（无 `steel` 来源）会让重工业停摆；`deriveUnemployment`/`boom` 事件读 `factories` 需改 | 每个工业建筑 output 键数 ≤2；`steelMills`/`machineryWorks`/`arsenals` 配方正确；`buildingProfits` 逐类可算；无 `factories` 残留 |
 | **F4 加 5 类建筑** | `schools`/`canals`/`telegraphs`/`forts`/`navalYards`（名册/配方/时间/建造点/投资/输出/种子） | 每个 `Record<BuildingId,…>` 都要补 5 键；运河/电报无产出需特判为成本中心 | 5 个 id 出现在全部 `Record<BuildingId,…>` 表；`canals`/`telegraphs` output 空且供给 >0；`completeBuilding` 对新增的可建筑无遗漏（或明确无副作用） |
 | **F5 统一基础设施 + debuff** | `INFRA_SUPPLY`/`infrastructureNeed`；`ratio`/乘数；`computeProduction` 施加；`computeDemand` 加维护需求；月末写 `基础设施水平`；旧 `gates.infrastructure` 与旧曲线退场 | 改变了全部建筑的产出口径（行为变更）；维护需求进市场会推高 wood/coal/services 需求 | `ratio=1` → 乘数 1（无 debuff）；`ratio=0.5` → 乘数 0.5；`ratio≥1` 不奖励；维护需求按供给/水平正确计入 demand；`C+I+G+NX===GDP` 不变；60 月确定性 |
 | **F6 `unlock` + build 校验** | `BuildingDef.unlock/infrastructureNeed`；`build` 动作加 techLevel 校验 | 校验写反会误挡建筑；字段位置写错会让 TS 契约不一致 | 开局所有建筑可建；合成一个 `unlock.techLevel > 当前` 的建筑被拒；当前缺省下 `build` 行为与接入前逐位相同 |
@@ -294,6 +294,55 @@ F2 把打包的 `mines` 拆成三个单产采掘建筑，**World 版本仍为 v1
 - **不变量**：`tests/economy-recipe-calibration.test.ts` 全部 9 项 gate 绿；`C+I+G+NX===GDP`、金币守恒、
   60/120 月确定性、工资分摊恒等式均绿（344 pass / 0 fail）。新增 `tests/extraction-split.test.ts` 覆盖三矿
   单产配方、`mines` 无残留、种子座数守恒与三货双侧性。
+
+### 7.4 F3 已落地的安排（World v11，名册不变）
+
+F3 把打包的 `factories` 拆成七个单产/少产工业建筑，**World 版本仍为 v11**。实际落地：
+
+- **七个建筑（每座/月，labor = 万人）**：
+  - `textileMills` 纺织厂：产出 `fabric 1.45 + clothes 0.68`；投入 `grain 1.0、coal 0.18、wood 0.1、machinery 0.18`；labor 0.9。
+  - `furnitureWorks` 家具厂：产出 `furniture 1.54`；投入 `wood 0.1、coal 0.18、fabric 1.14、steel 0.3、machinery 0.18`；labor 0.7。
+  - `distilleries` 酿酒厂：产出 `liquor 1.9`；投入 `grain 1.0、coal 0.18、wood 0.1、machinery 0.18`；labor 0.6。
+  - `machineryWorks` 机械厂：产出 `machinery 0.82`；投入 `steel 0.5、coal 0.18、wood 0.1、machinery 0.18`；labor 1.0。
+  - `steelMills` 钢铁厂：产出 `steel 4.0`；投入 `iron(铁矿石) 3.5、coal 0.5、machinery 0.18`；labor 1.0。
+  - `arsenals` 兵工厂：产出 `arms 0.9`；投入 `steel 0.5、machinery 0.3、coal 0.18、iron 0.3`；labor 0.9。
+  - `luxuryWorks` 奢侈品厂：产出 `luxury 0.49`；投入 `fabric 1.14、coal 0.18、wood 0.1、machinery 0.18`；labor 0.8。
+- **门控**：七个全部 `{tech, industrial}`，共用 `outputModifier: 'factoryOutput'`；旧工厂的
+  **liquor 仅 `industrial`** 覆盖被原样保留在 `distilleries` 上（`outputGates.liquor`）。
+- **输出守恒（为何系数不是 §3.1 的值）**：沿用 F2 的守恒思路——每个建筑某货的产出系数 =
+  **旧 `factories` 该货系数 ÷ 该建筑的旧产出价值占比**（value share）。价值占比按旧工厂产出
+  向量与基准价算：纺织 41.4%、机械 21.9%、家具 10.4%、军械 7.8%、酿酒 7.4%、奢侈 7.1%、钢铁 4.0%。
+  这样「按价值占比拆座数 × 系数 = 旧产出」逐货守恒，全国工业供给与拆分前一致。
+- **投入守恒（防止拆分断链）**：新建筑的投入合计**复现旧工厂的每厂消耗篮子**——粮食给纺织/酿酒、
+  铁矿石给炼钢、布料给家具/奢侈，而煤/木材/**机械（工业周转资本）**按座给到七个建筑。
+  于是**聚合投入价值守恒**，聚合毛利回到旧工厂的 ~16% 带内（参考点实测 7 大国产量加权 **16.0%**）。
+- **`COUNTRY_SEEDS` 拆分规则**：每国旧 `factories` 座数 N 按旧**产出价值占比**拆到七个建筑
+  （四舍五入，余数给纺织厂）。十国总和守恒：旧 `factories` 合计 **516**，新七类合计亦 **516**。
+- **造价/工期/建造点**：`textileMills` 4/4/2、`furnitureWorks` 3.5/3/1.5、`distilleries` 3.5/3/1.5、
+  `machineryWorks` 5/5/2.5、`steelMills` 5/5/2.5、`arsenals` 4.5/4/2、`luxuryWorks` 5/4/2（§3.2 提案值）。
+- **`INVESTMENT_DEMAND`**（F1 后一律 `steel`、无 `iron` 键）：纺织 `{steel 0.1, machinery 0.1, wood 0.1}`、
+  家具 `{wood 0.2, steel 0.08, machinery 0.05}`、酿酒 `{steel 0.1, machinery 0.05, wood 0.1}`、
+  机械 `{steel 0.2, machinery 0.1}`、钢铁 `{steel 0.15, machinery 0.1}`、军械 `{steel 0.2, machinery 0.1}`、
+  奢侈 `{steel 0.1, machinery 0.1, fabric 0.05}`。
+- **`BUILDING_OUTPUT`**（私人投资短缺信号）：按旧工厂七货权重拆到对应建筑。
+- **`factories` 引用全部改线**：`BuildingId`、`BUILDING_RECIPES`、`BUILDINGS`、`BUILDING_TIME`、
+  `INVESTMENT_DEMAND`、`BUILDING_OUTPUT`、`CAPACITY_COST`、`BUILDING_COST_MULTIPLIER/ADDEND`、
+  `COUNTRY_SEEDS`、`randomDecision` 的 build 候选、`engine/ai.ts` 提示词与国别行、`engine/inspect.ts`
+  的就业基础/建筑提示、`hooks/register.tsx` 的两个建筑 enum。派生消费点 `deriveUnemployment`、
+  `country.ts` 的城市化/工匠转移、`investment.ts` 的工业禀赋乘子改用 `industrialBuildingCount`
+  （= 七个工业建筑之和，座数守恒使其量级与旧 `factories` 一致）。
+- **`boom` 事件与 `工业起飞` 阈值**：`factories >= 20` / `>= 100` 改为**工业建筑总数** `>= 20` / `>= 100`
+  （座数守恒故行为等价）；配置条件 `ConditionStat` 的 `'factories'` 更名 **`'industry'`**
+  （`engine/scale.ts`、`engine/config/blocks/thresholds.ts`）。
+- **世界供给核对**（种子 9100）：`fabric`/`machinery`/`steel`/`iron` 与粮/煤/木在所有 12 月窗口**双侧性达标**；
+  参考点（第 24 月）7 大国产量加权聚合工业毛利 **16.0%**（GBR 6.5%、FRA 11.6%、PRU 11.2%），
+  无商品钉价、每个主要国至少一类工业盈利。
+- **不变量**：`tests/economy-recipe-calibration.test.ts` gate 全绿（边际带、双侧性、无钉价、
+  `C+I+G+NX===GDP`、工资分摊恒等式、60/120 月确定性）；新增 `tests/industrial-split.test.ts`
+  覆盖七建筑配方（output 键 ≤2、钢铁/机械/军械链条、纺织两产）、`factories` 无残留、种子座数守恒与
+  工业货双侧性（351 pass / 0 fail）。
+- **可调数字（F7 统一校准）**：七建筑的 output/input 系数、`COUNTRY_SEEDS` 的国别占比、`GOODS` 基准价。
+  参考点仍为 plan 0008 §5 的「七大国产量加权聚合」。
 
 ## 8. 验收
 

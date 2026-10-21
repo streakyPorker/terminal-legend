@@ -23,12 +23,12 @@ describe('utilization feedback (ADR 0022 B3)', () => {
     expect(gbr).toBeDefined()
     if (gbr === undefined) return
 
-    // Before B5 the seed factories were themselves unprofitable, so the idle
-    // signal was read straight off the seed. B5 made factories profitable, so
+    // Before B5 the seed industry was itself unprofitable, so the idle
+    // signal was read straight off the seed. B5 made industry profitable, so
     // drive a sustained loss the way the market would (dear inputs, cheap
     // output) and re-pin it each month: `computeEconomy` smooths prices back
     // toward base, so a one-off crash would recover on its own.
-    const crashFactory = (): void => {
+    const crashIndustry = (): void => {
       for (const good of ['fabric', 'clothes', 'liquor', 'furniture', 'machinery', 'arms', 'luxury', 'steel'] as const) {
         gbr.econ.prices[good] = GOODS[good].basePrice * 0.25
       }
@@ -36,28 +36,28 @@ describe('utilization feedback (ADR 0022 B3)', () => {
         gbr.econ.prices[good] = GOODS[good].basePrice * 4
       }
     }
-    crashFactory()
+    crashIndustry()
     advance(world, 1, [], makeRngForWorld(world))
-    const first = gbr.econ.buildingProfits.factories.utilization
+    const first = gbr.econ.buildingProfits.textileMills.utilization
     // A loss-making type leaves full capacity and cannot fall below the floor.
     expect(first).toBeLessThan(1)
     expect(first).toBeGreaterThanOrEqual(UTIL_IDLE_FLOOR)
 
     for (let index = 0; index < 11; index += 1) {
-      crashFactory()
+      crashIndustry()
       advance(world, 1, [], makeRngForWorld(world))
     }
-    const later = gbr.econ.buildingProfits.factories.utilization
+    const later = gbr.econ.buildingProfits.textileMills.utilization
     expect(later).toBeLessThan(first)
     expect(later).toBeGreaterThanOrEqual(UTIL_IDLE_FLOOR)
 
     // Output carries last month's stored rate: production at the idled rate is
-    // below production at full capacity, and fabric comes only from factories.
+    // below production at full capacity, and fabric comes only from textile mills.
     const idled = inspectEconomy(gbr).production.fabric
-    const saved = gbr.econ.buildingProfits.factories.utilization
-    gbr.econ.buildingProfits.factories.utilization = 1
+    const saved = gbr.econ.buildingProfits.textileMills.utilization
+    gbr.econ.buildingProfits.textileMills.utilization = 1
     const full = inspectEconomy(gbr).production.fabric
-    gbr.econ.buildingProfits.factories.utilization = saved
+    gbr.econ.buildingProfits.textileMills.utilization = saved
     expect(idled).toBeLessThan(full * 0.75)
   })
 
@@ -67,9 +67,9 @@ describe('utilization feedback (ADR 0022 B3)', () => {
     expect(gbr).toBeDefined()
     if (gbr === undefined) return
 
-    // Start factories pinned at the idle floor, then make them clearly
+    // Start textile mills pinned at the idle floor, then make them clearly
     // profitable (dear outputs, cheap inputs) and re-run the settlement.
-    gbr.econ.buildingProfits.factories.utilization = UTIL_IDLE_FLOOR
+    gbr.econ.buildingProfits.textileMills.utilization = UTIL_IDLE_FLOOR
     const pinPrices = (): void => {
       for (const good of ['fabric', 'clothes', 'liquor', 'furniture', 'machinery', 'arms', 'luxury', 'steel'] as const) {
         gbr.econ.prices[good] = GOODS[good].basePrice * 4
@@ -82,10 +82,10 @@ describe('utilization feedback (ADR 0022 B3)', () => {
     for (let index = 0; index < 10; index += 1) {
       pinPrices()
       const snap = computeEconomy(gbr)
-      expect(snap.buildingProfits.factories.profitPerBuilding).toBeGreaterThan(0)
+      expect(snap.buildingProfits.textileMills.profitPerBuilding).toBeGreaterThan(0)
       // Adopt the snapshot so the next pass reads the new rate (one-month lag).
       gbr.econ.buildingProfits = snap.buildingProfits
-      rates.push(snap.buildingProfits.factories.utilization)
+      rates.push(snap.buildingProfits.textileMills.utilization)
     }
     const last = rates[rates.length - 1] ?? 0
     expect(last).toBeGreaterThan(rates[0] ?? 0)
@@ -144,10 +144,10 @@ describe('utilization feedback (ADR 0022 B3)', () => {
     expect(controlGbr).toBeDefined()
     if (lossGbr === undefined || controlGbr === undefined) return
 
-    const start = controlGbr.econ.buildings.factories
-    // B5's factories carry a smaller material bill than the pre-B5 row, so the
+    const start = controlGbr.econ.buildings.textileMills
+    // B5's industry carries a smaller material bill than the pre-B5 row, so the
     // crash must be a little deeper for the loss to reach the deep-shrink path.
-    const crashFactory = (country: typeof lossGbr): void => {
+    const crashIndustry = (country: typeof lossGbr): void => {
       for (const good of ['fabric', 'clothes', 'liquor', 'furniture', 'machinery', 'arms', 'luxury', 'steel'] as const) {
         country.econ.prices[good] = GOODS[good].basePrice * 0.2
       }
@@ -155,22 +155,22 @@ describe('utilization feedback (ADR 0022 B3)', () => {
         country.econ.prices[good] = GOODS[good].basePrice * 5
       }
     }
-    crashFactory(lossGbr)
-    expect(computeEconomy(lossGbr).buildingProfits.factories.profitPerBuilding).toBeLessThan(0)
+    crashIndustry(lossGbr)
+    expect(computeEconomy(lossGbr).buildingProfits.textileMills.profitPerBuilding).toBeLessThan(0)
 
     advance(loss, 1, [], makeRngForWorld(loss))
     advance(control, 1, [], makeRngForWorld(control))
     // The deep loss scraps more than plain wear and tear would.
-    expect(lossGbr.econ.buildings.factories).toBeLessThan(controlGbr.econ.buildings.factories)
-    expect(lossGbr.econ.buildings.factories).toBeLessThan(start * 0.99)
+    expect(lossGbr.econ.buildings.textileMills).toBeLessThan(controlGbr.econ.buildings.textileMills)
+    expect(lossGbr.econ.buildings.textileMills).toBeLessThan(start * 0.99)
 
     // Even sustained deep losses never drive the count below zero.
-    lossGbr.econ.buildings.factories = 0.01
+    lossGbr.econ.buildings.textileMills = 0.01
     for (let month = 0; month < 24; month += 1) {
-      crashFactory(lossGbr)
+      crashIndustry(lossGbr)
       advance(loss, 1, [], makeRngForWorld(loss))
-      expect(Number.isFinite(lossGbr.econ.buildings.factories)).toBe(true)
-      expect(lossGbr.econ.buildings.factories).toBeGreaterThanOrEqual(0)
+      expect(Number.isFinite(lossGbr.econ.buildings.textileMills)).toBe(true)
+      expect(lossGbr.econ.buildings.textileMills).toBeGreaterThanOrEqual(0)
     }
   })
 

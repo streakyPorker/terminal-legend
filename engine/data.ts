@@ -86,9 +86,9 @@ export type WageAllocationBasis = 'labor' | 'valueAdded' | 'capitalPlusLabor'
 /**
  * Wage-allocation rule for `buildingProfits` (plan 0008 B5). `'labor'`
  * reproduces the pre-B5 baseline exactly; B5 selected `'valueAdded'` because
- * under `'labor'` the industrial core's factories cannot be made profitable
+ * under `'labor'` the industrial core's industry cannot be made profitable
  * without breaking the 20% aggregate ceiling: with `'labor'`, the calibrated
- * recipe leaves GBR at ~4% factory margin at 20.7% aggregate, and any recipe
+ * recipe leaves GBR at ~4% industrial margin at 20.7% aggregate, and any recipe
  * that lifts GBR to 5% pushes the aggregate well past 20%. Charging wages in
  * proportion to value added (wages track productivity) lifts the industrial core
  * and pulls the aggregate to ~16%. `weights` multiplies the chosen basis weight
@@ -226,7 +226,15 @@ export const INVESTMENT_DEMAND: Record<BuildingId, Partial<Record<GoodId, number
   coalMines: { steel: 0.1, machinery: 0.03, wood: 0.1 },
   ironMines: { steel: 0.05, machinery: 0.03, wood: 0.1 },
   lumberMills: { wood: 0.05, machinery: 0.02 },
-  factories: { steel: 0.22, machinery: 0.1, wood: 0.1 },
+  // Plan 0011 F3: the bundled factory split into seven industrial buildings.
+  // Every project buys the worked metal (`steel`), never raw ore (plan 0011 F1).
+  textileMills: { steel: 0.1, machinery: 0.1, wood: 0.1 },
+  furnitureWorks: { wood: 0.2, steel: 0.08, machinery: 0.05 },
+  distilleries: { steel: 0.1, machinery: 0.05, wood: 0.1 },
+  machineryWorks: { steel: 0.2, machinery: 0.1 },
+  steelMills: { steel: 0.15, machinery: 0.1 },
+  arsenals: { steel: 0.2, machinery: 0.1 },
+  luxuryWorks: { steel: 0.1, machinery: 0.1, fabric: 0.05 },
   railroads: { steel: 0.5, machinery: 0.16, wood: 0.4 },
   ports: { wood: 0.3, steel: 0.1 },
   universities: { furniture: 0.12, wood: 0.05 },
@@ -247,16 +255,15 @@ export const BUILDING_OUTPUT: Record<BuildingId, Partial<Record<GoodId, number>>
   coalMines: { coal: 0.96 },
   ironMines: { iron: 0.96 },
   lumberMills: { wood: 0.96 },
-  factories: {
-    fabric: 0.6,
-    clothes: 0.38,
-    liquor: 0.2,
-    furniture: 0.22,
-    machinery: 0.09,
-    arms: 0.07,
-    luxury: 0.035,
-    steel: 0.09,
-  },
+  // F3: legacy shortage weights split off the old factories row (kept in the
+  // same proportions so the private-investment ranking signal is unchanged).
+  textileMills: { fabric: 0.6, clothes: 0.38 },
+  furnitureWorks: { furniture: 0.22 },
+  distilleries: { liquor: 0.2 },
+  machineryWorks: { machinery: 0.09 },
+  steelMills: { steel: 0.09 },
+  arsenals: { arms: 0.07 },
+  luxuryWorks: { luxury: 0.035 },
   railroads: {},
   ports: {},
   universities: {},
@@ -282,7 +289,7 @@ export type RecipeGates = {
   infrastructure?: boolean
   /** Market-access multiplier (0.55 + marketAccess × 0.9). */
   access?: boolean
-  /** Coal/iron endowment factor (0.7..1.3), applied to factories. */
+  /** Coal/iron endowment factor (0.7..1.3), applied to industrial buildings. */
   industrial?: boolean
   /** Resource endowments that scale this output (forward-compat; unused in B1+B2). */
   resource?: ResourceId[]
@@ -303,7 +310,7 @@ export type BuildingRecipe = {
   gates?: RecipeGates
   /**
    * Per-output-good gate overrides for byproducts that share none of the
-   * building's default gates (e.g. farms' wood, factories' liquor).
+   * building's default gates (e.g. farms' wood, distilleries' liquor).
    */
   outputGates?: Partial<Record<GoodId, RecipeGates>>
   /** Building-category output modifier seam (farmOutput/mineOutput/factoryOutput). */
@@ -313,7 +320,7 @@ export type BuildingRecipe = {
 /**
  * B1 copied these from the literals previously hardcoded in `computeProduction`
  * and the per-building intermediate block in `computeDemand`; B5 (plan 0008 §5)
- * then recalibrated the factories row (details in plan 0008 B5). It cut the
+ * then recalibrated the industrial row (details in plan 0008 B5). It cut the
  * material inputs and trimmed the consumer-good output so that a factory's value
  * added covers its allocated wage at the (locally glutted) consumer-good prices
  * — the pre-B5 row was ~87% material cost and ran at a loss. `workshops` output
@@ -349,26 +356,67 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     gates: { tech: true },
     outputModifier: 'mineOutput',
   },
-  factories: {
-    output: {
-      fabric: 0.6,
-      clothes: 0.28,
-      liquor: 0.14,
-      furniture: 0.16,
-      machinery: 0.18,
-      arms: 0.07,
-      luxury: 0.035,
-      // F1: the bundled factory smelts ore into steel (split into `steelMills`
-      // in F3); it is the only source of `steel`.
-      steel: 0.09,
-    },
-    // `iron` is ore: the furnace burns a large quantity of it (plus coal) to
-    // yield a little steel. Machinery/arms/furniture (bundled here) buy their
-    // steel from the national heavy-industry pool, not from this recipe.
-    input: { grain: 0.5, coal: 0.18, iron: 0.45, fabric: 0.2, wood: 0.1, machinery: 0.18 },
+  // Plan 0011 F3: the bundled `factories` row is split into seven single/few-
+  // output industrial buildings. Outputs are `old_factory_output / valueShare`
+  // so the national supply of every industrial good is conserved across the
+  // split (the same conservation move F2 made for the mines); inputs reproduce
+  // the old factory's per-factory consumption basket — grain to textiles/
+  // distilleries, the ore to the smelters, the fabric to furniture/luxury, and
+  // coal/wood/machinery (industrial working capital) to every type — so the
+  // aggregate input bill, and with it the old ~16% margin band, is preserved.
+  // The per-building gates are the old
+  // `{tech, industrial}` pair, with the old liquor-only-industrial override kept
+  // on `distilleries`. All seven share the `factoryOutput` seam.
+  textileMills: {
+    output: { fabric: 1.45, clothes: 0.68 },
+    input: { grain: 1.0, coal: 0.18, wood: 0.1, machinery: 0.18 },
+    labor: 0.9,
+    gates: { tech: true, industrial: true },
+    outputModifier: 'factoryOutput',
+  },
+  furnitureWorks: {
+    output: { furniture: 1.54 },
+    input: { wood: 0.1, coal: 0.18, fabric: 1.14, steel: 0.3, machinery: 0.18 },
+    labor: 0.7,
+    gates: { tech: true, industrial: true },
+    outputModifier: 'factoryOutput',
+  },
+  distilleries: {
+    output: { liquor: 1.9 },
+    input: { grain: 1.0, coal: 0.18, wood: 0.1, machinery: 0.18 },
+    labor: 0.6,
+    gates: { tech: true, industrial: true },
+    // The old bundled factory gated liquor by `industrial` alone (plan 0011 F3).
+    outputGates: { liquor: { industrial: true } },
+    outputModifier: 'factoryOutput',
+  },
+  machineryWorks: {
+    output: { machinery: 0.82 },
+    input: { steel: 0.5, coal: 0.18, wood: 0.1, machinery: 0.18 },
     labor: 1.0,
     gates: { tech: true, industrial: true },
-    outputGates: { liquor: { industrial: true } },
+    outputModifier: 'factoryOutput',
+  },
+  steelMills: {
+    output: { steel: 4.0 },
+    // Ore (raw `iron`) + coal are smelted into steel: the only consumer of ore.
+    input: { iron: 3.5, coal: 0.5, machinery: 0.18 },
+    labor: 1.0,
+    gates: { tech: true, industrial: true },
+    outputModifier: 'factoryOutput',
+  },
+  arsenals: {
+    output: { arms: 0.9 },
+    input: { steel: 0.5, machinery: 0.3, coal: 0.18, iron: 0.3 },
+    labor: 0.9,
+    gates: { tech: true, industrial: true },
+    outputModifier: 'factoryOutput',
+  },
+  luxuryWorks: {
+    output: { luxury: 0.49 },
+    input: { fabric: 1.14, coal: 0.18, wood: 0.1, machinery: 0.18 },
+    labor: 0.8,
+    gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
   },
   railroads: {
@@ -431,7 +479,13 @@ export const BUILDINGS: Record<BuildingId, { name: string; cost: number; note: s
   coalMines: { name: '煤矿', cost: 2.5, note: '煤炭，工业与钢铁的燃料' },
   ironMines: { name: '铁矿', cost: 2.5, note: '铁矿石，钢铁厂的原料' },
   lumberMills: { name: '伐木场', cost: 2, note: '木材，建造与家具的原料' },
-  factories: { name: '工厂', cost: 4, note: '工业品产能，推动城市化' },
+  textileMills: { name: '纺织厂', cost: 4, note: '布料与成衣，轻工业的起点' },
+  furnitureWorks: { name: '家具厂', cost: 3.5, note: '家具，木材与钢铁的下游' },
+  distilleries: { name: '酿酒厂', cost: 3.5, note: '酒类，粮食的下游消费' },
+  machineryWorks: { name: '机械厂', cost: 5, note: '机械，钢铁与煤的下游' },
+  steelMills: { name: '钢铁厂', cost: 5, note: '钢铁，铁矿石与煤的冶炼' },
+  arsenals: { name: '兵工厂', cost: 4.5, note: '军械，钢铁与机械的军工' },
+  luxuryWorks: { name: '奢侈品厂', cost: 5, note: '奢侈品，布料与煤的高端制造' },
   railroads: { name: '铁路', cost: 7, note: '交通基础设施与市场接入' },
   ports: { name: '港口', cost: 3, note: '市场接入与关税收入' },
   universities: { name: '大学', cost: 5, note: '科技点数、识字率与行政能力' },
@@ -446,7 +500,13 @@ export const BUILDING_TIME: Record<BuildingId, number> = {
   coalMines: 3,
   ironMines: 3,
   lumberMills: 2,
-  factories: 4,
+  textileMills: 4,
+  furnitureWorks: 3,
+  distilleries: 3,
+  machineryWorks: 5,
+  steelMills: 5,
+  arsenals: 4,
+  luxuryWorks: 4,
   railroads: 8,
   ports: 3,
   universities: 5,
@@ -459,6 +519,29 @@ export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[]
 
 export function buildOf(id: string): BuildingId | undefined {
   return (BUILDING_IDS as string[]).includes(id) ? (id as BuildingId) : undefined
+}
+
+/**
+ * The seven industrial types the bundled `factories` split into (plan 0011 F3).
+ * They share the seed-split share, the `industry` config condition stat, and
+ * every proxy that used to read `buildings.factories` (urbanisation, artisan
+ * shift, unemployment, the `boom` event).
+ */
+export const INDUSTRIAL_BUILDING_IDS: BuildingId[] = [
+  'textileMills',
+  'furnitureWorks',
+  'distilleries',
+  'machineryWorks',
+  'steelMills',
+  'arsenals',
+  'luxuryWorks',
+]
+
+/** Total industrial buildings in a country (the F3 successor to `factories`). */
+export function industrialBuildingCount(country: Country): number {
+  let total = 0
+  for (const id of INDUSTRIAL_BUILDING_IDS) total += country.econ.buildings[id] ?? 0
+  return total
 }
 
 export const SPENDING: Record<SpendingCategory, { name: string; note: string }> = {
@@ -530,31 +613,11 @@ export function emptyTradeState(): TradeState {
   }
 }
 
-const buildings = (
-  farms: number,
-  coalMines: number,
-  ironMines: number,
-  lumberMills: number,
-  factories: number,
-  railroads: number,
-  ports: number,
-  universities: number,
-  barracks: number,
-  offices: number,
-  workshops: number,
-): Record<BuildingId, number> => ({
-  farms,
-  coalMines,
-  ironMines,
-  lumberMills,
-  factories,
-  railroads,
-  ports,
-  universities,
-  barracks,
-  offices,
-  workshops,
-})
+const buildings = (counts: Partial<Record<BuildingId, number>>): Record<BuildingId, number> => {
+  const out = {} as Record<BuildingId, number>
+  for (const id of BUILDING_IDS) out[id] = counts[id] ?? 0
+  return out
+}
 
 const spending = (
   army: number,
@@ -675,7 +738,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 13,
     tariff: 8,
     spending: spending(6, 0.8, 4, 1, 0.5, 1.5),
-    buildings: buildings(3000, 18, 15, 2, 20, 0, 14, 4, 40, 4, 12),
+    buildings: buildings({ farms: 3000, coalMines: 18, ironMines: 15, lumberMills: 2, textileMills: 9, furnitureWorks: 2, distilleries: 1, machineryWorks: 4, steelMills: 1, arsenals: 2, luxuryWorks: 1, railroads: 0, ports: 14, universities: 4, barracks: 40, offices: 4, workshops: 12 }),
     transportInfrastructure: 25,
     marketAccess: 0.45,
     unemployment: 6,
@@ -731,7 +794,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 12,
     tariff: 5,
     spending: spending(4, 6, 2.5, 1.2, 1.5, 2),
-    buildings: buildings(110, 47, 40, 3, 160, 25, 60, 18, 20, 14, 24),
+    buildings: buildings({ farms: 110, coalMines: 47, ironMines: 40, lumberMills: 3, textileMills: 67, furnitureWorks: 17, distilleries: 12, machineryWorks: 35, steelMills: 6, arsenals: 12, luxuryWorks: 11, railroads: 25, ports: 60, universities: 18, barracks: 20, offices: 14, workshops: 24 }),
     transportInfrastructure: 85,
     marketAccess: 0.9,
     unemployment: 8,
@@ -787,7 +850,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: -2,
     tariff: 12,
     spending: spending(5, 3, 2.5, 1, 1.2, 1.8),
-    buildings: buildings(260, 29, 24, 2, 95, 8, 30, 12, 30, 10, 16),
+    buildings: buildings({ farms: 260, coalMines: 29, ironMines: 24, lumberMills: 2, textileMills: 39, furnitureWorks: 10, distilleries: 7, machineryWorks: 21, steelMills: 4, arsenals: 7, luxuryWorks: 7, railroads: 8, ports: 30, universities: 12, barracks: 30, offices: 10, workshops: 16 }),
     transportInfrastructure: 60,
     marketAccess: 0.75,
     unemployment: 7,
@@ -843,7 +906,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 4,
     tariff: 8,
     spending: spending(4.5, 0.5, 1.8, 1.1, 0.8, 1.5),
-    buildings: buildings(180, 36, 31, 3, 60, 6, 10, 11, 22, 8, 10),
+    buildings: buildings({ farms: 180, coalMines: 36, ironMines: 31, lumberMills: 3, textileMills: 26, furnitureWorks: 6, distilleries: 4, machineryWorks: 13, steelMills: 2, arsenals: 5, luxuryWorks: 4, railroads: 6, ports: 10, universities: 11, barracks: 22, offices: 8, workshops: 10 }),
     transportInfrastructure: 55,
     marketAccess: 0.7,
     unemployment: 5,
@@ -899,7 +962,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 6,
     tariff: 15,
     spending: spending(6, 1.2, 3, 0.3, 0.4, 1),
-    buildings: buildings(900, 36, 31, 3, 35, 2, 12, 6, 50, 6, 8),
+    buildings: buildings({ farms: 900, coalMines: 36, ironMines: 31, lumberMills: 3, textileMills: 14, furnitureWorks: 4, distilleries: 3, machineryWorks: 8, steelMills: 1, arsenals: 3, luxuryWorks: 2, railroads: 2, ports: 12, universities: 6, barracks: 50, offices: 6, workshops: 8 }),
     transportInfrastructure: 20,
     marketAccess: 0.5,
     unemployment: 4,
@@ -955,7 +1018,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: -5,
     tariff: 10,
     spending: spending(4, 0.6, 2.2, 0.6, 0.7, 1),
-    buildings: buildings(420, 31, 26, 3, 45, 4, 5, 8, 30, 7, 10),
+    buildings: buildings({ farms: 420, coalMines: 31, ironMines: 26, lumberMills: 3, textileMills: 18, furnitureWorks: 5, distilleries: 3, machineryWorks: 10, steelMills: 2, arsenals: 4, luxuryWorks: 3, railroads: 4, ports: 5, universities: 8, barracks: 30, offices: 7, workshops: 10 }),
     transportInfrastructure: 45,
     marketAccess: 0.65,
     unemployment: 6,
@@ -1011,7 +1074,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 14,
     tariff: 20,
     spending: spending(1.5, 1.2, 1.2, 0.8, 0.5, 1.5),
-    buildings: buildings(300, 29, 24, 2, 55, 6, 25, 10, 12, 8, 8),
+    buildings: buildings({ farms: 300, coalMines: 29, ironMines: 24, lumberMills: 2, textileMills: 23, furnitureWorks: 6, distilleries: 4, machineryWorks: 12, steelMills: 2, arsenals: 4, luxuryWorks: 4, railroads: 6, ports: 25, universities: 10, barracks: 12, offices: 8, workshops: 8 }),
     transportInfrastructure: 50,
     marketAccess: 0.7,
     unemployment: 5,
@@ -1067,7 +1130,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 3,
     tariff: 5,
     spending: spending(2.5, 0.6, 1.5, 0.5, 0.3, 0.8),
-    buildings: buildings(380, 11, 10, 1, 12, 0, 10, 4, 15, 4, 3),
+    buildings: buildings({ farms: 380, coalMines: 11, ironMines: 10, lumberMills: 1, textileMills: 5, furnitureWorks: 1, distilleries: 1, machineryWorks: 3, steelMills: 0, arsenals: 1, luxuryWorks: 1, railroads: 0, ports: 10, universities: 4, barracks: 15, offices: 4, workshops: 3 }),
     transportInfrastructure: 22,
     marketAccess: 0.4,
     unemployment: 3,
@@ -1123,7 +1186,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: -7,
     tariff: 12,
     spending: spending(3, 0.8, 2, 0.3, 0.3, 0.6),
-    buildings: buildings(420, 13, 11, 1, 14, 0, 12, 3, 22, 4, 4),
+    buildings: buildings({ farms: 420, coalMines: 13, ironMines: 11, lumberMills: 1, textileMills: 6, furnitureWorks: 1, distilleries: 1, machineryWorks: 3, steelMills: 1, arsenals: 1, luxuryWorks: 1, railroads: 0, ports: 12, universities: 3, barracks: 22, offices: 4, workshops: 4 }),
     transportInfrastructure: 18,
     marketAccess: 0.45,
     unemployment: 8,
@@ -1179,7 +1242,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: -11,
     tariff: 12,
     spending: spending(2, 0.8, 1.5, 0.4, 0.4, 0.6),
-    buildings: buildings(220, 16, 13, 1, 20, 2, 14, 6, 14, 4, 4),
+    buildings: buildings({ farms: 220, coalMines: 16, ironMines: 13, lumberMills: 1, textileMills: 9, furnitureWorks: 2, distilleries: 1, machineryWorks: 4, steelMills: 1, arsenals: 2, luxuryWorks: 1, railroads: 2, ports: 14, universities: 6, barracks: 14, offices: 4, workshops: 4 }),
     transportInfrastructure: 35,
     marketAccess: 0.55,
     unemployment: 10,
@@ -1272,12 +1335,12 @@ export function deriveBureaucracy(country: Country, smooth: boolean): Bureaucrac
   }
 }
 
-/** Unemployment follows factories, literacy and unrest (plan §7.4). */
+/** Unemployment follows industry, literacy and unrest (plan §7.4). */
 export function deriveUnemployment(country: Country): number {
   const popFactor = Math.max(0.1, country.pops.total / 1000)
   return clampValue(
     4 +
-      (1 - country.econ.buildings.factories / Math.max(1, popFactor * 3)) * 30 +
+      (1 - industrialBuildingCount(country) / Math.max(1, popFactor * 3)) * 30 +
       country.pops.radicals * 0.15 -
       country.pops.literacy * 10,
     0,
@@ -1309,7 +1372,13 @@ export function deriveLabor(country: Country): LaborStats {
     b.coalMines * laborOf('coalMines') +
     b.ironMines * laborOf('ironMines') +
     b.lumberMills * laborOf('lumberMills') +
-    b.factories * laborOf('factories') +
+    b.textileMills * laborOf('textileMills') +
+    b.furnitureWorks * laborOf('furnitureWorks') +
+    b.distilleries * laborOf('distilleries') +
+    b.machineryWorks * laborOf('machineryWorks') +
+    b.steelMills * laborOf('steelMills') +
+    b.arsenals * laborOf('arsenals') +
+    b.luxuryWorks * laborOf('luxuryWorks') +
     b.railroads * laborOf('railroads') +
     b.ports * laborOf('ports') +
     b.offices * laborOf('offices') +
@@ -1671,7 +1740,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     kind: 'boom',
     title: '工业繁荣',
     weight: 12,
-    when: c => c.econ.buildings.factories >= 20,
+    when: c => industrialBuildingCount(c) >= 20,
     text: c => `${c.name}的工厂昼夜开工，商人们争相订购机器与煤炭。`,
     options: () => [
       {

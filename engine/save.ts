@@ -41,18 +41,15 @@ export async function saveGame(
 /**
  * Fills fields added after v7 was first written. The construction-sector
  * building is additive, so an old v7 save can keep playing: every country
- * without workshops gets one per two factories (capped at 24), and the
- * construction-rent / per-project capacity fields default to 0.
+ * without workshops gets one, and the construction-rent / per-project capacity
+ * fields default to 0.
  */
 function normalizeWorld(world: WorldState): WorldState {
   if (!Array.isArray(world.tradeRoutes)) world.tradeRoutes = []
   for (const country of Object.values(world.countries)) {
     const buildings = country.econ.buildings as Record<string, number>
     if (typeof buildings.workshops !== 'number') {
-      buildings.workshops = Math.min(
-        24,
-        Math.max(1, Math.round((buildings.factories ?? 0) / 2)),
-      )
+      buildings.workshops = 1
     }
     for (const id of BUILDING_IDS) {
       if (typeof buildings[id] !== 'number') buildings[id] = 0

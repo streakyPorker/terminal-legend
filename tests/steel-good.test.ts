@@ -15,9 +15,9 @@ import { advance, inspectEconomy, newWorld } from '../engine/sim'
 import type { GoodId, WorldState } from '../types'
 
 // Plan 0011 F1: the iron-ore / steel split. `iron` keeps its id but becomes raw
-// ORE (铁矿石); `steel` (钢铁) is the new worked metal. The bundled `factories`
-// smelt ore + coal into steel for F1 (steelMills arrives in F3) and the heavy
-// consumers move from `iron` to `steel`.
+// ORE (铁矿石); `steel` (钢铁) is the new worked metal. The steel mills smelt ore
+// + coal into steel (F3 split the old bundled factories into `steelMills` and
+// six siblings) and the heavy consumers drink from that pool.
 const BASELINE_SEED = 9100
 const MONTHS = 24
 
@@ -79,17 +79,17 @@ describe('steel good and the iron-ore rename (plan 0011 F1)', () => {
     expect(BUILDING_RECIPES.railroads.input.iron).toBeUndefined()
   })
 
-  test('the ore→steel chain: factories consume ore + coal and produce steel', async () => {
-    const recipe = BUILDING_RECIPES.factories
+  test('the ore→steel chain: steel mills consume ore + coal and produce steel', async () => {
+    const recipe = BUILDING_RECIPES.steelMills
     expect(recipe.input.iron ?? 0).toBeGreaterThan(0)
     expect(recipe.input.coal ?? 0).toBeGreaterThan(0)
     expect(recipe.output.steel ?? 0).toBeGreaterThan(0)
     // Ore is not an output of industry any more — only the ore mines produce it.
-    expect(BUILDING_RECIPES.factories.output.iron).toBeUndefined()
+    expect(recipe.output.iron).toBeUndefined()
 
     const world = newWorld(9702, 'GBR')
     const gbr = countryOf(world, 'GBR')
-    const factories = gbr.econ.buildings.factories
+    const mills = gbr.econ.buildings.steelMills
     const delta = 0.25
 
     // Raising the ore input raises ore demand by count × Δ (the chain consumes).
@@ -97,7 +97,7 @@ describe('steel good and the iron-ore rename (plan 0011 F1)', () => {
     const ironBefore = inspectEconomy(gbr).demand.iron
     try {
       recipe.input.iron = savedIron + delta
-      close(inspectEconomy(gbr).demand.iron - ironBefore, factories * delta, 1e-6)
+      close(inspectEconomy(gbr).demand.iron - ironBefore, mills * delta, 1e-6)
     } finally {
       recipe.input.iron = savedIron
     }

@@ -281,7 +281,13 @@ describe('E1 demand shock loop', () => {
     // Construction capacity and inputs can bind, so a demand boost no longer
     // guarantees a strictly larger capital stock; it must not shrink it much.
     const capacityBuildings = (country: typeof controlQing): number =>
-      country.econ.buildings.factories +
+      country.econ.buildings.textileMills +
+      country.econ.buildings.furnitureWorks +
+      country.econ.buildings.distilleries +
+      country.econ.buildings.machineryWorks +
+      country.econ.buildings.steelMills +
+      country.econ.buildings.arsenals +
+      country.econ.buildings.luxuryWorks +
       country.econ.buildings.coalMines +
       country.econ.buildings.ironMines +
       country.econ.buildings.lumberMills +

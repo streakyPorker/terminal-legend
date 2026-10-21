@@ -123,8 +123,8 @@
 | 成衣 | `clothes` | 3.0 | 鸦片 | `opium` | 2.5 |
 | 酒类 | `liquor` | 2.6 | 服务 | `services` | 4.0 |
 
-- `iron` 是**铁矿石**（World v11 起；id 未变），由矿场产出、只作工厂炼钢的投入；`steel`（钢铁）
-  由工厂用「铁矿石 + 煤」炼成，供铁路、建设投资与政府建设使用。
+- `iron` 是**铁矿石**（World v11 起；id 未变），由铁矿产出、只作**钢铁厂**炼钢的投入；`steel`（钢铁）
+  由钢铁厂用「铁矿石 + 煤」炼成，供铁路、建设投资、政府建设与机械/军械/家具使用。
 
 - **价格收敛**：目标价 `= basePrice × clamp(√(需求/供给), 0.35, 3)`，每月向目标移动 **30%**。
 - **硬上下限**：`0.25 × basePrice` 与 `4 × basePrice`。
@@ -135,7 +135,7 @@
 ### 4.3 建筑配方（单一真源，ADR 0021）
 
 `engine/data.ts` 的 `BUILDING_RECIPES` 是**产出与中间投入的唯一来源**；`computeProduction`
-只读该表。11 类建筑每座每月：
+只读该表。17 类建筑每座每月：
 
 | 建筑 | output（每座/月） | input（每座/月） | labor | 门控 |
 | --- | --- | --- | ---: | --- |
@@ -143,7 +143,13 @@
 | 煤矿 `coalMines` | coal 0.96 | 无 | 0.6 | tech |
 | 铁矿 `ironMines` | iron 0.96 | 无 | 0.6 | tech |
 | 伐木场 `lumberMills` | wood 0.96 | 无 | 0.4 | tech |
-| 工厂 `factories` | fabric 0.6、clothes 0.28、liquor 0.14、furniture 0.16、machinery 0.18、arms 0.07、luxury 0.035、**steel 0.09** | grain 0.5、coal 0.18、**iron 0.45**、fabric 0.2、wood 0.1、machinery 0.18 | 1.0 | tech + industrial（liquor 仅 industrial） |
+| 纺织厂 `textileMills` | fabric 1.45、clothes 0.68 | grain 1.0、coal 0.18、wood 0.1、machinery 0.18 | 0.9 | tech + industrial |
+| 家具厂 `furnitureWorks` | furniture 1.54 | wood 0.1、coal 0.18、fabric 1.14、**steel 0.3**、machinery 0.18 | 0.7 | tech + industrial |
+| 酿酒厂 `distilleries` | liquor 1.9 | grain 1.0、coal 0.18、wood 0.1、machinery 0.18 | 0.6 | tech + industrial（liquor 仅 industrial） |
+| 机械厂 `machineryWorks` | machinery 0.82 | **steel 0.5**、coal 0.18、wood 0.1、machinery 0.18 | 1.0 | tech + industrial |
+| 钢铁厂 `steelMills` | **steel 4.0** | **iron(铁矿石) 3.5**、coal 0.5、machinery 0.18 | 1.0 | tech + industrial |
+| 兵工厂 `arsenals` | arms 0.9 | **steel 0.5**、machinery 0.3、coal 0.18、iron 0.3 | 0.9 | tech + industrial |
+| 奢侈品厂 `luxuryWorks` | luxury 0.49 | fabric 1.14、coal 0.18、wood 0.1、machinery 0.18 | 0.8 | tech + industrial |
 | 铁路 `railroads` | 无 | **steel 0.5**、wood 0.4 | 0.2 | 无 |
 | 港口 `ports` | 无 | 无 | 0.4 | 无 |
 | 大学 `universities` | services 0.2 | 无 | 0.2 | 无 |
@@ -164,10 +170,21 @@
   `lumberMills`（木材）**三个单产建筑，各产 0.96、用工 0.6/0.6/0.4、仅 tech 门控。种子按旧
   产出比例（煤 0.5 : 铁 0.42 : 木 0.04）拆座数，**总采掘座数守恒**（512→512），故世界煤/铁/木
   供给与拆分前基本一致（plan 0011 §7.3）。
-- **B5 工厂再平衡（ADR 0021、plan 0008 §5）**：工厂配方调轻了材料单、并下调成衣/酒/家具产出
-  （见上表），使工厂在参考点可盈利。7 大国产量的加权**聚合工厂毛利落在 5–20% 带内**；
-  工业核心 GBR/FRA/PRU 亦在带内，资源富集、工资低的 RUS/QING/JAP 在带上界之上（属预期）。
-  F1（World v11）重定了工厂配方，带内性质由 `tests/economy-recipe-calibration.test.ts` 守住。
+- **F3 工厂七拆（World v11）**：打包的 `factories` 拆成 **`textileMills`（布料+成衣）/
+  `furnitureWorks`/`distilleries`/`machineryWorks`/`steelMills`/`arsenals`/`luxuryWorks`** 七个
+  单产/少产建筑（见上表），全部 tech+industrial 门控、共用 `factoryOutput`；旧的「liquor 仅
+  industrial」覆盖保留在 `distilleries`。**输出系数 = 旧工厂该货系数 ÷ 该建筑的旧产出价值占比**，
+  故每货全国供给守恒；**投入合计复现旧工厂的每厂篮子**（煤/木/机械按座给全部七类），故聚合投入
+  价值守恒、参考点 7 大国加权**聚合工业毛利 ≈ 16%**（GBR 6.5% / FRA 11.6% / PRU 11.2%）。
+  种子按旧产出价值占比拆座数（纺织 41.4%…钢铁 4.0%，余数给纺织），**总工业座数守恒**（516→516）。
+  机械/军械/家具改吃 `steel`；`iron`（铁矿石）只作钢铁厂投入。`factories` 已从全部表面移除，
+  派生口径改用工业建筑总数 `industrialBuildingCount`；`boom` 事件与 `工业起飞` 阈值改用该总数，
+  配置条件 `'factories'` 更名 `'industry'`（plan 0011 §7.4）。
+- **B5 工厂再平衡（ADR 0021、plan 0008 §5）**：工厂配方调轻了材料单、并下调成衣/酒/家具产出，
+  使工厂在参考点可盈利。7 大国产量的加权**聚合工厂毛利落在 5–20% 带内**；工业核心 GBR/FRA/PRU
+  亦在带内，资源富集、工资低的 RUS/QING/JAP 在带上界之上（属预期）。F1（World v11）重定了工厂
+  配方，F3 把工厂拆成七个单产建筑并把门线改为**工业建筑聚合**，带内性质由
+  `tests/economy-recipe-calibration.test.ts` 守住。
 - **部分商品按设计为本地自给**：成衣、酒类、家具由各国**手工匠**（`ARTISAN_OUTPUT`）供给，
   军械由本地兵营供给，**不做全球双向贸易**（PT-002 的另一允许路径；写入 ADR 0021 与
   `tests/economy-recipe-calibration.test.ts`）。GM 不应指望在世界市场上买卖这四类商品；
@@ -224,8 +241,8 @@
 - **建设补贴**（`spending.construction`）：每级每月 **+1.5 建造点、花 0.45 金**；
   补贴点与营造所产点同质，同样受原料约束；没有营造所时补贴不产生建造力。
 
-每座每月的建造点需求（`CAPACITY_COST`）：营造所/港口 1.5、农场 0.5、矿场/兵营/官署 1、
-工厂/大学 2、铁路 4。
+每座每月的建造点需求（`CAPACITY_COST`）：营造所/港口 1.5、农场 0.5、煤矿/铁矿/兵营/官署 1、
+伐木场 0.8、纺织/军械/奢侈 2、家具/酿酒 1.5、机械/钢铁 2.5、大学 2、铁路 4。
 
 来源：ADR 0010/0012/0013/0015、README「建造能力」、`engine/sim.ts`（`CAPACITY_COST`/
 `WORKLOAD_MULTIPLIER=30`/`CONSTRUCTION_COST_PER_POINT=0.2`/`CONSTRUCTION_RENT_PER_POINT=0.3`）。
@@ -313,10 +330,10 @@ GLOSSARY（航线/到岸成本/软容量/禁运）。
 
 ## 7. 人口 / 劳动 / 社会
 
-- **失业率**是**结构性**指标：由工厂吸纳能力、识字率与激进共同决定（`deriveUnemployment`），
+- **失业率**是**结构性**指标：由工业建筑吸纳能力、识字率与激进共同决定（`deriveUnemployment`），
   口径上**不等于** `1 − 劳动需求/劳动力`。
 - `v3_inspect labor` 并列显示：失业率、**原始需求/劳动力**利用率与「结构性缺口」；
-  并给出就业基础（农田/矿场/工厂/营造所/铁路/港口）。
+  并给出就业基础（农田/煤矿/铁矿/伐木场/七个工业建筑/营造所/铁路/港口）。
 - **劳动需求**由各建筑配方 `labor × count` 汇总；**劳动力** = `peasants×0.6 + workers + artisans`。
 - **生活水平（sol）**、**识字率**、**激进**、**合法性**、**城市化**都在月度结算里更新；
   `sol` 与粮价联动（饥荒触发条件见 §8）。
@@ -388,7 +405,7 @@ GLOSSARY（航线/到岸成本/软容量/禁运）。
 | 关税收入翻倍 | 进口税与出口税两个方向之和，或贸易量上升 | `v3_inspect fiscal`（含税率行） |
 | 税入与 GDP 不再按比例 | 已改为**四税基**（土地 / 企业 / 消费 / 关税），GDP 只作派生产出指标 | `v3_inspect fiscal`（每基税基量/税率/税额）、§4.7 |
 | 税入随租金缩放、GDP 上升税反降 | 「其他（建造力出租）」入账时差曾被并入上月收入；现已用 `lastIncomeOther` 修正口径 | `v3_inspect fiscal` |
-| 失业率与「原始利用率」不一致 | 失业率是**结构性**指标，含工厂吸纳、进口竞争与在职不足；原始利用率只反映需求缺口 | `v3_inspect labor` |
+| 失业率与「原始利用率」不一致 | 失业率是**结构性**指标，含工业吸纳、进口竞争与在职不足；原始利用率只反映需求缺口 | `v3_inspect labor` |
 | 自由贸易后关税不是 0 | 自由贸易下限 **5%**，且进出口各收一次 | `v3_inspect fiscal`、README「双向关税」 |
 | 债务很小却出现压力 | 看的是**债务/GDP 比例**（25% 起），不是绝对额 | `v3_inspect fiscal`、`v3_status` 债务压力行 |
 | 私人项目不可取消/出现很慢 | 私人项目**不可取消**；每两月最多开工一次、最多三单在途（ADR 0017），且只建有利润的类型（ADR 0022） | `v3_inspect construction` |

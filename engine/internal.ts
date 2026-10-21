@@ -76,10 +76,7 @@ export { techMultiplier }
 export function ensureConstructionFields(country: Country): void {
   const buildings = country.econ.buildings as Record<string, number>
   if (typeof buildings.workshops !== 'number') {
-    buildings.workshops = Math.min(
-      24,
-      Math.max(1, Math.round((buildings.factories ?? 0) / 2)),
-    )
+    buildings.workshops = 1
   }
   if (typeof country.econ.lastConstructionRent !== 'number') {
     country.econ.lastConstructionRent = 0

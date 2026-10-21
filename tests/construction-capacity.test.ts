@@ -67,7 +67,7 @@ describe('construction capacity (ADR 0010)', () => {
     qing.econ.buildings.workshops = 2
     qing.econ.constructionQueue = []
     const first = project(
-      { id: 'first', building: 'factories', count: 3, owner: 'state' },
+      { id: 'first', building: 'textileMills', count: 3, owner: 'state' },
       world.date,
     )
     const second = project(
@@ -93,10 +93,10 @@ describe('construction capacity (ADR 0010)', () => {
     qing.econ.buildings.workshops = 4
     qing.econ.constructionQueue = []
     qing.econ.privateCapital = 100
-    const factoriesBefore = qing.econ.buildings.factories
+    const textilesBefore = qing.econ.buildings.textileMills
     qing.econ.constructionQueue.push(
       project(
-        { id: 'private', building: 'factories', count: 2, owner: 'private' },
+        { id: 'private', building: 'textileMills', count: 2, owner: 'private' },
         world.date,
       ),
     )
@@ -124,7 +124,7 @@ describe('construction capacity (ADR 0010)', () => {
     // queue and has made some progress.
     expect(qing.econ.constructionQueue.length).toBeGreaterThan(0)
     expect(qing.econ.constructionQueue[0]?.progress ?? 0).toBeGreaterThan(0)
-    expect(qing.econ.buildings.factories).toBeGreaterThan(factoriesBefore * 0.99)
+    expect(qing.econ.buildings.textileMills).toBeGreaterThan(textilesBefore * 0.99)
   })
 
   test('an old v7 save without the new fields is normalized on load', async () => {
@@ -135,7 +135,7 @@ describe('construction capacity (ADR 0010)', () => {
     raw.countries.QING.econ.constructionQueue = [
       {
         id: 'old',
-        building: 'factories',
+        building: 'textileMills',
         count: 1,
         owner: 'state',
         monthsLeft: 2,
@@ -208,7 +208,7 @@ describe('construction slot limits (ADR 0012/0013)', () => {
     qing.econ.constructionQueue = []
     const result = applyDecision(
       world,
-      { countryId: 'QING', action: 'build', params: { building: 'factories', count: 20 } },
+      { countryId: 'QING', action: 'build', params: { building: 'textileMills', count: 20 } },
       makeRngForWorld(world),
     )
     expect(result.ok).toBe(true)
@@ -216,7 +216,7 @@ describe('construction slot limits (ADR 0012/0013)', () => {
     expect(project?.count).toBe(5)
     expect(project?.monthsLeft).toBe(1)
     expect(project?.monthlyCost).toBe(2)
-    expect(maxSlotCapacity('factories')).toBe(10)
+    expect(maxSlotCapacity('textileMills')).toBe(10)
   })
 
   test('a slot draws all idle capacity, not just its own monthly need', async () => {
@@ -227,7 +227,7 @@ describe('construction slot limits (ADR 0012/0013)', () => {
       project(
         {
           id: 'oversized',
-          building: 'factories',
+          building: 'textileMills',
           count: 20,
           owner: 'state',
           monthsLeft: 1,
@@ -242,13 +242,13 @@ describe('construction slot limits (ADR 0012/0013)', () => {
     // A five-factory slot's monthly need is 10 points; with the workshops idle
     // it can take every point they produce this month.
     expect(load.byProject.oversized ?? 0).toBeGreaterThan(
-      maxSlotCapacity('factories'),
+      maxSlotCapacity('textileMills'),
     )
     advance(world, 1, [], makeRngForWorld(world))
     const kept = qing.econ.constructionQueue.find(one => one.id === 'oversized')
     expect(kept).toBeDefined()
     if (kept === undefined) return
-    expect(kept.lastCapacity ?? 0).toBeGreaterThan(maxSlotCapacity('factories'))
+    expect(kept.lastCapacity ?? 0).toBeGreaterThan(maxSlotCapacity('textileMills'))
     expect(kept.progress).toBeGreaterThan(0)
     expect(kept.progress).toBeLessThan(1)
   })
@@ -262,11 +262,11 @@ describe('construction schedule estimate', () => {
     qing.econ.constructionQueue = []
     qing.econ.constructionQueue.push(
       project(
-        { id: 'first', building: 'factories', count: 2, owner: 'state' },
+        { id: 'first', building: 'textileMills', count: 2, owner: 'state' },
         world.date,
       ),
       project(
-        { id: 'second', building: 'factories', count: 4, owner: 'state' },
+        { id: 'second', building: 'textileMills', count: 4, owner: 'state' },
         world.date,
       ),
     )

@@ -16,10 +16,10 @@ export type AiReport = {
 const SYSTEM = `你是 19 世纪大战略游戏的世界决策引擎。你为每个 AI 国家选择本月行动。
 规则：
 - 只输出一个 JSON 数组，不要输出解释、Markdown 或代码围栏。
-- 每个元素形如 {"country":"GBR","action":"build","params":{"building":"factories","count":1},"narrative":"一句符合该领袖性格的行动描述"}
+- 每个元素形如 {"country":"GBR","action":"build","params":{"building":"textileMills","count":1},"narrative":"一句符合该领袖性格的行动描述"}
 - 每个国家最多 1 条；只为他国（非玩家国）决策。
 - action 只能是：build, tax, tariff, spending, research, conscript, law, diplomacy, invest, situation。
-- build 的 building 只能是：farms, coalMines, ironMines, lumberMills, factories, railroads, ports, universities, barracks, offices；params.count 为 1..20 的数字。官署提供行政能力与官僚上限。
+- build 的 building 只能是：farms, coalMines, ironMines, lumberMills, textileMills, furnitureWorks, distilleries, machineryWorks, steelMills, arsenals, luxuryWorks, railroads, ports, universities, barracks, offices；params.count 为 1..20 的数字。官署提供行政能力与官僚上限。
 - tax 用 params.base（land=土地税, profit=企业所得税, consumption=消费税, tariff=关税）与 params.rate（0..60）；tariff 用 params.rate（0..60，可选 params.exportRate）；spending 用 params.category（army/navy/bureaucracy/education/welfare/construction）与 params.amount（0..50）；数值必须是 JSON 数字，不能写成字符串。
 - invest 调整投资信心：params.amount 取 -3..3，结果被限制在该国基准上下 10 点内。
 - diplomacy 需要 params.target（国家代码）与 params.move（improve, insult, alliance, rival, gift, war, peace, embargo, unembargo, tension）。
@@ -88,7 +88,7 @@ function countryLine(country: Country, world: WorldState): string {
     `税:土${country.econ.taxes.land}/企${country.econ.taxes.profit}/消${country.econ.taxes.consumption}%关税:进${country.econ.tariff}/出${country.econ.exportTariff ?? country.econ.tariff}%`,
     `支出:陆${n1(country.econ.spending.army)}/海${n1(country.econ.spending.navy)}/官${n1(country.econ.spending.bureaucracy)}/教${n1(country.econ.spending.education)}/福${n1(country.econ.spending.welfare)}/建${n1(country.econ.spending.construction)}`,
     `在建:${country.econ.constructionQueue.length}(上月实付${n1(country.econ.lastStateConstructionSpend)})`,
-    `建筑:农场${country.econ.buildings.farms}/煤${country.econ.buildings.coalMines}/铁${country.econ.buildings.ironMines}/木${country.econ.buildings.lumberMills}/工厂${country.econ.buildings.factories}/铁路${country.econ.buildings.railroads}/官署${country.econ.buildings.offices}`,
+    `建筑:农场${country.econ.buildings.farms}/煤${country.econ.buildings.coalMines}/铁${country.econ.buildings.ironMines}/木${country.econ.buildings.lumberMills}/纺织${country.econ.buildings.textileMills}/家具${country.econ.buildings.furnitureWorks}/酒${country.econ.buildings.distilleries}/机械${country.econ.buildings.machineryWorks}/钢铁${country.econ.buildings.steelMills}/军械${country.econ.buildings.arsenals}/奢侈${country.econ.buildings.luxuryWorks}/铁路${country.econ.buildings.railroads}/官署${country.econ.buildings.offices}`,
     `权威:${Math.round(country.government.authority)}人力:${n1(country.military.manpower)}`,
     `私人资本:${n1(country.econ.privateCapital)}金`,
     `投资信心:${Math.round(country.econ.investmentConfidence)}`,

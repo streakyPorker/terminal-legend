@@ -7,7 +7,7 @@ import type {
   ScaleSpec,
 } from '../types'
 import { findBlock } from './config/blocks'
-import { resourceMultiplier } from './data'
+import { industrialBuildingCount, resourceMultiplier } from './data'
 import { effectiveResources } from './endowment'
 
 /**
@@ -50,8 +50,8 @@ export function readStatValue(country: Country, stat: ConditionStat): number {
       return country.military.navy
     case 'techLevel':
       return country.tech.level
-    case 'factories':
-      return country.econ.buildings.factories
+    case 'industry':
+      return industrialBuildingCount(country)
     case 'prestige':
       return country.diplo.prestige
     case 'income':
@@ -92,7 +92,7 @@ export const READABLE_STATS: ReadonlySet<ConditionStat> = new Set<ConditionStat>
   'army',
   'navy',
   'techLevel',
-  'factories',
+  'industry',
   'prestige',
   'income',
   'expense',

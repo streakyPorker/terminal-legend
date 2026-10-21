@@ -842,7 +842,13 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
     rng.chance(0.45)
   ) {
     const options = [
-      'factories',
+      'textileMills',
+      'furnitureWorks',
+      'distilleries',
+      'machineryWorks',
+      'steelMills',
+      'arsenals',
+      'luxuryWorks',
       'farms',
       'coalMines',
       'ironMines',

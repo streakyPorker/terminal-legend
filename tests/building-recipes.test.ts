@@ -17,15 +17,15 @@ describe('BUILDING_RECIPES: output drives production (ADR 0021 B1)', () => {
   test('doubling a recipe output coefficient doubles that good production', async () => {
     const world = newWorld(9701, 'GBR')
     const gbr = countryOf(world, 'GBR')
-    const recipe = BUILDING_RECIPES.factories
+    const recipe = BUILDING_RECIPES.textileMills
     const saved = recipe.output.fabric
-    if (saved === undefined) throw new Error('factories has no fabric output')
+    if (saved === undefined) throw new Error('textileMills has no fabric output')
 
     const original = inspectEconomy(gbr).production.fabric
     try {
       recipe.output.fabric = saved * 2
       const doubled = inspectEconomy(gbr).production.fabric
-      // fabric comes only from factories and every multiplier is linear in the
+      // fabric comes only from textile mills and every multiplier is linear in the
       // coefficient, so the ratio is exact.
       close(doubled, original * 2, 1e-6)
     } finally {
@@ -39,16 +39,16 @@ describe('BUILDING_RECIPES: input drives intermediate demand (ADR 0021 B1)', () 
   test('raising a recipe input coefficient raises that good demand by count × Δ', async () => {
     const world = newWorld(9702, 'GBR')
     const gbr = countryOf(world, 'GBR')
-    const recipe = BUILDING_RECIPES.factories
+    const recipe = BUILDING_RECIPES.textileMills
     const saved = recipe.input.coal ?? 0
     const delta = 0.25
-    const factories = gbr.econ.buildings.factories
+    const textiles = gbr.econ.buildings.textileMills
 
     const before = inspectEconomy(gbr).demand.coal
     try {
       recipe.input.coal = saved + delta
       const after = inspectEconomy(gbr).demand.coal
-      close(after - before, factories * delta, 1e-6)
+      close(after - before, textiles * delta, 1e-6)
     } finally {
       recipe.input.coal = saved
     }
@@ -151,10 +151,10 @@ describe('WAGE_ALLOCATION bases (plan 0008 B5)', () => {
     advance(world, 1, [], makeRngForWorld(world))
 
     const base = withBasis('labor', undefined, () => computeEconomy(qing))
-    const weighted = withBasis('labor', { factories: 2 }, () => computeEconomy(qing))
+    const weighted = withBasis('labor', { textileMills: 2 }, () => computeEconomy(qing))
     // Doubling the factory weight raises the factory wage share and lowers it
     // everywhere else, but the split still closes on the national bill.
-    expect(weighted.buildingProfits.factories.wages).toBeGreaterThan(base.buildingProfits.factories.wages)
+    expect(weighted.buildingProfits.textileMills.wages).toBeGreaterThan(base.buildingProfits.textileMills.wages)
     let sumWages = 0
     for (const id of BUILDING_IDS) sumWages += weighted.buildingProfits[id].wages
     close(sumWages, weighted.wages, 1e-6)

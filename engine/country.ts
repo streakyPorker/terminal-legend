@@ -4,6 +4,7 @@ import {
   GOOD_IDS,
   deriveBureaucracy,
   deriveUnemployment,
+  industrialBuildingCount,
   successorFor,
   techCost,
   techName,
@@ -194,16 +195,17 @@ export function simulateCountry(
   country.pops.aristocrats *= scale
   country.pops.capitalists *= scale
 
+  const industry = industrialBuildingCount(country)
   const urbanPull = Math.min(
     country.pops.peasants * 0.0008,
-    country.econ.buildings.factories * 0.015 * (1 + country.tech.level * 0.05),
+    industry * 0.015 * (1 + country.tech.level * 0.05),
   )
   country.pops.peasants -= urbanPull
   country.pops.workers += urbanPull
 
   const artisanShift = Math.min(
     country.pops.artisans * 0.0006,
-    country.econ.buildings.factories * 0.003,
+    industry * 0.003,
   )
   country.pops.artisans -= artisanShift
   country.pops.workers += artisanShift

@@ -2,9 +2,11 @@
 // Self-contained by design: the engine loads it as the plugin's `types` entry
 // and type-checks every `$.state` key the hooks module names against it.
 // World model v11: on top of v10's design, `iron` is raw ore (铁矿石) and a new
-// `steel` (钢铁) good carries the worked metal — factories smelt ore + coal into
+// `steel` (钢铁) good carries the worked metal — steel mills smelt ore + coal into
 // steel and the heavy consumers (construction, railroads, investment) buy it
-// (plan 0011 F1). v10: taxes come from four real bases (land / per-building profit /
+// (plan 0011 F1). F2 split the bundled mines into coal/iron/lumber; F3 split the
+// bundled `factories` into seven single/few-output industrial buildings (plan
+// 0011 F3). v10: taxes come from four real bases (land / per-building profit /
 // final consumption / tariff, `Economy.taxes` + `Economy.taxBaseQty`), never
 // from GDP (ADR 0023). Every building type carries a declarative production
 // recipe (`BUILDING_RECIPES`, engine/data.ts) that is the single source of truth
@@ -157,7 +159,15 @@ export type BuildingId =
   | 'coalMines'
   | 'ironMines'
   | 'lumberMills'
-  | 'factories'
+  // Plan 0011 F3: the bundled `factories` split into seven single/few-output
+  // industrial buildings. Textiles are the one two-output chain (fabric→clothes).
+  | 'textileMills'
+  | 'furnitureWorks'
+  | 'distilleries'
+  | 'machineryWorks'
+  | 'steelMills'
+  | 'arsenals'
+  | 'luxuryWorks'
   | 'railroads'
   | 'ports'
   | 'universities'
@@ -346,7 +356,7 @@ export type PolicyProposal = {
 /**
  * The stats a ConfigBlock condition may read (ADR 0024 §6). ADR 0024 says
  * conditions share `ModifierStat` with effects, but real threshold conditions
- * also read raw readings that are NOT modifier seams (`debtRatio`, `factories`,
+ * also read raw readings that are NOT modifier seams (`debtRatio`, `industry`,
  * `treasury`, `debt`, `army`, `navy`, `techLevel`). Those are added here rather
  * than lossy-mapped onto a ModifierStat, so no condition is silently dropped.
  * See docs/plans/0009-config-refactor.md §7 (待定) for the follow-up note.
@@ -359,7 +369,7 @@ export type ConditionStat =
   | 'army'
   | 'navy'
   | 'techLevel'
-  | 'factories'
+  | 'industry'
   /**
    * C7: the industrial production gate reads the average of the effective
    * coal/iron endowment multipliers, which is not a single ModifierStat seam.

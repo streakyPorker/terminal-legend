@@ -27,7 +27,7 @@ import { DEBT_PRESSURE_BLOCK } from '../engine/config/blocks/fiscal'
 import { GATE_BLOCKS } from '../engine/config/blocks/gates'
 import { evaluateThresholds } from '../engine/thresholds'
 import { addModifier, applyModifiers, tickModifiers } from '../engine/modifiers'
-import { makeRngForWorld } from '../engine/data'
+import { industrialBuildingCount, makeRngForWorld } from '../engine/data'
 import { advance, newWorld } from '../engine/sim'
 
 const country = (seed: number, id = 'QING'): { world: WorldState; c: Country } => {
@@ -129,7 +129,7 @@ const OLD_RULES: OldRule[] = [
     id: 'industrial-takeoff',
     label: '工业起飞',
     mode: 'while',
-    conditions: [{ stat: 'factories', op: '>=', value: 100 }],
+    conditions: [{ stat: 'industry', op: '>=', value: 100 }],
     modifiers: [{ stat: 'factoryOutput', stack: 'percent', value: 10 }],
   },
   {
@@ -196,8 +196,8 @@ function oldReadStat(c: Country, stat: ConditionStat): number {
       return c.military.navy
     case 'techLevel':
       return c.tech.level
-    case 'factories':
-      return c.econ.buildings.factories
+    case 'industry':
+      return industrialBuildingCount(c)
     case 'prestige':
       return c.diplo.prestige
     case 'income':
@@ -517,10 +517,10 @@ describe('migration equivalence with the old thresholds system', () => {
 
   test('synthetic states produce identical fired blocks and modifier values', () => {
     const states: Partial<Record<string, number>>[] = [
-      { radicals: 5, legitimacy: 70, literacy: 0.7, debtRatio: 0, factories: 0, unemployment: 0, bureaucracy: 0 },
-      { radicals: 55, legitimacy: 70, literacy: 0.5, debtRatio: 0, factories: 0, unemployment: 0, bureaucracy: 0 },
-      { radicals: 99, legitimacy: 30, literacy: 0.5, debtRatio: 2, factories: 120, unemployment: 25, bureaucracy: 80 },
-      { radicals: 0, legitimacy: 20, literacy: 0, debtRatio: 0.5, factories: 0, unemployment: 3, bureaucracy: 10 },
+      { radicals: 5, legitimacy: 70, literacy: 0.7, debtRatio: 0, industry: 0, unemployment: 0, bureaucracy: 0 },
+      { radicals: 55, legitimacy: 70, literacy: 0.5, debtRatio: 0, industry: 0, unemployment: 0, bureaucracy: 0 },
+      { radicals: 99, legitimacy: 30, literacy: 0.5, debtRatio: 2, industry: 120, unemployment: 25, bureaucracy: 80 },
+      { radicals: 0, legitimacy: 20, literacy: 0, debtRatio: 0.5, industry: 0, unemployment: 3, bureaucracy: 10 },
     ]
     for (const state of states) {
       const fresh = country(9017).c
@@ -530,7 +530,7 @@ describe('migration equivalence with the old thresholds system', () => {
       fresh.pops.literacy = state.literacy ?? 0
       fresh.econ.gdp = 100
       fresh.econ.treasury = -((state.debtRatio ?? 0) * fresh.econ.gdp)
-      fresh.econ.buildings.factories = state.factories ?? 0
+      fresh.econ.buildings.textileMills = state.industry ?? 0
       fresh.econ.unemployment = state.unemployment ?? 0
       fresh.bureaucracy.score = state.bureaucracy ?? 0
 

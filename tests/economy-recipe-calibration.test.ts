@@ -21,16 +21,34 @@ const PRODUCTION_BUILDINGS = [
   'coalMines',
   'ironMines',
   'lumberMills',
-  'factories',
+  'textileMills',
+  'furnitureWorks',
+  'distilleries',
+  'machineryWorks',
+  'steelMills',
+  'arsenals',
+  'luxuryWorks',
   'barracks',
   'universities',
   'offices',
 ] as const
 
+// Plan 0011 F3: the seven single/few-output industrial buildings replacing the
+// bundled `factories`. Aggregated for the reference-point margin gate.
+const INDUSTRIAL_BUILDINGS = [
+  'textileMills',
+  'furnitureWorks',
+  'distilleries',
+  'machineryWorks',
+  'steelMills',
+  'arsenals',
+  'luxuryWorks',
+] as const
+
 const GOOD_IDS_ALL = Object.keys(GOODS) as GoodId[]
 
 // Goods the plan requires to trade on both sides at least once per 12 months.
-const TWO_SIDED_GOODS: GoodId[] = ['grain', 'wood', 'coal', 'iron', 'fabric', 'machinery']
+const TWO_SIDED_GOODS: GoodId[] = ['grain', 'wood', 'coal', 'iron', 'fabric', 'machinery', 'steel']
 
 // Consumer goods the plan allows to be either two-sided or "intentionally
 // local" (plan §5 / PT-002). B5 picks local: artisans supply them everywhere, so
@@ -137,17 +155,23 @@ describe('B5 recipe calibration gates (plan 0008 §5)', () => {
     for (const id of PRODUCTION_BUILDINGS) expect(everProfitable[id]).toBe(true)
   })
 
-  test('factory margin lands in the 5–20% band at the reference operating point', async () => {
+  test('industrial margin lands in the 5–20% band at the reference operating point', async () => {
     const world = newWorld(BASELINE_SEED, 'QING')
     const aggregate = (): { profit: number; revenue: number; perCountry: Record<string, number> } => {
       let profit = 0
       let revenue = 0
       const perCountry: Record<string, number> = {}
       for (const id of MAJORS) {
-        const factories = countryOf(world, id).econ.buildingProfits.factories
-        profit += factories.profit
-        revenue += factories.revenue
-        perCountry[id] = factories.revenue > 0 ? factories.profit / factories.revenue : 0
+        let countryProfit = 0
+        let countryRevenue = 0
+        for (const building of INDUSTRIAL_BUILDINGS) {
+          const row = countryOf(world, id).econ.buildingProfits[building]
+          countryProfit += row.profit
+          countryRevenue += row.revenue
+        }
+        profit += countryProfit
+        revenue += countryRevenue
+        perCountry[id] = countryRevenue > 0 ? countryProfit / countryRevenue : 0
       }
       return { profit, revenue, perCountry }
     }
@@ -160,11 +184,12 @@ describe('B5 recipe calibration gates (plan 0008 §5)', () => {
       if (month === MONTHS) sample84 = aggregate()
     }
     // The reference point is the production-weighted aggregate across the major
-    // nations (plan §5 lets the reference be "the seed average"): the factories
-    // that actually exist, where they exist. Individual countries spread wider —
-    // the resource-rich, low-wage economies (RUS/JAP/QING) run above the band,
-    // which is expected — but the aggregate, and the industrial core's factories,
-    // must sit in the meaningful 5–20% band. Each must at least be profitable.
+    // nations (plan §5 lets the reference be "the seed average"): the industrial
+    // buildings that actually exist, where they exist. Individual countries
+    // spread wider — the resource-rich, low-wage economies (RUS/JAP/QING) run
+    // above the band, which is expected — but the aggregate, and the industrial
+    // core's stock, must sit in the meaningful 5–20% band. Each must at least be
+    // profitable.
     expect(sample24).toBeDefined()
     expect(sample84).toBeDefined()
     if (sample24 === undefined || sample84 === undefined) return

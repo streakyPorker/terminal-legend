@@ -119,15 +119,15 @@ describe('M2 construction queue and economy fixes', () => {
     expect(prussia).toBeDefined()
     if (prussia === undefined) return
 
-    const beforeFactories = prussia.econ.buildings.factories
+    const beforeTextiles = prussia.econ.buildings.textileMills
     const beforeTreasury = prussia.econ.treasury
     const result = applyDecision(
       world,
-      { countryId: 'PRU', action: 'build', params: { building: 'factories', count: 2 } },
+      { countryId: 'PRU', action: 'build', params: { building: 'textileMills', count: 2 } },
       makeRngForWorld(world),
     )
     expect(result.ok).toBe(true)
-    expect(prussia.econ.buildings.factories).toBe(beforeFactories)
+    expect(prussia.econ.buildings.textileMills).toBe(beforeTextiles)
     expect(prussia.econ.treasury).toBe(beforeTreasury)
     expect(prussia.econ.constructionQueue.length).toBe(1)
     const project = prussia.econ.constructionQueue[0]
@@ -141,17 +141,17 @@ describe('M2 construction queue and economy fixes', () => {
     expect(prussia).toBeDefined()
     if (prussia === undefined) return
 
-    const before = prussia.econ.buildings.factories
+    const before = prussia.econ.buildings.textileMills
     prussia.econ.treasury = 200
     applyDecision(
       world,
-      { countryId: 'PRU', action: 'build', params: { building: 'factories', count: 1 } },
+      { countryId: 'PRU', action: 'build', params: { building: 'textileMills', count: 1 } },
       makeRngForWorld(world),
     )
     advance(world, 24, [], makeRngForWorld(world))
     // Monthly depreciation means the stock is not exactly before + 1, but the
     // project completed and added a factory on top of the worn stock.
-    expect(prussia.econ.buildings.factories).toBeGreaterThan(before * 0.9)
+    expect(prussia.econ.buildings.textileMills).toBeGreaterThan(before * 0.9)
     // Private replacement projects may still be in the queue; the state project
     // under test has completed.
     expect(prussia.econ.constructionQueue.filter(one => one.owner === 'state').length).toBe(0)
@@ -167,7 +167,7 @@ describe('M2 construction queue and economy fixes', () => {
     prussia.econ.buildings.workshops = 0
     applyDecision(
       world,
-      { countryId: 'PRU', action: 'build', params: { building: 'factories', count: 1 } },
+      { countryId: 'PRU', action: 'build', params: { building: 'textileMills', count: 1 } },
       makeRngForWorld(world),
     )
     advance(world, 3, [], makeRngForWorld(world))
@@ -214,7 +214,7 @@ describe('M2 construction queue and economy fixes', () => {
     expect(armedExpense - leanExpense).toBeLessThan(10.5)
   })
 
-  test('unemployment reacts to factories, literacy and unrest', async () => {
+  test('unemployment reacts to industry, literacy and unrest', async () => {
     const world = newWorld(9, 'QING')
     const qing = world.countries.QING
     expect(qing).toBeDefined()
@@ -222,7 +222,7 @@ describe('M2 construction queue and economy fixes', () => {
 
     const base = deriveUnemployment(qing)
     expect(base).toBeGreaterThan(0)
-    qing.econ.buildings.factories += 40
+    qing.econ.buildings.textileMills += 40
     expect(deriveUnemployment(qing)).toBeLessThan(base)
     qing.pops.literacy += 0.2
     expect(deriveUnemployment(qing)).toBeLessThan(base)
@@ -572,7 +572,7 @@ describe('M6 destiny and ironman', () => {
     qing.econ.constructionQueue = [
       {
         id: 'state-1',
-        building: 'factories',
+        building: 'textileMills',
         count: 2,
         owner: 'state',
         monthsLeft: 4,
@@ -593,10 +593,10 @@ describe('M6 destiny and ironman', () => {
         startedAt: { ...world.date },
       },
     ]
-    const factories = qing.econ.buildings.factories
+    const textiles = qing.econ.buildings.textileMills
     const result = applyCheat(world, { action: 'finishProjects' })
     expect(result.ok).toBe(true)
-    expect(qing.econ.buildings.factories).toBe(factories + 2)
+    expect(qing.econ.buildings.textileMills).toBe(textiles + 2)
     expect(qing.econ.constructionQueue.map(one => one.id)).toEqual(['private-1'])
   })
 

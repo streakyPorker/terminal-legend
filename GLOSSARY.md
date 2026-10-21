@@ -59,7 +59,7 @@ _Avoid_: 利润率表, 建筑盈亏
 一类建筑**只产出一种货**（少数链条允许两产，如纺织厂产 `fabric` + `clothes`）的设计原则。
 取代旧的「矿场一包三货、工厂一包七货」；目的是让逐建筑利润率**读得清、调得动**。
 每个产货建筑有目标利润带，并进入 `tests/economy-recipe-calibration.test.ts` 的 gate
-（plan 0011 §3/§6，ADR 0026；矿场拆分已完成——F2：`coalMines`/`ironMines`/`lumberMills`；工厂拆分在 F3–F4）。
+（plan 0011 §3/§6，ADR 0026；矿场拆分已完成——F2：`coalMines`/`ironMines`/`lumberMills`；工厂拆分已完成——F3：`textileMills`/`furnitureWorks`/`distilleries`/`machineryWorks`/`steelMills`/`arsenals`/`luxuryWorks`）。
 _Avoid_: 单一产出, 专业建筑
 
 **建筑解锁**:
@@ -70,15 +70,15 @@ _Avoid_: 建筑门槛, 前置科技
 
 **铁矿石**:
 商品 id 仍为 `iron`，但显示名从「钢铁」**改为「铁矿石」**，并改低价（基础价 1.0）。由铁矿
-（`ironMines`）产出，是工厂炼钢的投入。资源禀赋 `iron`（铁矿）产出它，语义自洽
-（plan 0011 §2/§3，ADR 0026，World v11 已实现——F1 商品、F2 铁矿建筑）。
+（`ironMines`）产出，是钢铁厂（`steelMills`）炼钢的投入。资源禀赋 `iron`（铁矿）产出它，语义自洽
+（plan 0011 §2/§3，ADR 0026，World v11 已实现——F1 商品、F2 铁矿建筑、F3 钢铁厂）。
 _Avoid_: 铁, 铁矿（那是对应的资源禀赋）
 
 **钢铁**:
-**新商品 `steel`**（基础价 2.2，介于铁矿石与机械之间）：由工厂（`factories`；拆分后为 `steelMills`）
-用「铁矿石 + 煤」炼成；铁路、建设投资（`INVESTMENT_DEMAND`）、政府建设（`GOVERNMENT_DEMAND`）与
-重工业（`machinery`/`arms`/`furniture`，F1 仍打包在工厂内）消耗它。**本次唯一新增的商品**——新商品集
-保持最小（plan 0011 §3，ADR 0026，World v11 已实现——F1）。
+**新商品 `steel`**（基础价 2.2，介于铁矿石与机械之间）：由钢铁厂（`steelMills`）用「铁矿石 + 煤」
+炼成；铁路、建设投资（`INVESTMENT_DEMAND`）、政府建设（`GOVERNMENT_DEMAND`）与重工业
+（机械厂 `machineryWorks` 产 `machinery`、兵工厂 `arsenals` 产 `arms`、家具厂 `furnitureWorks`）
+消耗它。**本次唯一新增的商品**——新商品集保持最小（plan 0011 §3，ADR 0026，World v11 已实现——F1、F3）。
 _Avoid_: 铁, 钢（口语）
 
 **工资分摊**:
