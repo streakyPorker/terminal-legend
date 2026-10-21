@@ -1,6 +1,6 @@
 # 经济系统 remake（配方经济 · 四税基 · 贸易路线）
 
-- Status: proposed（当前最高优先级；0002 事件树与 0005 科技树 v8 暂缓）
+- Status: B1–B5 shipped（World v10）；**B6 = 文档同步（本次进行中）**。0002 事件树与 0005 科技树 v8 暂缓
 - Depends on: `0003-economic-loop.md`、`0004-trade-diplomacy.md`、ADR 0005（不做存档兼容）、ADR 0006–0019、ADR 0020（贸易路线，本系列第①步）
 - Scope: 把「抽象产出 + GDP 比例税」换成「逐建筑显式配方 + 要素/消费/贸易税基」。世界版本升到 **v10**。
 - 来源：试玩 PT-031（`docs/playtest-issues.md`）＋玩家口述：
@@ -31,7 +31,7 @@
 - 不做多币种/汇率、不做每国独立科技树、不做 0002 事件树。
 - 不做建筑子类型拆分（如「纺织厂/机械厂」）：先按「一类建筑 = 一个多产出配方包」；子类型拆分为后续 v10 备选。
 
-## 2. 数据模型（World v9）
+## 2. 数据模型（World v9 → v10）
 
 ### 2.1 `BUILDING_RECIPES`（单一真源，engine/data.ts）
 
@@ -196,7 +196,7 @@ export const WAGE_ALLOCATION: {
 | **B3（决策联动）** ✅ | 私有投资改用利润率；加 utilization 门控与深度亏损折旧 | economic-loop 投资相关、60/84 基线 |
 | **B4（税基）** ✅ | 移除 `taxRate`，加 `taxes`；重写 `incomeParts`；`v3_action tax`；fiscal/sim/thresholds/inspect | fiscal.test「税是 GDP 份额」、经济循环高税侵蚀 |
 | **B5（再校准）** ✅ | 调配方系数与 `WAGE_ALLOCATION`；加校准测试；收敛 PT-002/PT-001 | economy-calibration、trade 基线 |
-| **B6（文档）** | ADR 0021–0023、README/GLOSSARY、playtest 状态更新 | — |
+| **B6（文档）** | 🔧 ADR 0021–0023、README/GLOSSARY、`gm-handbook.md`、playtest 状态更新（**本次进行中**） | — |
 
 - **进度**：B1+B2+B3 已实现（ADR 0021、ADR 0022，World v9）。`BUILDING_RECIPES` 为产出与中间投入的单一真源，
   逐建筑 `buildingProfits` 快照入 `Economy` 与 `v3_inspect economy`。B3 把快照接进决策：
@@ -216,7 +216,9 @@ export const WAGE_ALLOCATION: {
   工业核心 GBR/FRA/PRU 各自落在 5–20%（GBR 7%、FRA 12%、PRU 18%）。机械两侧基线恢复到
   `≥ months − 2`（0007-E1 原界，重新收紧）。新增 `tests/economy-recipe-calibration.test.ts`
   （9 项 gate）。PT-002 按 §5 的另一允许路径收敛：成衣/酒/家具判定为**本地自给**（手工匠供给），
-  不做全球双向贸易——真双向会掏空农村真实收入并饿死鸦片危机门。**B6 尚未开始。**
+  不做全球双向贸易——真双向会掏空农村真实收入并饿死鸦片危机门。**B6（文档同步）本次进行中**：
+  更新 `docs/gm-handbook.md`、`README.md`、`GLOSSARY.md`、`docs/playtest-issues.md` 与 ADR 0021–0023
+  引用，使其与 shipped 状态（World v10）一致。
 
 - ①（贸易路线，ADR 0020）先于本计划落地；B5 再校准会顺带重定路线收益。
 - 每个包独立提交、测试全绿再进下一个。

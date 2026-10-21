@@ -4,8 +4,8 @@
 与操作都通过 MCP 工具完成。这一份文档就是你的唯一机制参考，遇到「为什么变了」先翻它，
 再按指向调用 `v3_inspect`。
 
-> 世界版本：**v9**（建筑配方已落地，ADR 0021/0022）。数值口径以工具返回为准，
-> 本手册只解释**为什么**，不复述**是多少**。
+> 世界版本：**v10**（建筑配方、利用率/利润驱动投资与**四税基**均已落地，ADR 0021/0022/0023）。
+> 数值口径以工具返回为准，本手册只解释**为什么**，不复述**是多少**。
 
 ---
 
@@ -75,7 +75,7 @@
 | --- | --- | --- | --- |
 | `build` | `building`、`count` | `count` 1..5 | 入队一座国有项目（每槽最多 5 座） |
 | `cancel` | `projectId` | 无 | **仅国有**项目可取消；私人项目不可取消 |
-| `tax` | `rate` | 0..60 | 税率（当前口径见 §4.7） |
+| `tax` | `base`、`rate` | `base`∈ land/profit/consumption/tariff；`rate` 0..60 | 设定四大税基之一；省略 `base` 返回税菜单（见 §4.7） |
 | `tariff` | `rate` | `rate` 0..60；`exportRate` 可选 0..60 | `rate` 是进口税率；省略 `exportRate` 则进出口同率 |
 | `spending` | `category`、`amount` | `category`∈ army/navy/bureaucracy/education/welfare/construction；`amount` 0..50 | 设定支出等级 |
 | `research` | `tech` | 无 | 指定研究方向（科技名） |
@@ -127,7 +127,7 @@
 | --- | --- | --- | ---: | --- |
 | 农场 `farms` | grain 0.30、wood 0.04、opium 0.004 | 无 | 0.3 | tech + infra + access（wood 除外） |
 | 矿场 `mines` | coal 0.5、iron 0.42、wood 0.04 | 无 | 0.6 | tech（wood 除外） |
-| 工厂 `factories` | fabric 0.6、clothes 0.38、liquor 0.2、furniture 0.22、machinery 0.18、arms 0.07、luxury 0.035 | grain 1.0、coal 0.35、iron 0.4、fabric 0.45、wood 0.2、machinery 0.18 | 1.0 | tech + industrial（liquor 仅 industrial） |
+| 工厂 `factories` | fabric 0.6、clothes 0.28、liquor 0.14、furniture 0.16、machinery 0.18、arms 0.07、luxury 0.035 | grain 0.5、coal 0.18、iron 0.2、fabric 0.2、wood 0.1、machinery 0.18 | 1.0 | tech + industrial（liquor 仅 industrial） |
 | 铁路 `railroads` | 无 | iron 0.5、wood 0.4 | 0.2 | 无 |
 | 港口 `ports` | 无 | 无 | 0.4 | 无 |
 | 大学 `universities` | services 0.2 | 无 | 0.2 | 无 |
@@ -140,13 +140,25 @@
 - **中间投入进入需求**（用于定价与贸易），但**不计入 GDP**；GDP 只算最终用途。
 - 除逐建筑配方外，还有**国家级**项留在引擎里（手工业者产出、总人口服务项、鸦片国家
   `outputFactor`、工业城镇的煤/铁/布/木消费）。它们是历史口径，不随配方变动。
+- **B5 工厂再平衡（ADR 0021、plan 0008 §5）**：工厂配方调轻了材料单、并下调成衣/酒/家具产出
+  （见上表），使工厂在参考点可盈利。7 大国产量的加权**聚合工厂毛利 ≈ 15.8%**（5–20% 带内）；
+  工业核心 GBR 7%、FRA 12%、PRU 18%，资源富集、工资低的 RUS/QING/JAP 在带上界之上（属预期）。
+- **部分商品按设计为本地自给**：成衣、酒类、家具由各国**手工匠**（`ARTISAN_OUTPUT`）供给，
+  军械由本地兵营供给，**不做全球双向贸易**（PT-002 的另一允许路径；写入 ADR 0021 与
+  `tests/economy-recipe-calibration.test.ts`）。GM 不应指望在世界市场上买卖这四类商品；
+  真正的全球双向交易商品是粮食/木材/煤/铁/布/机械等原料与中间品。
 
 来源：ADR 0021、`engine/data.ts` `BUILDING_RECIPES`、`engine/sim.ts` `computeDemand`。
 
 ### 4.4 逐建筑经营利润 `buildingProfits`
 
 - 每月按类计算快照：**利润 = 产出价值 − 中间投入价值 − 分摊工资**。
-  工资按 `labor × count` 占比分摊全国工资，故 `Σ profit.wages === 全国 wages`。
+- **工资分摊可配置（plan 0008 B5）**：全国工资如何摊到各建筑类型由 `engine/data.ts` 的
+  `WAGE_ALLOCATION = { basis, weights? }` 决定。`basis` 取：
+  `'labor'`（按 `用工 × 座数`，旧口径）| `'valueAdded'`（按 `max(0, 产出价值 − 中间投入)`，
+  **当前值**）| `'capitalPlusLabor'`（按 `用工 + 建造成本 × 0.25`）。`weights?` 可再按类型乘系数
+  （当前未用）。三种 basis 都**精确**满足 `Σ buildingProfits.wages === 全国 wages`。
+  （plan 0009 将把该常量迁到 `engine/config/economy.ts`；默认 `'valueAdded'`。）
 - 单位：`profitPerBuilding`（金/座）、毛利率 `profit / revenue`。
 - **自 B3（ADR 0022）起它已驱动决策**：
   - 产出按**上月**存储的 `utilization` 门控（亏损类目闲置，下界 0.5，一阶平滑 0.25）；
@@ -156,7 +168,7 @@
   不是同一个量；通常更大，仅供判断「这类建筑按现价赚不赚钱」。
 - 查看：`v3_inspect economy` 的逐建筑行（含「开工率 %」「闲置」标记）。
 
-来源：ADR 0021、ADR 0022、`engine/inspect.ts` `economySection`。
+来源：ADR 0021、ADR 0022、`engine/data.ts`（`WAGE_ALLOCATION`）、`engine/inspect.ts` `economySection`。
 
 ### 4.5 消费、工资与利润、私人资本
 
@@ -193,32 +205,38 @@
 来源：ADR 0010/0012/0013/0015、README「建造能力」、`engine/sim.ts`（`CAPACITY_COST`/
 `WORKLOAD_MULTIPLIER=30`/`CONSTRUCTION_COST_PER_POINT=0.2`/`CONSTRUCTION_RENT_PER_POINT=0.3`）。
 
-### 4.7 税制
+### 4.7 税制（四税基，ADR 0023）
 
-**现状（World v9，仍在用）**：税入不按真实税基，而按 GDP 比例：
-
-```
-税入 = GDP × (税率/100) × 0.45
-     × 征收效率 × 合规率 × (1 − 债务收入惩罚)
-征收效率 = 0.5 + 合法性 / 200        （受 taxEfficiency 修正）
-合规率   = 税率 ≤ 25% 时为 1，>25% 起按 1 − (税率−25)×0.015 侵蚀，下限 0.45（拉弗曲线）
-```
-
-**四税基 remake 在建（plan 0008 B4）**：届时不再按 GDP 比例，改为：
+**现状（World v10）**：税入按**四个真实税基**累加，**GDP 不再是税基**（它只是派生的产出指标）：
 
 | 税基 | 税基量 | 承担者 |
 | --- | --- | --- |
-| **土地税** `land` | `resources.farmland × 地价系数` | 地主 / 农业 |
+| **土地税** `land` | `resources.farmland × 4`（地价系数） | 地主 / 农业 |
 | **企业所得税** `profit` | `Σ_建筑 max(0, buildingProfit.profit)`，**逐建筑单独算后累加** | 资本 / 经营体 |
-| **消费品消费税** `consumption` | `Σ_{消费品} 最终消费量 × 价格`（**仅最终消费，不含中间投入**） | 消费者 |
-| **关税** `tariff` | 进出口货值（含贸易路线） | 进出口商 |
+| **消费品消费税** `consumption` | Stone-Geary 的**最终消费**货值（**仅最终消费，不含中间投入**） | 消费者 |
+| **关税** `tariff` | 进出口货值（含贸易路线），在边境征清 | 进出口商 |
 
-统一式：`税收(base) = 税基量 × 税率 × 征收效率(官僚/合法/合规) × 债务削减`；
-`collection = clamp(0.35 + 官僚效能/200 + 合法性/400, 0.3, 1.1)`。
-**届时务必**：不再声称「税入 = GDP 比例」；按 `v3_inspect fiscal` 的税基逐项解释。
+统一式（土地税 / 企业税 / 消费税）：
 
-来源：`engine/fiscal.ts` `incomeParts`/`taxEfficiency`/`taxCompliance`、
-`docs/plans/0008-economy-remake.md` §4。
+```
+税额 = 税基量 × 税率 × 征收效率 × 合规 × 债务削减
+征收效率 = clamp(0.35 + 官僚效能/200 + 合法性/400, 0.3, 1.1) × taxEfficiency
+合规     = 税率 ≤ 25% 时为 1，>25% 起按 1 − (税率−25)×0.015 侵蚀，下限 0.45（逐基）
+债务削减 = 1 − 债务压力收入惩罚
+```
+
+- **关税**：`税额 = 边境实收 duty × 债务削减`（在边境一次征清，征收效率按设计为 1）。
+- **初始税率**：土地 2% / 企业 2% / 消费 3%（关税取各国种子值，5%~20%），
+  四基合计与旧 GDP 比例制相当（无财政冲击）。
+- **税负归属**：私人可支配收入按私人税负（土 + 企 + 消，**不含关税**）扣减，
+  闭合宏观循环、避免重复计征；关税在边境由进出口商一次缴清。
+- **查看**：`v3_inspect fiscal` 逐基显示**税基量 / 税率 / 税额**。
+- **设置**：`v3_action tax { base, rate }`，`base ∈ land/profit/consumption/tariff`（0..60）；
+  省略 `base` 返回四基菜单与当前税率。
+- **务必**：不再声称「税入 = GDP 比例」；按 `v3_inspect fiscal` 的税基逐项解释。
+
+来源：ADR 0023、`engine/fiscal.ts`（`taxBaseRevenues`/`collectionEfficiency`/`taxCompliance`）、
+`engine/economy.ts`（税基量快照）、`docs/plans/0008-economy-remake.md` §4。
 
 ## 5. 贸易
 
@@ -343,6 +361,7 @@ GLOSSARY（航线/到岸成本/软容量/禁运）。
 | 收入 > 支出，净资产仍下降 | 私人进口逆差由**私人资本/私人外债**承担，**不进国库账** | `v3_inspect fiscal`（私人逆差、私人外债） |
 | 出口为 0，不知为什么 | 全球可能没有 bid，或伙伴关系/禁运/战争切断 | `v3_inspect trade`、`market`（伙伴与货值） |
 | 关税收入翻倍 | 进口税与出口税两个方向之和，或贸易量上升 | `v3_inspect fiscal`（含税率行） |
+| 税入与 GDP 不再按比例 | 已改为**四税基**（土地 / 企业 / 消费 / 关税），GDP 只作派生产出指标 | `v3_inspect fiscal`（每基税基量/税率/税额）、§4.7 |
 | 税入随租金缩放、GDP 上升税反降 | 「其他（建造力出租）」入账时差曾被并入上月收入；现已用 `lastIncomeOther` 修正口径 | `v3_inspect fiscal` |
 | 失业率与「原始利用率」不一致 | 失业率是**结构性**指标，含工厂吸纳、进口竞争与在职不足；原始利用率只反映需求缺口 | `v3_inspect labor` |
 | 自由贸易后关税不是 0 | 自由贸易下限 **5%**，且进出口各收一次 | `v3_inspect fiscal`、README「双向关税」 |
@@ -354,16 +373,22 @@ GLOSSARY（航线/到岸成本/软容量/禁运）。
 
 ## 10. 在建（本手册将随后续包更新）
 
-- **plan 0008**：
+- **plan 0008 经济 remake**：
   - **B1~B3 已落地**：`BUILDING_RECIPES` 配方单一真源、逐建筑 `buildingProfits` 快照、
     利用率与利润驱动的私人投资（ADR 0021、ADR 0022，World v9）。
-  - **B4（在建）**：**四税基**（土地税 / 企业所得税逐建筑单算 / 消费品消费税 / 关税），
-    移除 GDP 比例税基；`v3_action tax` 改按 `base` 设税率。
-  - **B5（在建）**：**物价与配方再平衡**，收敛 PT-002（成衣/酒/家具/军械全球过剩）与 PT-001。
-- 这些落地后，§4.4（利润口径）、§4.7（税制）与 §9 会同步更新；届时以 `v3_inspect`
-  的分区输出为准。
+  - **B4 已落地**：**四税基**（土地税 / 企业所得税逐建筑单算 / 消费品消费税 / 关税），
+    移除 GDP 比例税基；`v3_action tax` 改按 `base` 设税率（ADR 0023，World v10）。
+  - **B5 已落地**：**配方 + 工资分摊再平衡**（`WAGE_ALLOCATION`，默认 `'valueAdded'`），
+    工厂转为可盈利；消费品按设计判为**本地自给**，收敛 PT-002 / PT-001。
+  - **B6（本次）**：文档同步（本手册、README、GLOSSARY、playtest 状态）。
+- **未完成的后续工作 = config-block 重构（ADR 0024 / plan 0009，取代 ADR 0004）**：
+  配置分层（`engine/config/` + `engine/data/`）与统一 `ConfigBlock` 乘数机制，
+  增量 TDD、每步一个提交、第一刀行为保持，里程碑 **C1–C7**；不升世界版本。
+- 经济口径已全部落地，§4.4（利润口径）、§4.7（税制）与 §9 均已按 shipped 状态更新；
+  实际数值以 `v3_inspect` 的分区输出为准。
 
-来源：`docs/plans/0008-economy-remake.md` §6、`docs/playtest-issues.md` PT-031。
+来源：`docs/plans/0008-economy-remake.md` §6、`docs/plans/0009-config-refactor.md`、
+`docs/playtest-issues.md` PT-031。
 
 ---
 

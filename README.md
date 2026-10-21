@@ -26,14 +26,20 @@
     识字率 ≥60% → 启蒙时代）；`while` 规则条件消失即移除，`once` 规则永久保留。
   - **事件**：事件选项的 `effects.modifiers` 直接携带限时 buff。
 - **支出法经济循环**：每月按 C+I+G+NX 核算 GDP（NX 为净出口，已接入双边贸易）；Stone-Geary
-  消费需求、劳动份额与利润分配、私人储蓄与自动投资、建造队列（国有/私人，按建造点推进）、国家级资源禀赋
+  消费需求、劳动份额与利润分配（全国工资再按 `WAGE_ALLOCATION` 摊到各建筑类型的经营利润）、
+  私人储蓄与自动投资、建造队列（国有/私人，按建造点推进）、国家级资源禀赋
   （农田/林地/煤矿/铁矿）与 0.7–1.3 的软乘数共同构成增长螺旋。私人项目可见但不可取消。
 - **建筑配方（单一真源）**：`engine/data.ts` 的 `BUILDING_RECIPES` 逐类声明每座每月的
   产出与中间投入（含副产品）与用工，是产出与投入的**唯一来源**；`computeProduction` 只读该表，
   中间投入按 `Σ 建筑数 × 配方投入` 汇总。同时每月算出**逐建筑经营利润**快照
   `econ.buildingProfits`（产出价 − 投入价 − 分摊工资），`v3_inspect economy` 可读。
+  全国工资按 `WAGE_ALLOCATION`（`basis: 'labor' | 'valueAdded' | 'capitalPlusLabor'`，当前
+  `valueAdded`）分摊到各建筑类型，`weights?` 可按类型再加权；三种 basis 都精确满足
+  `Σ buildingProfits.wages === 全国工资`（plan 0008 B5；plan 0009 将迁到 `engine/config/economy.ts`）。
   利用率门控产能、亏损类目闲置萎缩、私人投资只看盈利类目（ADR 0021/0022，World v9）；
-  企业税按逐类利润累加（ADR 0023，World v10）。
+  企业税按逐类利润累加（ADR 0023，World v10）。B5 重定工厂配方（调轻材料单、下调成衣/酒/家具
+  产出）使其可盈利（7 大国产量加权聚合毛利 ≈ 15.8%）；成衣/酒/家具/军械按设计为**本地自给**
+  （手工匠与本地军供），不做全球双向贸易。
 - **双向关税与到岸价**：`tariff` 是进口税率，`exportTariff` 可选、缺省与进口同率（旧行为）。
   到岸价 = 出口国国内价 × (1 + 出口关税) × (1 + 进口关税) × 运输 / 接入 / 风险；进口国私人付
   边境价 + 进口税，出口国国库收出口税，进口国国库收进口税。`v3_action tariff` 可用 `rate`
@@ -216,7 +222,7 @@ claude plugin test .
 .claude-plugin/plugin.json   清单、userConfig（AI 模型）
 hooks/hooks.json             单个 hooks 模块
 hooks/register.tsx           命令、工具、御前会议、秘书、系统提示、三层渲染
-types/index.d.ts             PluginState 契约与世界模型类型（world v9：建筑配方与逐建筑利润；科技树规划中）
+types/index.d.ts             PluginState 契约与世界模型类型（world v10：建筑配方、逐建筑利润与四税基；科技树规划中）
 engine/data.ts               国家/商品/建筑/科技/领袖/事件模板、官僚与失业派生
 engine/sim.ts                门面（barrel）：原样再导出下列模块，保持公共导入面不变
 engine/internal.ts           跨模块共享的小工具：clamp、日期、GOOD 校验、v7 建造字段补齐
