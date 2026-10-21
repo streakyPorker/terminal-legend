@@ -4,7 +4,6 @@ import {
   BUILDING_IDS,
   BUILDING_OUTPUT,
   BUILDING_RECIPES,
-  BUILDING_TIME,
   INVESTMENT_DEMAND,
   makeRngForWorld,
 } from '../engine/data'
@@ -105,7 +104,6 @@ describe('F3 industrial split: factories → seven single/few-output works', () 
     const tables: Record<string, Record<string, unknown>> = {
       BUILDING_RECIPES: BUILDING_RECIPES as unknown as Record<string, unknown>,
       BUILDINGS: BUILDINGS as unknown as Record<string, unknown>,
-      BUILDING_TIME: BUILDING_TIME as unknown as Record<string, unknown>,
       BUILDING_OUTPUT: BUILDING_OUTPUT as unknown as Record<string, unknown>,
       INVESTMENT_DEMAND: INVESTMENT_DEMAND as unknown as Record<string, unknown>,
       CAPACITY_COST: CAPACITY_COST as unknown as Record<string, unknown>,
@@ -126,9 +124,6 @@ describe('F3 industrial split: factories → seven single/few-output works', () 
     expect(BUILDINGS.steelMills.cost).toBe(5)
     expect(BUILDINGS.arsenals.cost).toBe(4.5)
     expect(BUILDINGS.luxuryWorks.cost).toBe(5)
-    expect(BUILDING_TIME.textileMills).toBe(4)
-    expect(BUILDING_TIME.machineryWorks).toBe(5)
-    expect(BUILDING_TIME.steelMills).toBe(5)
     expect(CAPACITY_COST.textileMills).toBe(2)
     expect(CAPACITY_COST.machineryWorks).toBe(2.5)
     expect(CAPACITY_COST.steelMills).toBe(2.5)

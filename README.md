@@ -338,7 +338,14 @@ view/panels/band.tsx         Band（AbovePrompt 仪表盘）
 view/panels/report.tsx       Report + TurnReport（命令输出）
 statusline/install.mjs       状态行调度器安装脚本
 tests/game.test.tsx          引擎、命令与渲染测试
-tests/first-slice.test.ts    第一刀（M1–M6）引擎与命令测试
+tests/first-slice-data.test.ts        第一刀 M1：类型 / 数据 / 存档迁移
+tests/first-slice-engine.test.ts      第一刀 M2–M6：引擎侧用例（建造 / 简报 / 中断 / 天命）
+tests/first-slice-modifiers.test.ts   第一刀：buff/debuff 叠算与政策/阈值/事件修正来源
+tests/first-slice-commands.test.ts    第一刀：M3–M6 命令与 hook 面 + v3_manual 工具面
+tests/economic-loop-gdp.test.ts           经济循环：支出法 GDP / Stone-Geary / 需求冲击
+tests/economic-loop-investment.test.ts    经济循环：私人资本 / 私人项目节奏 / 投资评分
+tests/economic-loop-resources.test.ts     经济循环：资源禀赋与 0.7–1.3 乘数
+tests/economic-loop-regressions.test.ts   经济循环：E4/E5 AI 与确定性 + Round 1–3 回归
 ```
 
 ## 路线图

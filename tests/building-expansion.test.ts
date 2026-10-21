@@ -4,7 +4,6 @@ import {
   BUILDING_IDS,
   BUILDING_OUTPUT,
   BUILDING_RECIPES,
-  BUILDING_TIME,
   INFRA_SUPPLY,
   infrastructureSupply,
   INVESTMENT_DEMAND,
@@ -43,7 +42,6 @@ describe('F4 building expansion: schools / canals / telegraphs / forts / navalYa
     const tables: Record<string, Record<string, unknown>> = {
       BUILDINGS: BUILDINGS as unknown as Record<string, unknown>,
       BUILDING_RECIPES: BUILDING_RECIPES as unknown as Record<string, unknown>,
-      BUILDING_TIME: BUILDING_TIME as unknown as Record<string, unknown>,
       BUILDING_OUTPUT: BUILDING_OUTPUT as unknown as Record<string, unknown>,
       INVESTMENT_DEMAND: INVESTMENT_DEMAND as unknown as Record<string, unknown>,
       CAPACITY_COST: CAPACITY_COST as unknown as Record<string, unknown>,
@@ -69,12 +67,6 @@ describe('F4 building expansion: schools / canals / telegraphs / forts / navalYa
     expect(BUILDINGS.telegraphs.cost).toBe(4)
     expect(BUILDINGS.forts.cost).toBe(4)
     expect(BUILDINGS.navalYards.cost).toBe(5)
-
-    expect(BUILDING_TIME.schools).toBe(3)
-    expect(BUILDING_TIME.canals).toBe(6)
-    expect(BUILDING_TIME.telegraphs).toBe(2)
-    expect(BUILDING_TIME.forts).toBe(4)
-    expect(BUILDING_TIME.navalYards).toBe(5)
 
     expect(CAPACITY_COST.schools).toBe(1)
     expect(CAPACITY_COST.canals).toBe(3)

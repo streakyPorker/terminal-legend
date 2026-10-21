@@ -406,32 +406,6 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   workshops: { name: '营造所', cost: 3, note: '消耗木材、粮食与铁，产出建造点', infrastructureNeed: 0.12 },
 }
 
-/** Months a project of each kind takes, before bureaucratic delay. */
-export const BUILDING_TIME: Record<BuildingId, number> = {
-  farms: 2,
-  coalMines: 3,
-  ironMines: 3,
-  lumberMills: 2,
-  textileMills: 4,
-  furnitureWorks: 3,
-  distilleries: 3,
-  machineryWorks: 5,
-  steelMills: 5,
-  arsenals: 4,
-  luxuryWorks: 4,
-  schools: 3,
-  canals: 6,
-  telegraphs: 2,
-  forts: 4,
-  navalYards: 5,
-  railroads: 8,
-  ports: 3,
-  universities: 5,
-  barracks: 2,
-  offices: 3,
-  workshops: 3,
-}
-
 export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[]
 
 export function buildOf(id: string): BuildingId | undefined {

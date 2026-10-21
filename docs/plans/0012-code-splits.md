@@ -56,8 +56,18 @@
 - `index.ts` — 保留 `INSPECT_SECTIONS` / `InspectSection` 与 `inspectWorld` 调度器，并重导出 `forecastWorld` / `InspectOptions`；旧 `inspect.ts` 的全部 5 个公共符号（`INSPECT_SECTIONS`/`InspectSection`/`InspectOptions`/`forecastWorld`/`inspectWorld`）导出集无缺无多，`import ... from '../engine/inspect'` 路径不变。
 - 完成后：`claude plugin test .` 388 pass / 0 fail，`validate` 通过（警告与拆分前一致）；16 个 section 函数 + `forecastWorld` + `inspectWorld` + 8 个 `shared` 助手经规范化 diff 与旧文件逐字节一致，World 仍 v11，行为零改动。最大文件 `index.ts` 121 行（远低于 600 软警）。
 
-### S6 测试拆分
-- `tests/first-slice.test.ts` / `tests/economic-loop.test.ts` 按关注点拆分（引擎/命令/渲染分开）。
+### S6 ✅ 测试拆分
+- `tests/first-slice.test.ts`（930）→ 4 个按关注点分文件，原文件删除：
+  - `first-slice-data.test.ts` — M1 类型 / 数据 / 存档迁移（5 用例）。
+  - `first-slice-engine.test.ts` — M2 建造队列与经济、M3 简报、M4/M5 中断判定、M6 天命动作等纯引擎用例（16 用例）。
+  - `first-slice-modifiers.test.ts` — buff/debuff 叠算、政策 / 阈值 / 事件修正来源、存量/流量语义（10 用例）。
+  - `first-slice-commands.test.ts` — M3 秘书、M4/M5 托管、M6 铁人与 `v3_manual` 的命令/hook 面用例（9 用例），并携带 `setupSurface` / `startCampaign` 脚手架。
+- `tests/economic-loop.test.ts`（856）→ 4 个按关注点分文件，原文件删除：
+  - `economic-loop-gdp.test.ts` — 支出法 GDP / Stone-Geary / 要素份额 + 需求冲击回路（5 用例）。
+  - `economic-loop-investment.test.ts` — 私人资本、私人项目节奏与投资评分（4 用例）。
+  - `economic-loop-resources.test.ts` — 资源禀赋与 0.7–1.3 乘数带（2 用例）。
+  - `economic-loop-regressions.test.ts` — E4/E5 AI 批处理与确定性 + Round 1–3 回归守卫（29 用例）。
+- 完成后：`claude plugin test .` 388 pass / 0 fail（跨 41 个文件，原 35 + 6），`validate` 通过（警告与拆分前一致）；被搬运的 80 个用例（first-slice 40 + economic-loop 40）逐字节原样迁移，仅调整各文件的 import 头与（跨 describe 拆分处的）describe 归并，断言零改动；World 仍 v11。最大文件 `economic-loop-regressions.test.ts` 597 行（<600 软警）。
 
 ## 2. 顺序与依赖
 

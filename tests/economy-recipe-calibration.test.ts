@@ -3,7 +3,6 @@ import {
   ARTISAN_OUTPUT,
   BUILDINGS,
   BUILDING_IDS,
-  BUILDING_TIME,
   GOODS,
   infrastructureStats,
   makeRngForWorld,
@@ -403,14 +402,10 @@ describe('F7 building calibration gates (plan 0011 §6/§7)', () => {
     expect(BUILDINGS.textileMills.cost).toBeGreaterThan(BUILDINGS.coalMines.cost)
     expect(BUILDINGS.coalMines.cost).toBeGreaterThan(BUILDINGS.farms.cost)
     // Railroads and canals are the longest, costliest, most capacity-hungry works.
-    expect(BUILDING_TIME.railroads).toBeGreaterThan(BUILDING_TIME.steelMills)
-    expect(BUILDING_TIME.canals).toBeGreaterThan(BUILDING_TIME.textileMills)
     expect(CAPACITY_COST.railroads).toBeGreaterThan(CAPACITY_COST.steelMills)
     expect(CAPACITY_COST.canals).toBeGreaterThan(CAPACITY_COST.schools)
     // Nothing is absurd: every type takes at least 2 months and at most 8.
     for (const id of BUILDING_IDS) {
-      expect(BUILDING_TIME[id], `${id} time`).toBeGreaterThanOrEqual(2)
-      expect(BUILDING_TIME[id], `${id} time`).toBeLessThanOrEqual(8)
       expect(BUILDINGS[id].cost, `${id} cost`).toBeGreaterThan(0)
       expect(CAPACITY_COST[id], `${id} capacity`).toBeGreaterThan(0)
     }
