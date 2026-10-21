@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# 提交前自动递增插件补丁版本号（每次 commit +1 patch）。
+# 同时更新 .claude-plugin/plugin.json 与 .claude-plugin/marketplace.json，
+# 并把它们加入本次提交，保证版本号随提交前进、永不回退。
+#
+# 安装（本仓库已用 core.hooksPath 指向 .githooks）：
+#   git config core.hooksPath .githooks
+#
+# 跳过某次递增： git commit --no-verify
+set -euo pipefail
+
+bump_file() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+  node -e '
+    const fs = require("fs")
+    const file = process.argv[1]
+    const src = fs.readFileSync(file, "utf8")
+    // 只替换第一个 "version": "x.y.z"（plugin.json 为顶层；marketplace.json 为 metadata）。
+    const out = src.replace(
+      /("version"\s*:\s*")(\d+)\.(\d+)\.(\d+)(")/,
+      (_, pre, major, minor, patch, post) => `${pre}${major}.${minor}.${Number(patch) + 1}${post}`,
+    )
+    if (out !== src) {
+      fs.writeFileSync(file, out)
+      console.error(`[pre-commit] bumped ${file}`)
+    }
+  ' "$file"
+  git add "$file"
+}
+
+bump_file .claude-plugin/plugin.json
+bump_file .claude-plugin/marketplace.json
