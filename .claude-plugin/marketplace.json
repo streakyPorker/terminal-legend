@@ -1,0 +1,19 @@
+{
+  "name": "terminal-legend",
+  "owner": {
+    "name": "streakyPorker"
+  },
+  "metadata": {
+    "description": "Victoria-3-inspired grand strategy simulation for Claude Code.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "terminal-legend",
+      "source": "./",
+      "description": "A Victoria-3-inspired grand strategy simulation inside Claude Code: a monthly war council, a delegable secretary subagent, deterministic economy and diplomacy, persona-driven AI leaders, a live HUD, and chat-native play.",
+      "category": "games",
+      "tags": ["game", "strategy", "simulation", "economy", "history"]
+    }
+  ]
+}

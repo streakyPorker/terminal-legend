@@ -67,6 +67,15 @@
 
 ## 快速开始
 
+**全局安装（可一键开关）**：
+
+```text
+/plugin install terminal-legend --marketplace https://gitcode.com/streakyPorker/terminal-legend.git
+```
+
+装好后用 `/plugin disable terminal-legend` / `/plugin enable terminal-legend`（或 `claude plugin disable|enable terminal-legend`）
+在任意会话里开关；本地开发仍可用 dev-mods 热重载。
+
 在本 mod 所在的 Claude Code 会话里（或 `claude --plugin-dir <这个目录>`）：
 
 ```text
