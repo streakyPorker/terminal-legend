@@ -1,5 +1,6 @@
 import type {
   BuildingId,
+  BuildingProfit,
   Country,
   ConstructionProject,
   Embargo,
@@ -24,6 +25,7 @@ import {
   BUILDINGS,
   BUILDING_IDS,
   BUILDING_OUTPUT,
+  BUILDING_RECIPES,
   CONSUMPTION_PROPENSITY,
   CONSUMER_GOODS,
   GOODS,
@@ -125,6 +127,7 @@ export type EconomySnapshot = {
   laborShare: number
   wages: number
   profits: number
+  buildingProfits: Record<BuildingId, BuildingProfit>
   labor: LaborStats
 }
 
@@ -249,48 +252,37 @@ function computeProduction(country: Country): Record<GoodId, number> {
       'production',
       applyModifiers(country, `${id}Output`, value * resources[id]),
     )
-  const farm = (value: number): number => applyModifiers(country, 'farmOutput', value)
-  const mine = (value: number): number => applyModifiers(country, 'mineOutput', value)
-  const factory = (value: number): number => applyModifiers(country, 'factoryOutput', value)
-
-  out.grain = output('grain', farm(cap(b.farms) * 0.30 * tech * infra * access))
-  out.wood = output('wood', farm(cap(b.farms) * 0.04) + mine(cap(b.mines) * 0.04))
-  out.coal = output('coal', mine(cap(b.mines) * 0.5 * tech))
-  out.iron = output('iron', mine(cap(b.mines) * 0.42 * tech))
-  out.fabric = output('fabric', factory(cap(b.factories) * 0.6 * tech * industrial))
-  // Artisans supply the bottom of the consumer market before factories do;
-  // without them an agrarian country reads as permanently short of clothes.
-  out.clothes = output(
-    'clothes',
-    factory(cap(b.factories) * 0.38 * tech * industrial) + country.pops.artisans * 0.035,
-  )
-  out.liquor = output(
-    'liquor',
-    factory(cap(b.factories) * 0.2 * industrial) + country.pops.artisans * 0.01,
-  )
-  out.furniture = output(
-    'furniture',
-    factory(cap(b.factories) * 0.22 * tech * industrial) + country.pops.artisans * 0.006,
-  )
-  out.machinery = output('machinery', factory(cap(b.factories) * 0.18 * tech * industrial))
-  out.arms = output(
-    'arms',
-    factory(cap(b.factories) * 0.07 * tech * industrial) + cap(b.barracks) * 0.05,
-  )
-  out.luxury = output('luxury', factory(cap(b.factories) * 0.035 * tech * industrial))
-  out.services = output(
-    'services',
-    (country.pops.total / 1000) * 0.5 * access +
-      country.pops.artisans * 0.01 +
-      cap(b.offices) * 0.8 +
-      cap(b.universities) * 0.2,
-  )
+  // Gated per-building output, summed by good (ADR 0021). BUILDING_RECIPES is
+  // the only source of the coefficients; the multiplier seams it names are the
+  // same `tech`/`infra`/`access`/`industrial` factors the code always applied.
+  const raw = zeroGoods()
+  for (const id of BUILDING_IDS) {
+    const recipe = BUILDING_RECIPES[id]
+    const count = cap(b[id])
+    if (count <= 0) continue
+    const modifier = recipe.outputModifier
+    for (const [good, coef] of Object.entries(recipe.output) as [GoodId, number][]) {
+      const gates = recipe.outputGates?.[good] ?? recipe.gates
+      let value = count * coef
+      if (gates?.tech) value *= tech
+      if (gates?.infrastructure) value *= infra
+      if (gates?.access) value *= access
+      if (gates?.industrial) value *= industrial
+      if (modifier !== undefined) value = applyModifiers(country, modifier, value)
+      raw[good] += value
+    }
+  }
   // Opium is farm-grown (plan 0004 §1.1) and scaled by the country's own
   // output factor, which lets Britain stand in for British India.
-  out.opium = output(
-    'opium',
-    cap(b.farms) * 0.004 * tech * infra * access * country.opium.outputFactor,
-  )
+  raw.opium *= country.opium.outputFactor
+  // Artisans supply the bottom of the consumer market before factories do;
+  // without them an agrarian country reads as permanently short of clothes.
+  // National (per-artisan/pop) terms, not per-building recipes.
+  raw.clothes += country.pops.artisans * 0.035
+  raw.liquor += country.pops.artisans * 0.01
+  raw.furniture += country.pops.artisans * 0.006
+  raw.services += (country.pops.total / 1000) * 0.5 * access + country.pops.artisans * 0.01
+  for (const id of GOOD_IDS) out[id] = output(id, raw[id])
   return out
 }
 
@@ -298,11 +290,8 @@ function computeProduction(country: Country): Record<GoodId, number> {
 export const WORKSHOP_CAPACITY_OUTPUT = 4
 
 /** Goods one workshop consumes per month to run at full capacity. */
-export const WORKSHOP_INPUTS: Partial<Record<GoodId, number>> = {
-  wood: 1,
-  grain: 0.6,
-  iron: 0.3,
-}
+export const WORKSHOP_INPUTS: Partial<Record<GoodId, number>> =
+  BUILDING_RECIPES.workshops.input
 
 /** Construction points a project needs each month, per building in the slot. */
 export const CAPACITY_COST: Record<BuildingId, number> = {
@@ -713,22 +702,30 @@ function computeDemand(country: Country): DemandBreakdown {
   const government = zeroGoods()
 
   // ---- intermediate demand: industrial inputs, not part of GDP ----
+  // Each building consumes its recipe.input (Σ count × coefficient). The
+  // per-popFactor household industrial terms and the military arms term stay
+  // national, outside the recipes.
+  const intermediate = zeroGoods()
+  for (const id of BUILDING_IDS) {
+    const count = b[id]
+    if (count <= 0) continue
+    for (const [good, perBuilding] of Object.entries(BUILDING_RECIPES[id].input) as [
+      GoodId,
+      number,
+    ][]) {
+      intermediate[good] += count * perBuilding
+    }
+  }
   // Industrial towns buy food off the market; this puts agrarian and
   // industrial economies on opposite sides of the grain trade instead of
   // every country holding a permanent grain mountain.
-  out.grain += demand('grain', b.factories * 1.0)
-  // Workshops turn wood, grain and iron into construction points.
-  for (const [good, perWorkshop] of Object.entries(WORKSHOP_INPUTS) as [
-    GoodId,
-    number,
-  ][]) {
-    if (perWorkshop > 0) out[good] += demand(good, b.workshops * perWorkshop)
+  intermediate.coal += popFactor * 1.2
+  intermediate.iron += popFactor * 0.8
+  intermediate.fabric += popFactor * 0.5
+  intermediate.wood += popFactor * 0.3
+  for (const good of GOOD_IDS) {
+    if (intermediate[good] !== 0) out[good] += demand(good, intermediate[good])
   }
-  out.coal += demand('coal', popFactor * 1.2 + b.factories * 0.35)
-  out.iron += demand('iron', popFactor * 0.8 + b.factories * 0.4 + b.railroads * 0.5)
-  out.fabric += demand('fabric', b.factories * 0.45 + popFactor * 0.5)
-  out.wood += demand('wood', b.factories * 0.2 + b.railroads * 0.4 + popFactor * 0.3)
-  out.machinery += demand('machinery', b.factories * 0.18)
   out.arms += demand('arms', country.military.army * 0.02 + country.military.navy * 0.01)
 
   // ---- investment demand from last month's actual construction spend ----
@@ -886,6 +883,41 @@ export function computeEconomy(
   const wages = realGdp * laborShare
   const profits = realGdp * (1 - laborShare)
 
+  // Per-building-type operating profit (ADR 0021 B2). Informational in B1+B2:
+  // it uses this month's recipe output/input valued at this month's prices and
+  // allocates the national wage bill by labor × count. No decision reads it
+  // until B3 wires it to idling and private investment.
+  const prices = country.econ.prices
+  const buildings = country.econ.buildings
+  let laborWeightTotal = 0
+  for (const id of BUILDING_IDS) laborWeightTotal += BUILDING_RECIPES[id].labor * buildings[id]
+  const buildingProfits = {} as Record<BuildingId, BuildingProfit>
+  for (const id of BUILDING_IDS) {
+    const recipe = BUILDING_RECIPES[id]
+    const count = buildings[id]
+    const effCount = effectiveCount(count)
+    let revenue = 0
+    let inputCost = 0
+    for (const [good, coef] of Object.entries(recipe.output) as [GoodId, number][]) {
+      revenue += coef * prices[good] * effCount
+    }
+    for (const [good, coef] of Object.entries(recipe.input) as [GoodId, number][]) {
+      inputCost += coef * prices[good] * effCount
+    }
+    const wageWeight =
+      laborWeightTotal > 0 ? (recipe.labor * count) / laborWeightTotal : 0
+    const typeWages = wages * wageWeight
+    const profit = revenue - inputCost - typeWages
+    buildingProfits[id] = {
+      revenue,
+      inputCost,
+      wages: typeWages,
+      profit,
+      utilization: 1,
+      profitPerBuilding: profit / Math.max(1, count),
+    }
+  }
+
   return {
     production,
     supply,
@@ -900,6 +932,7 @@ export function computeEconomy(
     laborShare,
     wages,
     profits,
+    buildingProfits,
     labor,
   }
 }
@@ -922,6 +955,7 @@ export function calibrateWorld(world: WorldState): void {
     country.econ.laborShare = snap.laborShare
     country.econ.wages = snap.wages
     country.econ.profits = snap.profits
+    country.econ.buildingProfits = snap.buildingProfits
     country.econ.laborDemand = snap.labor.demand
     country.econ.laborForce = snap.labor.force
     country.econ.laborUtilization = snap.labor.utilization
@@ -1527,6 +1561,7 @@ function simulateCountry(
   country.econ.laborShare = snap.laborShare
   country.econ.wages = snap.wages
   country.econ.profits = snap.profits
+  country.econ.buildingProfits = snap.buildingProfits
   country.econ.laborDemand = snap.labor.demand
   country.econ.laborForce = snap.labor.force
   country.econ.laborUtilization = snap.labor.utilization

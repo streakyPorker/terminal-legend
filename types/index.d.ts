@@ -1,9 +1,13 @@
 // Type contract for terminal-legend.
 // Self-contained by design: the engine loads it as the plugin's `types` entry
 // and type-checks every `$.state` key the hooks module names against it.
-// World model v8: persistent bilateral trade routes sit in front of the
-// spot clearing (ADR 0020); bilateral quantities, NX accounting, gold
-// settlement and resource imports remain live (plan 0004 T1a/T1b).
+// World model v9: every building type carries a declarative production recipe
+// (`BUILDING_RECIPES`, engine/data.ts) that is the single source of truth for
+// output AND intermediate input (ADR 0021), and each country stores a
+// per-building-type profit snapshot (`Economy.buildingProfits`). Persistent
+// bilateral trade routes still sit in front of the spot clearing (ADR 0020);
+// bilateral quantities, NX accounting, gold settlement and resource imports
+// remain live (plan 0004 T1a/T1b).
 
 export type GameDate = { year: number; month: number }
 
@@ -218,6 +222,28 @@ export type GdpComponents = {
   nx: number
 }
 
+/**
+ * Per-building-type operating profit snapshot (ADR 0021, plan 0008 B2). Values
+ * are this month's gold flows: output valued at this month's prices minus the
+ * recipe inputs at those prices minus the wage bill allocated to the type.
+ * Informational in B1+B2; B3 uses `utilization` and `profitPerBuilding` to
+ * drive idling and private investment.
+ */
+export type BuildingProfit = {
+  /** Σ recipe.output × price × effectiveCount (per month, gold). */
+  revenue: number
+  /** Σ recipe.input × price × effectiveCount (per month, gold). */
+  inputCost: number
+  /** Share of the national wage bill allocated by labor × count. */
+  wages: number
+  /** revenue − inputCost − wages. */
+  profit: number
+  /** 0..1 operating rate; 1 in B1+B2 (B3 will drive it). */
+  utilization: number
+  /** profit ÷ max(1, count); the per-building signal for B3. */
+  profitPerBuilding: number
+}
+
 /** A numeric seam that policies, events and laws may modify. */
 export type ModifierStat =
   | 'production'
@@ -376,6 +402,8 @@ export type Economy = {
   /** Wage bill and profit bill this month (gold). */
   wages: number
   profits: number
+  /** Per-building-type operating profit snapshot for this month (ADR 0021). */
+  buildingProfits: Record<BuildingId, BuildingProfit>
   /** Idle profit flow this month (gold) and gold set for luxury next month. */
   idleProfits: number
   idlePurchases: number

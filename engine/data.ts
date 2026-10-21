@@ -1,11 +1,13 @@
 import type {
   Bureaucracy,
   BuildingId,
+  BuildingProfit,
   Country,
   EventOption,
   GameEvent,
   GoodId,
   Leader,
+  ModifierStat,
   PoliticalEconomy,
   Region,
   ResourceId,
@@ -172,7 +174,13 @@ export const INVESTMENT_DEMAND: Record<BuildingId, Partial<Record<GoodId, number
   workshops: { wood: 0.3, iron: 0.2, furniture: 0.05 },
 }
 
-/** Gross output per building per month before tech, infrastructure and resources. */
+/**
+ * Legacy gross-output weights, retained ONLY as the private-investment scoring
+ * proxy (`investmentScore` in sim.ts) and kept byte-for-byte so B1+B2 stay
+ * behaviour-preserving. It is NOT a production source: production reads
+ * `BUILDING_RECIPES` below. B3 replaces the proxy with `buildingProfits` and
+ * retires this table.
+ */
 export const BUILDING_OUTPUT: Record<BuildingId, Partial<Record<GoodId, number>>> = {
   farms: { grain: 1.05, wood: 0.16 },
   mines: { coal: 0.5, iron: 0.42, wood: 0.06 },
@@ -191,6 +199,123 @@ export const BUILDING_OUTPUT: Record<BuildingId, Partial<Record<GoodId, number>>
   barracks: { arms: 0.05 },
   offices: {},
   workshops: {},
+}
+
+// ---------------------------------------------------------------- building recipes
+
+/** A per-building goods basket: good → quantity per building per month. */
+export type RecipeIO = Partial<Record<GoodId, number>>
+
+/**
+ * Multiplier seams a recipe's output may pass through. The values are the same
+ * runtime multipliers `computeProduction` always applied by hand; the recipe
+ * only declares which ones a given output good uses, so results are unchanged.
+ */
+export type RecipeGates = {
+  /** Country tech level multiplier (1 + level × 0.07). */
+  tech?: boolean
+  /** Transport-infrastructure multiplier (0.6 + transport / 160). */
+  infrastructure?: boolean
+  /** Market-access multiplier (0.55 + marketAccess × 0.9). */
+  access?: boolean
+  /** Coal/iron endowment factor (0.7..1.3), applied to factories. */
+  industrial?: boolean
+  /** Resource endowments that scale this output (forward-compat; unused in B1+B2). */
+  resource?: ResourceId[]
+}
+
+/**
+ * The single source of truth for building production and intermediate inputs
+ * (ADR 0021, plan 0008 B1). `output` is the per-building monthly basket before
+ * gates and per-good modifiers; `input` is the per-building monthly
+ * intermediate consumption; `labor` is the per-building labor-demand
+ * coefficient (ten-thousands of workers per building).
+ */
+export type BuildingRecipe = {
+  output: RecipeIO
+  input: RecipeIO
+  labor: number
+  /** Multipliers applied to every output good unless `outputGates` overrides. */
+  gates?: RecipeGates
+  /**
+   * Per-output-good gate overrides for byproducts that share none of the
+   * building's default gates (e.g. farms' wood, mines' wood, factories' liquor).
+   */
+  outputGates?: Partial<Record<GoodId, RecipeGates>>
+  /** Building-category output modifier seam (farmOutput/mineOutput/factoryOutput). */
+  outputModifier?: ModifierStat
+}
+
+/**
+ * Coefficients are exact copies of the literals previously hardcoded in
+ * `computeProduction` and the per-building intermediate block in
+ * `computeDemand`; changing one changes production/demand by the same amount
+ * it always would. `workshops` output is construction points, special-cased in
+ * sim.ts, so its `output` is empty.
+ */
+export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
+  farms: {
+    output: { grain: 0.3, wood: 0.04, opium: 0.004 },
+    input: {},
+    labor: 0.3,
+    gates: { tech: true, infrastructure: true, access: true },
+    outputGates: { wood: {} },
+    outputModifier: 'farmOutput',
+  },
+  mines: {
+    output: { coal: 0.5, iron: 0.42, wood: 0.04 },
+    input: {},
+    labor: 0.6,
+    gates: { tech: true },
+    outputGates: { wood: {} },
+    outputModifier: 'mineOutput',
+  },
+  factories: {
+    output: {
+      fabric: 0.6,
+      clothes: 0.38,
+      liquor: 0.2,
+      furniture: 0.22,
+      machinery: 0.18,
+      arms: 0.07,
+      luxury: 0.035,
+    },
+    input: { grain: 1.0, coal: 0.35, iron: 0.4, fabric: 0.45, wood: 0.2, machinery: 0.18 },
+    labor: 1.0,
+    gates: { tech: true, industrial: true },
+    outputGates: { liquor: { industrial: true } },
+    outputModifier: 'factoryOutput',
+  },
+  railroads: {
+    output: {},
+    input: { iron: 0.5, wood: 0.4 },
+    labor: 0.2,
+  },
+  ports: {
+    output: {},
+    input: {},
+    labor: 0.4,
+  },
+  universities: {
+    output: { services: 0.2 },
+    input: {},
+    labor: 0.2,
+  },
+  barracks: {
+    output: { arms: 0.05 },
+    input: {},
+    labor: 0.3,
+  },
+  offices: {
+    output: { services: 0.8 },
+    input: {},
+    labor: 0.1,
+  },
+  workshops: {
+    output: {},
+    input: { wood: 1, grain: 0.6, iron: 0.3 },
+    labor: 0,
+  },
 }
 
 export const BUILDINGS: Record<BuildingId, { name: string; cost: number; note: string }> = {
@@ -1073,15 +1198,16 @@ export type LaborStats = {
  */
 export function deriveLabor(country: Country): LaborStats {
   const b = country.econ.buildings
+  const laborOf = (id: BuildingId): number => BUILDING_RECIPES[id].labor
   const demand =
-    b.farms * 0.3 +
-    b.mines * 0.6 +
-    b.factories * 1.0 +
-    b.railroads * 0.2 +
-    b.ports * 0.4 +
-    b.offices * 0.1 +
-    b.universities * 0.2 +
-    b.barracks * 0.3
+    b.farms * laborOf('farms') +
+    b.mines * laborOf('mines') +
+    b.factories * laborOf('factories') +
+    b.railroads * laborOf('railroads') +
+    b.ports * laborOf('ports') +
+    b.offices * laborOf('offices') +
+    b.universities * laborOf('universities') +
+    b.barracks * laborOf('barracks')
   const force = country.pops.peasants * 0.6 + country.pops.workers + country.pops.artisans
   const raw = demand / Math.max(1, force)
   const utilization = clampValue(raw, 0.5, 1)
@@ -1140,6 +1266,22 @@ export function initialUi(): UiState {
       isRunning: false,
     },
   }
+}
+
+/** A zeroed per-building profit snapshot, before the first monthly settlement. */
+export function emptyBuildingProfits(): Record<BuildingId, BuildingProfit> {
+  const out = {} as Record<BuildingId, BuildingProfit>
+  for (const id of BUILDING_IDS) {
+    out[id] = {
+      revenue: 0,
+      inputCost: 0,
+      wages: 0,
+      profit: 0,
+      utilization: 1,
+      profitPerBuilding: 0,
+    }
+  }
+  return out
 }
 
 export function createWorld(seed: number, playerId = 'QING'): WorldState {
@@ -1203,6 +1345,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         laborShare: seedRow.politicalEconomy.laborShareBase,
         wages: 0,
         profits: 0,
+        buildingProfits: emptyBuildingProfits(),
         idleProfits: 0,
         idlePurchases: 0,
         laborDemand: 0,
@@ -1280,7 +1423,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
   }
 
   return {
-    version: 8,
+    version: 9,
     seed,
     date: { year: START_YEAR, month: START_MONTH },
     tick: 0,

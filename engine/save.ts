@@ -1,10 +1,10 @@
 import type { EngineInterface } from 'claude-code'
 import type { WorldState } from '../types'
-import { BUILDING_IDS } from './data'
+import { BUILDING_IDS, emptyBuildingProfits } from './data'
 import { normalizeConstructionQueue } from './sim'
 
 /** Current world shape; older in-memory worlds are discarded like old saves. */
-export const CURRENT_WORLD_VERSION = 8
+export const CURRENT_WORLD_VERSION = 9
 
 const safeName = (name: string | undefined): string => {
   const cleaned = (name ?? 'save').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32)
@@ -65,6 +65,9 @@ function normalizeWorld(world: WorldState): WorldState {
     }
     if (typeof country.econ.lastPrivateStartTick !== 'number') {
       country.econ.lastPrivateStartTick = -999
+    }
+    if (typeof country.econ.buildingProfits !== 'object' || country.econ.buildingProfits === null) {
+      country.econ.buildingProfits = emptyBuildingProfits()
     }
     const history = country.econ.history as Record<string, unknown>
     for (const key of [

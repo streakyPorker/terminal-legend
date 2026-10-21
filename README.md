@@ -28,6 +28,11 @@
 - **支出法经济循环**：每月按 C+I+G+NX 核算 GDP（NX 为净出口，已接入双边贸易）；Stone-Geary
   消费需求、劳动份额与利润分配、私人储蓄与自动投资、建造队列（国有/私人，按建造点推进）、国家级资源禀赋
   （农田/林地/煤矿/铁矿）与 0.7–1.3 的软乘数共同构成增长螺旋。私人项目可见但不可取消。
+- **建筑配方（单一真源）**：`engine/data.ts` 的 `BUILDING_RECIPES` 逐类声明每座每月的
+  产出与中间投入（含副产品）与用工，是产出与投入的**唯一来源**；`computeProduction` 只读该表，
+  中间投入按 `Σ 建筑数 × 配方投入` 汇总。同时每月算出**逐建筑经营利润**快照
+  `econ.buildingProfits`（产出价 − 投入价 − 分摊工资），`v3_inspect economy` 可读。
+  这是纯信息/结构迁移，不改变任何数值与决策（ADR 0021，World v9；决策联动与四税基见后续包）。
 - **双向关税与到岸价**：`tariff` 是进口税率，`exportTariff` 可选、缺省与进口同率（旧行为）。
   到岸价 = 出口国国内价 × (1 + 出口关税) × (1 + 进口关税) × 运输 / 接入 / 风险；进口国私人付
   边境价 + 进口税，出口国国库收出口税，进口国国库收进口税。`v3_action tariff` 可用 `rate`
@@ -169,7 +174,8 @@ node statusline/install.mjs
    **⏸ 暂停**，等经济系统打磨完成后再恢复。
 
 已完成、作为参考：`0003-economic-loop.md`（World v5）、`0004-trade-diplomacy.md`（World v6）、
-ADR 0006（World v7 净资产财政）、ADR 0020（World v8 持久贸易航线）。
+ADR 0006（World v7 净资产财政）、ADR 0020（World v8 持久贸易航线）、
+ADR 0021（World v9 建筑配方与逐建筑利润）。
 
 ## 开发
 
@@ -200,7 +206,7 @@ claude plugin test .
 .claude-plugin/plugin.json   清单、userConfig（AI 模型）
 hooks/hooks.json             单个 hooks 模块
 hooks/register.tsx           命令、工具、御前会议、秘书、系统提示、三层渲染
-types/index.d.ts             PluginState 契约与世界模型类型（world v8：持久贸易航线；科技树 v9 规划中）
+types/index.d.ts             PluginState 契约与世界模型类型（world v9：建筑配方与逐建筑利润；科技树规划中）
 engine/data.ts               国家/商品/建筑/科技/领袖/事件模板、官僚与失业派生
 engine/sim.ts                确定性月度模拟、建造队列、玩家行动、托管中断
 engine/fiscal.ts             国库收支账：收入来源与支出用途拆分（GDP ≠ 财政）
@@ -240,6 +246,7 @@ tests/first-slice.test.ts    第一刀（M1–M6）引擎与命令测试
 | ADR 0018 | 科技基础研究率：无大学也按月产出，识字与官僚加成 | ✅ 已实现（World v7） |
 | ADR 0019 | 饥荒触发条件：生活水平 <45 且粮价高于基准 5% | ✅ 已实现（World v7） |
 | ADR 0020 | 持久化贸易航线：软闸门（航线遍 + 现货残差遍）、成长衰退、自动开通、玩家航线动作 | ✅ 已实现（World v8） |
+| ADR 0021 | 建筑配方单一真源：`BUILDING_RECIPES`（产出+中间投入+用工）、逐建筑经营利润快照 | ✅ 已实现（World v9；决策联动/税基见 0008 B3–B4） |
 | 0005 | 科技树 K1–K4：三分支 + 通用时代线、跨分支溢出、国际扩散 | 📝 已规划（等经济打磨后） |
 | 0002 | 事件树 S1–S4：局势/提案/多国交互 | ⏸ 暂缓（先打磨经济） |
 | 0006 | GM ⇄ 引擎接口：查询/预测全部走 MCP，禁止读存档 | 📝 已规划 |
