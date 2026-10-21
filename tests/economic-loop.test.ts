@@ -100,7 +100,7 @@ describe('E2 private investment', () => {
     expect(prussia).toBeDefined()
     if (prussia === undefined) return
     // A coal shortage with a high price gives private capital a clear outlet.
-    prussia.econ.buildings.mines = 1
+    prussia.econ.buildings.coalMines = 1
     prussia.econ.prices.coal = prussia.econ.prices.coal * 3
     prussia.econ.privateCapital = 120
     advance(world, 2, [], makeRngForWorld(world))
@@ -128,7 +128,7 @@ describe('E2 private investment', () => {
     b.econ.privateCapital = 100
     b.econ.constructionQueue.push({
       id: 'private-test',
-      building: 'mines',
+      building: 'coalMines',
       count: 2,
       owner: 'private',
       monthsLeft: 3,
@@ -170,8 +170,8 @@ describe('E2 private investment', () => {
     const production = prussia.econ.goods
     const shortageDemand = { ...demand, coal: production.coal * 2, iron: production.iron * 2 }
     const glutDemand = { ...demand, coal: production.coal * 0.2, iron: production.iron * 0.2 }
-    const shortage = investmentScore(prussia, 'mines', shortageDemand, production)
-    const glut = investmentScore(prussia, 'mines', glutDemand, production)
+    const shortage = investmentScore(prussia, 'coalMines', shortageDemand, production)
+    const glut = investmentScore(prussia, 'coalMines', glutDemand, production)
     expect(shortage).toBeGreaterThan(glut)
   })
 })
@@ -210,7 +210,7 @@ describe('E3 resource endowments', () => {
     poorCountry.econ.resources.coal = 20
     for (const country of [richCountry, poorCountry]) {
       country.econ.prices.coal = 4
-      country.econ.buildings.mines = 40
+      country.econ.buildings.coalMines = 40
     }
     const richBefore = computeEconomy(richCountry).production.coal
     const poorBefore = computeEconomy(poorCountry).production.coal
@@ -282,7 +282,9 @@ describe('E1 demand shock loop', () => {
     // guarantees a strictly larger capital stock; it must not shrink it much.
     const capacityBuildings = (country: typeof controlQing): number =>
       country.econ.buildings.factories +
-      country.econ.buildings.mines +
+      country.econ.buildings.coalMines +
+      country.econ.buildings.ironMines +
+      country.econ.buildings.lumberMills +
       country.econ.buildings.workshops
     expect(capacityBuildings(boostedQing)).toBeGreaterThanOrEqual(
       capacityBuildings(controlQing) * 0.9,
@@ -740,7 +742,7 @@ describe('Round 3 regressions', () => {
     expect(cancelled.ok).toBe(true)
     qing.econ.constructionQueue.push({
       id: 'private-cancel-test',
-      building: 'mines',
+      building: 'coalMines',
       count: 1,
       owner: 'private',
       monthsLeft: 3,

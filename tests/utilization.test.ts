@@ -93,46 +93,46 @@ describe('utilization feedback (ADR 0022 B3)', () => {
   })
 
   test('(c) private investment does not start an unprofitable type', async () => {
-    const run = (muteMineOutput: boolean): { mines: number; other: number } => {
+    const run = (muteMineOutput: boolean): { coalMines: number; other: number } => {
       const world = newWorld(203, 'QING')
       const qing = world.countries.QING
       if (qing === undefined) throw new Error('missing QING')
       qing.econ.privateCapital = 400
-      const savedOutput = { ...BUILDING_RECIPES.mines.output }
-      const savedInput = { ...BUILDING_RECIPES.mines.input }
+      const savedOutput = { ...BUILDING_RECIPES.coalMines.output }
+      const savedInput = { ...BUILDING_RECIPES.coalMines.input }
       try {
-        // Muting the mine recipe makes mines unprofitable while the legacy
-        // shortage signal (`BUILDING_OUTPUT`) still ranks them highest. B5's
+        // Muting the coal-mine recipe makes it unprofitable while the legacy
+        // shortage signal (`BUILDING_OUTPUT`) still ranks it highest. B5's
         // `valueAdded` wage basis gives a zero-input, near-zero-output mine a
         // near-zero wage, so it would stay trivially profitable; a small input
         // keeps the muted mine genuinely in the red.
         if (muteMineOutput) {
-          BUILDING_RECIPES.mines.output = { coal: 0.0001, iron: 0.0001, wood: 0.0001 }
-          BUILDING_RECIPES.mines.input = { coal: 1 }
+          BUILDING_RECIPES.coalMines.output = { coal: 0.0001 }
+          BUILDING_RECIPES.coalMines.input = { coal: 1 }
         }
-        let mines = 0
+        let coalMines = 0
         let other = 0
         for (let month = 0; month < 18; month += 1) {
           const before = world.log.length
           advance(world, 1, [], makeRngForWorld(world))
           for (const entry of world.log.slice(before)) {
             if (!entry.text.includes('私人资本投建')) continue
-            if (entry.text.includes('矿场')) mines += 1
+            if (entry.text.includes('煤矿')) coalMines += 1
             else other += 1
           }
         }
-        return { mines, other }
+        return { coalMines, other }
       } finally {
-        BUILDING_RECIPES.mines.output = savedOutput
-        BUILDING_RECIPES.mines.input = savedInput
+        BUILDING_RECIPES.coalMines.output = savedOutput
+        BUILDING_RECIPES.coalMines.input = savedInput
       }
     }
 
-    // With mines unprofitable the gate blocks them even though they still top
-    // the shortage ranking; other profitable types are built instead.
-    expect(run(true).mines).toBe(0)
-    // Control: with the normal recipe mines are profitable and do get built.
-    expect(run(false).mines).toBeGreaterThan(0)
+    // With coal mines unprofitable the gate blocks them even though they still
+    // top the shortage ranking; other profitable types are built instead.
+    expect(run(true).coalMines).toBe(0)
+    // Control: with the normal recipe coal mines are profitable and do get built.
+    expect(run(false).coalMines).toBeGreaterThan(0)
   })
 
   test('(d) a deep loss shrinks the count and never goes negative', async () => {

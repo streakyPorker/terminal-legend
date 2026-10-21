@@ -135,12 +135,14 @@
 ### 4.3 建筑配方（单一真源，ADR 0021）
 
 `engine/data.ts` 的 `BUILDING_RECIPES` 是**产出与中间投入的唯一来源**；`computeProduction`
-只读该表。9 类建筑每座每月：
+只读该表。11 类建筑每座每月：
 
 | 建筑 | output（每座/月） | input（每座/月） | labor | 门控 |
 | --- | --- | --- | ---: | --- |
 | 农场 `farms` | grain 0.30、wood 0.04、opium 0.004 | 无 | 0.3 | tech + infra + access（wood 除外） |
-| 矿场 `mines` | coal 0.5、iron 0.42、wood 0.04 | 无 | 0.6 | tech（wood 除外） |
+| 煤矿 `coalMines` | coal 0.96 | 无 | 0.6 | tech |
+| 铁矿 `ironMines` | iron 0.96 | 无 | 0.6 | tech |
+| 伐木场 `lumberMills` | wood 0.96 | 无 | 0.4 | tech |
 | 工厂 `factories` | fabric 0.6、clothes 0.28、liquor 0.14、furniture 0.16、machinery 0.18、arms 0.07、luxury 0.035、**steel 0.09** | grain 0.5、coal 0.18、**iron 0.45**、fabric 0.2、wood 0.1、machinery 0.18 | 1.0 | tech + industrial（liquor 仅 industrial） |
 | 铁路 `railroads` | 无 | **steel 0.5**、wood 0.4 | 0.2 | 无 |
 | 港口 `ports` | 无 | 无 | 0.4 | 无 |
@@ -158,6 +160,10 @@
 - **F1 铁矿石/钢铁拆分（World v11）**：`iron` 转为**铁矿石**（只作工厂炼钢的投入），新增
   **`steel`**；铁路、建设投资（`INVESTMENT_DEMAND`）、政府建设改吃钢铁，营造所**运行**投入仍为
   铁矿石（plan 0011 §9 待定，F2 再定）。工厂在参考点的加权**聚合毛利仍在 5–20% 带内**。
+- **F2 矿场三拆（World v11）**：打包的 `mines` 拆成 **`coalMines`（煤）/`ironMines`（铁矿石）/
+  `lumberMills`（木材）**三个单产建筑，各产 0.96、用工 0.6/0.6/0.4、仅 tech 门控。种子按旧
+  产出比例（煤 0.5 : 铁 0.42 : 木 0.04）拆座数，**总采掘座数守恒**（512→512），故世界煤/铁/木
+  供给与拆分前基本一致（plan 0011 §7.3）。
 - **B5 工厂再平衡（ADR 0021、plan 0008 §5）**：工厂配方调轻了材料单、并下调成衣/酒/家具产出
   （见上表），使工厂在参考点可盈利。7 大国产量的加权**聚合工厂毛利落在 5–20% 带内**；
   工业核心 GBR/FRA/PRU 亦在带内，资源富集、工资低的 RUS/QING/JAP 在带上界之上（属预期）。

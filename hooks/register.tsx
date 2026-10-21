@@ -966,7 +966,9 @@ const TOOL_SPECS: {
           type: 'string',
           enum: [
             'farms',
-            'mines',
+            'coalMines',
+            'ironMines',
+            'lumberMills',
             'factories',
             'railroads',
             'ports',
@@ -1021,7 +1023,9 @@ const TOOL_SPECS: {
           type: 'string',
           enum: [
             'farms',
-            'mines',
+            'coalMines',
+            'ironMines',
+            'lumberMills',
             'factories',
             'railroads',
             'ports',

@@ -844,7 +844,9 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
     const options = [
       'factories',
       'farms',
-      'mines',
+      'coalMines',
+      'ironMines',
+      'lumberMills',
       'railroads',
       'universities',
       'workshops',

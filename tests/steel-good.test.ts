@@ -84,7 +84,7 @@ describe('steel good and the iron-ore rename (plan 0011 F1)', () => {
     expect(recipe.input.iron ?? 0).toBeGreaterThan(0)
     expect(recipe.input.coal ?? 0).toBeGreaterThan(0)
     expect(recipe.output.steel ?? 0).toBeGreaterThan(0)
-    // Ore is not an output of industry any more — only the mines produce it.
+    // Ore is not an output of industry any more — only the ore mines produce it.
     expect(BUILDING_RECIPES.factories.output.iron).toBeUndefined()
 
     const world = newWorld(9702, 'GBR')

@@ -18,7 +18,9 @@ const MAJORS = ['GBR', 'FRA', 'PRU', 'RUS', 'AUS', 'USA', 'JAP'] as const
 // unprofitable type" gate.
 const PRODUCTION_BUILDINGS = [
   'farms',
-  'mines',
+  'coalMines',
+  'ironMines',
+  'lumberMills',
   'factories',
   'barracks',
   'universities',

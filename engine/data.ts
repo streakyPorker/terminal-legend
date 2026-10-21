@@ -221,7 +221,11 @@ export const GOVERNMENT_DEMAND: Record<SpendingCategory, Partial<Record<GoodId, 
 /** Investment goods required per project-month, per building (plan 0003 §2.2). */
 export const INVESTMENT_DEMAND: Record<BuildingId, Partial<Record<GoodId, number>>> = {
   farms: { wood: 0.12, furniture: 0.02 },
-  mines: { steel: 0.18, machinery: 0.03 },
+  // The three extraction buildings (plan 0011 F2). Steel, not ore, is the worked
+  // metal every project buys (plan 0011 F1 moved investment demand off `iron`).
+  coalMines: { steel: 0.1, machinery: 0.03, wood: 0.1 },
+  ironMines: { steel: 0.05, machinery: 0.03, wood: 0.1 },
+  lumberMills: { wood: 0.05, machinery: 0.02 },
   factories: { steel: 0.22, machinery: 0.1, wood: 0.1 },
   railroads: { steel: 0.5, machinery: 0.16, wood: 0.4 },
   ports: { wood: 0.3, steel: 0.1 },
@@ -240,7 +244,9 @@ export const INVESTMENT_DEMAND: Record<BuildingId, Partial<Record<GoodId, number
  */
 export const BUILDING_OUTPUT: Record<BuildingId, Partial<Record<GoodId, number>>> = {
   farms: { grain: 1.05, wood: 0.16 },
-  mines: { coal: 0.5, iron: 0.42, wood: 0.06 },
+  coalMines: { coal: 0.96 },
+  ironMines: { iron: 0.96 },
+  lumberMills: { wood: 0.96 },
   factories: {
     fabric: 0.6,
     clothes: 0.38,
@@ -297,7 +303,7 @@ export type BuildingRecipe = {
   gates?: RecipeGates
   /**
    * Per-output-good gate overrides for byproducts that share none of the
-   * building's default gates (e.g. farms' wood, mines' wood, factories' liquor).
+   * building's default gates (e.g. farms' wood, factories' liquor).
    */
   outputGates?: Partial<Record<GoodId, RecipeGates>>
   /** Building-category output modifier seam (farmOutput/mineOutput/factoryOutput). */
@@ -322,12 +328,25 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     outputGates: { wood: {} },
     outputModifier: 'farmOutput',
   },
-  mines: {
-    output: { coal: 0.5, iron: 0.42, wood: 0.04 },
+  coalMines: {
+    output: { coal: 0.96 },
     input: {},
     labor: 0.6,
     gates: { tech: true },
-    outputGates: { wood: {} },
+    outputModifier: 'mineOutput',
+  },
+  ironMines: {
+    output: { iron: 0.96 },
+    input: {},
+    labor: 0.6,
+    gates: { tech: true },
+    outputModifier: 'mineOutput',
+  },
+  lumberMills: {
+    output: { wood: 0.96 },
+    input: {},
+    labor: 0.4,
+    gates: { tech: true },
     outputModifier: 'mineOutput',
   },
   factories: {
@@ -409,7 +428,9 @@ export const ARTISAN_SERVICE_OUTPUT = 0.01
 
 export const BUILDINGS: Record<BuildingId, { name: string; cost: number; note: string }> = {
   farms: { name: '农场', cost: 1.5, note: '粮食与原料，吸纳农业人口' },
-  mines: { name: '矿场', cost: 2.5, note: '煤炭与铁矿石，工业的起点' },
+  coalMines: { name: '煤矿', cost: 2.5, note: '煤炭，工业与钢铁的燃料' },
+  ironMines: { name: '铁矿', cost: 2.5, note: '铁矿石，钢铁厂的原料' },
+  lumberMills: { name: '伐木场', cost: 2, note: '木材，建造与家具的原料' },
   factories: { name: '工厂', cost: 4, note: '工业品产能，推动城市化' },
   railroads: { name: '铁路', cost: 7, note: '交通基础设施与市场接入' },
   ports: { name: '港口', cost: 3, note: '市场接入与关税收入' },
@@ -422,7 +443,9 @@ export const BUILDINGS: Record<BuildingId, { name: string; cost: number; note: s
 /** Months a project of each kind takes, before bureaucratic delay. */
 export const BUILDING_TIME: Record<BuildingId, number> = {
   farms: 2,
-  mines: 3,
+  coalMines: 3,
+  ironMines: 3,
+  lumberMills: 2,
   factories: 4,
   railroads: 8,
   ports: 3,
@@ -509,7 +532,9 @@ export function emptyTradeState(): TradeState {
 
 const buildings = (
   farms: number,
-  mines: number,
+  coalMines: number,
+  ironMines: number,
+  lumberMills: number,
   factories: number,
   railroads: number,
   ports: number,
@@ -519,7 +544,9 @@ const buildings = (
   workshops: number,
 ): Record<BuildingId, number> => ({
   farms,
-  mines,
+  coalMines,
+  ironMines,
+  lumberMills,
   factories,
   railroads,
   ports,
@@ -648,7 +675,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 13,
     tariff: 8,
     spending: spending(6, 0.8, 4, 1, 0.5, 1.5),
-    buildings: buildings(3000, 35, 20, 0, 14, 4, 40, 4, 12),
+    buildings: buildings(3000, 18, 15, 2, 20, 0, 14, 4, 40, 4, 12),
     transportInfrastructure: 25,
     marketAccess: 0.45,
     unemployment: 6,
@@ -704,7 +731,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 12,
     tariff: 5,
     spending: spending(4, 6, 2.5, 1.2, 1.5, 2),
-    buildings: buildings(110, 90, 160, 25, 60, 18, 20, 14, 24),
+    buildings: buildings(110, 47, 40, 3, 160, 25, 60, 18, 20, 14, 24),
     transportInfrastructure: 85,
     marketAccess: 0.9,
     unemployment: 8,
@@ -760,7 +787,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: -2,
     tariff: 12,
     spending: spending(5, 3, 2.5, 1, 1.2, 1.8),
-    buildings: buildings(260, 55, 95, 8, 30, 12, 30, 10, 16),
+    buildings: buildings(260, 29, 24, 2, 95, 8, 30, 12, 30, 10, 16),
     transportInfrastructure: 60,
     marketAccess: 0.75,
     unemployment: 7,
@@ -816,7 +843,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 4,
     tariff: 8,
     spending: spending(4.5, 0.5, 1.8, 1.1, 0.8, 1.5),
-    buildings: buildings(180, 70, 60, 6, 10, 11, 22, 8, 10),
+    buildings: buildings(180, 36, 31, 3, 60, 6, 10, 11, 22, 8, 10),
     transportInfrastructure: 55,
     marketAccess: 0.7,
     unemployment: 5,
@@ -872,7 +899,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 6,
     tariff: 15,
     spending: spending(6, 1.2, 3, 0.3, 0.4, 1),
-    buildings: buildings(900, 70, 35, 2, 12, 6, 50, 6, 8),
+    buildings: buildings(900, 36, 31, 3, 35, 2, 12, 6, 50, 6, 8),
     transportInfrastructure: 20,
     marketAccess: 0.5,
     unemployment: 4,
@@ -928,7 +955,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: -5,
     tariff: 10,
     spending: spending(4, 0.6, 2.2, 0.6, 0.7, 1),
-    buildings: buildings(420, 60, 45, 4, 5, 8, 30, 7, 10),
+    buildings: buildings(420, 31, 26, 3, 45, 4, 5, 8, 30, 7, 10),
     transportInfrastructure: 45,
     marketAccess: 0.65,
     unemployment: 6,
@@ -984,7 +1011,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 14,
     tariff: 20,
     spending: spending(1.5, 1.2, 1.2, 0.8, 0.5, 1.5),
-    buildings: buildings(300, 55, 55, 6, 25, 10, 12, 8, 8),
+    buildings: buildings(300, 29, 24, 2, 55, 6, 25, 10, 12, 8, 8),
     transportInfrastructure: 50,
     marketAccess: 0.7,
     unemployment: 5,
@@ -1040,7 +1067,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 3,
     tariff: 5,
     spending: spending(2.5, 0.6, 1.5, 0.5, 0.3, 0.8),
-    buildings: buildings(380, 22, 12, 0, 10, 4, 15, 4, 3),
+    buildings: buildings(380, 11, 10, 1, 12, 0, 10, 4, 15, 4, 3),
     transportInfrastructure: 22,
     marketAccess: 0.4,
     unemployment: 3,
@@ -1096,7 +1123,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: -7,
     tariff: 12,
     spending: spending(3, 0.8, 2, 0.3, 0.3, 0.6),
-    buildings: buildings(420, 25, 14, 0, 12, 3, 22, 4, 4),
+    buildings: buildings(420, 13, 11, 1, 14, 0, 12, 3, 22, 4, 4),
     transportInfrastructure: 18,
     marketAccess: 0.45,
     unemployment: 8,
@@ -1152,7 +1179,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: -11,
     tariff: 12,
     spending: spending(2, 0.8, 1.5, 0.4, 0.4, 0.6),
-    buildings: buildings(220, 30, 20, 2, 14, 6, 14, 4, 4),
+    buildings: buildings(220, 16, 13, 1, 20, 2, 14, 6, 14, 4, 4),
     transportInfrastructure: 35,
     marketAccess: 0.55,
     unemployment: 10,
@@ -1279,7 +1306,9 @@ export function deriveLabor(country: Country): LaborStats {
   const laborOf = (id: BuildingId): number => BUILDING_RECIPES[id].labor
   const demand =
     b.farms * laborOf('farms') +
-    b.mines * laborOf('mines') +
+    b.coalMines * laborOf('coalMines') +
+    b.ironMines * laborOf('ironMines') +
+    b.lumberMills * laborOf('lumberMills') +
     b.factories * laborOf('factories') +
     b.railroads * laborOf('railroads') +
     b.ports * laborOf('ports') +

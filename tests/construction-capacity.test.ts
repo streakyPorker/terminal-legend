@@ -55,7 +55,9 @@ describe('construction capacity (ADR 0010)', () => {
     qing.econ.resources.farmland = 0
     qing.econ.resources.iron = 0
     qing.econ.buildings.farms = 0
-    qing.econ.buildings.mines = 0
+    qing.econ.buildings.coalMines = 0
+    qing.econ.buildings.ironMines = 0
+    qing.econ.buildings.lumberMills = 0
     expect(constructionCapacity(qing)).toBeLessThan(eight)
   })
 
@@ -69,7 +71,7 @@ describe('construction capacity (ADR 0010)', () => {
       world.date,
     )
     const second = project(
-      { id: 'second', building: 'mines', count: 3, owner: 'state' },
+      { id: 'second', building: 'coalMines', count: 3, owner: 'state' },
       world.date,
     )
     qing.econ.constructionQueue.push(first, second)

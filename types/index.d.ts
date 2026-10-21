@@ -154,7 +154,9 @@ export type TaxRates = Record<TaxBaseId, number>
 
 export type BuildingId =
   | 'farms'
-  | 'mines'
+  | 'coalMines'
+  | 'ironMines'
+  | 'lumberMills'
   | 'factories'
   | 'railroads'
   | 'ports'

@@ -80,7 +80,7 @@ describe('debt pressure is smooth, not a cliff (ADR 0007)', () => {
     qing.econ.treasury = -3
     const project: ConstructionProject = {
       id: 'test-deficit-build',
-      building: 'mines',
+      building: 'coalMines',
       count: 1,
       owner: 'state',
       monthsLeft: 3,
@@ -91,14 +91,14 @@ describe('debt pressure is smooth, not a cliff (ADR 0007)', () => {
     }
     qing.econ.constructionQueue.push(project)
 
-    const minesBefore = qing.econ.buildings.mines
+    const coalMinesBefore = qing.econ.buildings.coalMines
     advance(world, 1, [], makeRngForWorld(world))
 
     // A fully funded slot now finishes in one month even from a small
     // negative balance; otherwise it must at least have spent gold.
     const kept = qing.econ.constructionQueue.find(one => one.id === project.id)
     expect(
-      qing.econ.buildings.mines > minesBefore ||
+      qing.econ.buildings.coalMines > coalMinesBefore ||
         (kept?.lastSpend ?? 0) > 0 ||
         (kept?.progress ?? 0) > 0,
     ).toBe(true)

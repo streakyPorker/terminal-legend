@@ -1,6 +1,6 @@
 # 建筑扩张与统一基础设施（Building Expansion + Infrastructure）
 
-- Status: **F1 已实现**（World v11：`iron`→铁矿石、新增 `steel`；详见 §7.2）；F2–F7 待做。其余章节仍为提案（本文件描述，F2+ 再改引擎/测试）
+- Status: **F1、F2 已实现**（World v11：F1 `iron`→铁矿石、新增 `steel`，详见 §7.2；F2 `mines`→`coalMines`/`ironMines`/`lumberMills`，详见 §7.3）；F3–F7 待做。其余章节仍为提案（本文件描述，F2+ 再改引擎/测试）
 - Depends on: ADR 0026（本计划对应的决策）、ADR 0021（建筑配方单一真源）、ADR 0022（利用率与利润投资）、ADR 0010/0012/0013（营造所与建造能力）、ADR 0005（不做存档兼容）
 - Scope: 把建筑名册从 9 类扩到 **22 类**（拆矿场、拆工厂、加 5 类）；引入 `steel` 商品与「铁矿石」语义；把「交通基础设施」升级为**统一基础设施**（供给/需求/线性 debuff/维护）；给建筑加前瞻 `unlock` 字段。世界版本升到 **v11**。
 - 来源：用户口述。核心诉求：「建筑盈利能力要读得清 → 单产/少产建筑」；「基础设施是一个统一的东西，铁路/港口/运河/电报都产它，所有建筑都要用它」；「商品按需加，先维护一个最小可用集」。
@@ -224,7 +224,7 @@ type BuildingDef = {
 | 里程碑 | 内容 | 行为 / 风险 | 护栏测试 |
 | --- | --- | --- | --- |
 | **F1 商品：加 `steel` + `iron`→铁矿石** ✅ | `GOODS`（+steel，iron 改名）、`SUBSISTENCE`/`INCOME_ELASTICITY` 补键、`GOVERNMENT_DEMAND.construction` iron→steel、`TRADABLE_GOODS` 加 steel；`GoodId` 扩项 | `Record<GoodId,number>` 漏键会编译失败；改基价会挪动物价中心 | `GOODS.steel` 存在且 `iron.name='铁矿石'`；`SUBSISTENCE/INCOME_ELASTICITY` 含 `steel:0`；`zeroGoods`/`basePrices` 覆盖 steel；`steel` 可贸易、非消费品 |
-| **F2 拆矿场** | `mines` → `coalMines`/`ironMines`/`lumberMills`（名册/配方/时间/建造点/投资/输出/种子） | 漏改任一 `Record<BuildingId,…>` 或派生消费点即编译失败；种子座数分配改变产出总量 | 每个新矿只产 1 货；`steelMills` 吃 `iron`+`coal`；全仓无 `mines` 残留；种子座数总和守恒或按资源禀赋可解释 |
+| **F2 拆矿场** ✅ | `mines` → `coalMines`/`ironMines`/`lumberMills`（名册/配方/时间/建造点/投资/输出/种子） | 漏改任一 `Record<BuildingId,…>` 或派生消费点即编译失败；种子座数分配改变产出总量 | 每个新矿只产 1 货；`steelMills` 吃 `iron`+`coal`；全仓无 `mines` 残留；种子座数总和守恒或按资源禀赋可解释 |
 | **F3 拆工厂** | `factories` → 7 个工业建筑；机械/军械/铁路/家具改吃 `steel` | 链条断裂（无 `steel` 来源）会让重工业停摆；`deriveUnemployment`/`boom` 事件读 `factories` 需改 | 每个工业建筑 output 键数 ≤2；`steelMills`/`machineryWorks`/`arsenals` 配方正确；`buildingProfits` 逐类可算；无 `factories` 残留 |
 | **F4 加 5 类建筑** | `schools`/`canals`/`telegraphs`/`forts`/`navalYards`（名册/配方/时间/建造点/投资/输出/种子） | 每个 `Record<BuildingId,…>` 都要补 5 键；运河/电报无产出需特判为成本中心 | 5 个 id 出现在全部 `Record<BuildingId,…>` 表；`canals`/`telegraphs` output 空且供给 >0；`completeBuilding` 对新增的可建筑无遗漏（或明确无副作用） |
 | **F5 统一基础设施 + debuff** | `INFRA_SUPPLY`/`infrastructureNeed`；`ratio`/乘数；`computeProduction` 施加；`computeDemand` 加维护需求；月末写 `基础设施水平`；旧 `gates.infrastructure` 与旧曲线退场 | 改变了全部建筑的产出口径（行为变更）；维护需求进市场会推高 wood/coal/services 需求 | `ratio=1` → 乘数 1（无 debuff）；`ratio=0.5` → 乘数 0.5；`ratio≥1` 不奖励；维护需求按供给/水平正确计入 demand；`C+I+G+NX===GDP` 不变；60 月确定性 |
@@ -266,6 +266,34 @@ F1 只做「商品 + 最小链条」，**不动名册**（矿场/工厂仍打包
 - **可调数字（F7 统一校准）**：`GOODS.iron.basePrice`、`GOODS.steel.basePrice`、
   `factories.input.iron=0.45`、`factories.output.steel=0.09`、中间篮子的 `0.6/0.2`。
   参考点仍是 plan 0008 §5 的「七大国产量加权聚合」。
+
+### 7.3 F2 已落地的安排（World v11，名册不变）
+
+F2 把打包的 `mines` 拆成三个单产采掘建筑，**World 版本仍为 v11**（同一次扩张，无结构断裂）。实际落地：
+
+- **配方（每座/月）**：`coalMines`→`coal 0.96`、`ironMines`→`iron 0.96`、`lumberMills`→`wood 0.96`；三者
+  `input` 皆空、门控 `{tech:true}`、`outputModifier: 'mineOutput'`（复用，最小改动）、labor 各 0.6/0.6/0.4。
+- **为何系数是 0.96 而非 §3.1 的 0.5**：0.96 = 旧 `mines` 单座的**产出总和**（`0.5+0.42+0.04`）。
+  `COUNTRY_SEEDS` 把旧矿场座数**按旧产出比例拆开**（见下），于是「单产系数 = 旧总和 × 按比例拆
+  的座数」恰好**逐货守恒**旧世界的煤/铁/木供给，同时**总采掘座数不变**（labor 与投资量级也基本不变）。
+  若照 §3.1 用 0.5/0.42 配「按比例拆座数」，煤/铁供给会腰斩、`iron` 双侧市场会破——这正是本计划
+  §10“种子座数分配”要 F7 校准的地方；F2 选了守恒式初值，把校准留给 F7。
+- **`COUNTRY_SEEDS` 拆分规则**：每国旧 `mines` 座数 N 按 `coal 0.5 : iron 0.42 : wood 0.04` 的比例
+  拆到三矿，即 `coalMines≈0.52N、ironMines≈0.44N、lumberMills≈0.04N`（四舍五入，余数给煤矿）。
+  十国总和守恒：旧 `mines` 合计 **512**，新三矿合计亦 **512**（煤 266 / 铁 225 / 木 21）。
+- **造价/工期/建造点**：`coalMines`/`ironMines` cost 2.5、工期 3、建造点 1；`lumberMills` cost 2、工期 2、
+  建造点 0.8（§3.2 提案值）。
+- **`INVESTMENT_DEMAND`**（F1 后一律用 `steel`，不再有 `iron` 键）：`coalMines` `{steel 0.1, machinery 0.03, wood 0.1}`、
+  `ironMines` `{steel 0.05, machinery 0.03, wood 0.1}`、`lumberMills` `{wood 0.05, machinery 0.02}`。
+- **`BUILDING_OUTPUT`**（私人投资短缺信号）：三矿各为单货 `0.96`。
+- **同步更新的消费点**：`deriveLabor`、`randomDecision` 的 build 候选、`engine/ai.ts` 提示词与国别行、
+  `hooks/register.tsx` 的两个建筑 enum、`engine/inspect.ts` 的 labor/building 文案、以及引用 `mines`
+  的测试。
+- **世界供给核对**（种子 9100，第 24 月，全球 bid/offer）：煤 31.5/175.8、铁 49.4/30.7、木 45.1/147.7
+  ——与拆分前（煤 31.6/172.3、铁 51.9/27.5、木 46.2/146.7）基本一致，三货双侧性保持。
+- **不变量**：`tests/economy-recipe-calibration.test.ts` 全部 9 项 gate 绿；`C+I+G+NX===GDP`、金币守恒、
+  60/120 月确定性、工资分摊恒等式均绿（344 pass / 0 fail）。新增 `tests/extraction-split.test.ts` 覆盖三矿
+  单产配方、`mines` 无残留、种子座数守恒与三货双侧性。
 
 ## 8. 验收
 

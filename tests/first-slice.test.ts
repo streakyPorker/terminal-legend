@@ -583,7 +583,7 @@ describe('M6 destiny and ironman', () => {
       },
       {
         id: 'private-1',
-        building: 'mines',
+        building: 'coalMines',
         count: 1,
         owner: 'private',
         monthsLeft: 3,

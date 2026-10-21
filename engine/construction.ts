@@ -32,7 +32,9 @@ export const WORKSHOP_INPUTS: Partial<Record<GoodId, number>> =
 /** Construction points a project needs each month, per building in the slot. */
 export const CAPACITY_COST: Record<BuildingId, number> = {
   farms: 0.5,
-  mines: 1,
+  coalMines: 1,
+  ironMines: 1,
+  lumberMills: 0.8,
   factories: 2,
   railroads: 4,
   ports: 1.5,
@@ -83,7 +85,9 @@ export const CONSTRUCTION_COST_PER_POINT = 0.2
 /** Per-building gold tuning; v1 is 1 for every type. */
 export const BUILDING_COST_MULTIPLIER: Record<BuildingId, number> = {
   farms: 1,
-  mines: 1,
+  coalMines: 1,
+  ironMines: 1,
+  lumberMills: 1,
   factories: 1,
   railroads: 1,
   ports: 1,
@@ -95,7 +99,9 @@ export const BUILDING_COST_MULTIPLIER: Record<BuildingId, number> = {
 /** Per-building fixed gold addend; v1 is 0 for every type. */
 export const BUILDING_COST_ADDEND: Record<BuildingId, number> = {
   farms: 0,
-  mines: 0,
+  coalMines: 0,
+  ironMines: 0,
+  lumberMills: 0,
   factories: 0,
   railroads: 0,
   ports: 0,
