@@ -168,6 +168,7 @@ node statusline/install.mjs
 2. `docs/plans/0006-gm-engine-interface.md`：GM 与引擎的交互**全部走 MCP 工具**，禁止读
    `.terminal-legend/save.json`。`v3_inspect`（economy/fiscal/labor/trade/construction/
    military/history）与 `v3_forecast` 已实现（ADR 0016）；后续补外交与世界市场的更细视图。
+   GM 的机制参考（工具、经济、贸易、财政、口径 FAQ）见 `docs/gm-handbook.md`。
 3. `docs/plans/0005-tech-tree.md`：科技树 v8：工业/行政/军事三分支 + 通用时代线、跨分支
    溢出、国际扩散。**等 0007-E5 校准后再排期。**
 4. `docs/plans/0002-agent-event-trees.md`：主要大国专属国策/事件树，再到多国交互事件树。
@@ -252,4 +253,4 @@ tests/first-slice.test.ts    第一刀（M1–M6）引擎与命令测试
 | 0006 | GM ⇄ 引擎接口：查询/预测全部走 MCP，禁止读存档 | 📝 已规划 |
 | 0007 | 经济打磨：世界贸易校准、支付能力可见化、建造队列、GDP/科技/劳动力 | 🔧 当前优先（E1 第一轮已校准，32e624b） |
 
-规划文档在 `docs/plans/`；架构决策在 `docs/adr/`；术语以 `GLOSSARY.md` 为准。
+规划文档在 `docs/plans/`；架构决策在 `docs/adr/`；术语以 `GLOSSARY.md` 为准；GM 机制参考见 `docs/gm-handbook.md`。
