@@ -194,11 +194,21 @@
 
 > C1–C7 只完成了**修正块引擎**。ADR 0024 §1 定的**物理布局**（`engine/config/*`、`engine/data/*`）与**散落数值字面量**的抽取**尚未做**。F 系列（建筑扩展）与 E 系列（实时事件）收口后执行，避免并发冲突。
 
-### D1 抽取有调参意义的字面量 → `engine/config/*.ts`
+### D1 ✅ 抽取有调参意义的字面量 → `engine/config/*.ts`
 - 按 ADR 0024 §1 建 `engine/config/{balance,economy,tax,trade,construction,diplomacy,military,society,tech}.ts`。
 - 抽取对象（据盘点，非穷举）：价格平滑 `0.3`、收敛钳位 `0.35/3`、价格上下限 `0.25×/4×`；门控系数（access `0.55+0.9`、infra `0.6+/160`、industrial `0.7..1.3`）；`tech 0.07`；工匠系数；增长 `0.0012`、sol/radicals/exhaustion 除数；城市化系数；sol 公式；识字增益；失业平滑与上下限；激进权重；政府类型表；合法性拉回 `0.08`；权威/研究/人力/士气/领袖年龄；私人投资率；关系漂移 `0.012`、结盟 `55`/对手 `-35`、恶名 `0.1`；战争目标常数；事件常数；trade/fiscal/situation 常数。
 - **行为零改动**：只把字面量换成具名导出，数值不变；按域分批提交。
 - 护栏：加「配置引用完整性」测试；跑全量测试 + 确定性基线。
+
+**D1 完成记录（本切片）**
+
+- 新增 12 个叶子配置模块（只 import `types`，无模块初始化环）：`balance.ts`（合法性/激进/忠诚/威望/关系上下限、历史长度、运行/账本上限）、`economy.ts`（价格平滑/收敛/上下限、利用率反馈、Stone-Geary 需求系数、逐建筑利润与 laborShare/prestige、私人投资门槛与节奏）、`society.ts`（人口增长、城市化、sol、识字、失业、激进/忠诚、合法性、政府类型表、权威、稀缺、崩解）、`military.ts`（人力、士气、领袖年龄/记忆、战争结算）、`tech.ts`（研究速率公式）、`diplomacy.ts`（关系漂移/恶名、贸易冷暖、外交动作幅度、战争目标结算）、`trade.ts`（候选数、航线系数、到岸价系数、进口/支付能力、资源进口加成）、`tax.ts`（土地系数、建设补贴、自由贸易下限、征收效率/合规）、`fiscal.ts`（债/基金利率、支出系数、重组规则、支出上限）、`construction.ts`（营造所产能、每槽/工程量/造价、完工副作用）、`events.ts`（随机事件概率、AI 选项概率、实时事件解析上限与显著性阈值）、`situations.ts`（鸦片危机窗口/触发线/时限/禁运月数）。
+- 抽取方式：**行内字面量换成具名导入**，并把原本已在模块内具名的同域常数（`UTIL_*`/`SHRINK_MAX`/`WORKSHOP_*`/`CAPACITY_COST`/`CONSTRUCTION_*`/`TOP_PARTNERS`/`RELATION_CUTOFF`/`ROUTE_*`/`TRADE_*`/`SENSITIVE_*`/`EMBARGO_MONTHS_MAX`/`LAND_VALUE_PER_UNIT`/`CONSTRUCTION_SUBSIDY_*`/`FREE_TRADE_TARIFF_FLOOR`/`DEPRECIATION_PER_MONTH`/`MAX_PRIVATE_PROJECTS`/`PRIVATE_START_INTERVAL`/`SITUATION_TIMEOUT_MONTHS`/`OPIUM_CRISIS_EMBARGO_MONTHS`）**归位**到配置模块，并在原模块**重导出**，保持 `./economy`、`./construction`、`./trade`、`./diplomacy`、`./fiscal`、`./actions`、`./situations`、`./sim` 导入路径不变。
+- **行为零改动**：所有值 1:1；算术顺序未变（如 `0.55 + x * 0.9` → `BASE + x * SLOPE`、`x * 0.3` → `x * PRICE_SMOOTHING`）。`engine/data.ts` 未动（D2）；`engine/config/blocks/*` 未动。`WorldState.version` **未**提升（仍为 v11）。
+- 新增 `tests/config-integrity.test.ts`（6 例）：所有数值导出为有限数、每模块非空、形状断言、表结构 key 断言、**重导出值与配置原值一致**（防漂移）、抽样值与旧字面量相等。
+- `claude plugin test .` **388 pass / 0 fail**（D1 基线 382 + 新增 6）；`claude plugin validate .` 通过（仅既有警告）。
+- 有意保留：`engine/data.ts` 的全局业务系数（`ARTISAN_OUTPUT`/`CONSUMPTION_PROPENSITY`/`SUBSISTENCE`/`GOVERNMENT_DEMAND`/`INCOME_ELASTICITY`/`CAPITAL_LABOR_SCALE`/`INFRA_MULT_FLOOR` 等）按本任务「排除 data.ts」留给 D2/D3；法案 `addModifier` 之外的**直达效果**字面量（`actions.ts` 的 `law` 分支）与纯结构常量（`1e-9`/`/1000` 单位换算/数组槽位）未抽。
+
 
 ### D2 拆 `engine/data.ts` → `engine/data/*.ts`（桶）
 - 与 `0012-code-splits.md` 的 S2 合并执行，一次只搬一个域、逐提交验证，桶文件保证 `./data` 导入路径不变。

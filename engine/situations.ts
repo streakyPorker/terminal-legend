@@ -20,6 +20,15 @@ import { atWar, declareWar, strength } from './diplomacy'
 import { inspectEconomy } from './economy'
 import { clamp } from './internal'
 import type { Rng } from './rng'
+import {
+  OPIUM_CRISIS_EMBARGO_MONTHS,
+  OPIUM_TRIGGER_IMPORT_SHARE,
+  OPIUM_TRIGGER_IMPORT_UNITS,
+  OPIUM_TRIGGER_RELATION_MAX,
+  OPIUM_WINDOW_END_YEAR,
+  OPIUM_WINDOW_START_YEAR,
+  SITUATION_TIMEOUT_MONTHS,
+} from './config/situations'
 
 /**
  * The one situation this slice ships: the opium crisis (plan 0004 §4). There is
@@ -30,16 +39,9 @@ export const OPIUM_CRISIS_ID = 'opium-crisis'
 export const OPIUM_CRISIS_TITLE = '鸦片危机'
 /** Participants, in stable order (plan §4.2). */
 export const OPIUM_CRISIS_PARTICIPANTS = ['QING', 'GBR'] as const
-/** Months before an incomplete situation settles anyway (plan §4.2). */
-export const SITUATION_TIMEOUT_MONTHS = 3
-/** Embargo length the crackdown pack imposes (plan §4.3). */
-export const OPIUM_CRISIS_EMBARGO_MONTHS = 24
-/** Trigger window 1839.01–1842.12 (plan §4.1). */
-const WINDOW_START_YEAR = 1839
-const WINDOW_END_YEAR = 1842
-/** Trigger bars: ≥2 opium units/month, or ≥20% of QING consumption (plan §4.1). */
-const TRIGGER_IMPORT_UNITS = 2
-const TRIGGER_IMPORT_SHARE = 0.2
+/** The timeout and crackdown-embargo lengths live in `config/situations.ts`;
+ *  re-exported here so the `./situations` import surface is unchanged. */
+export { SITUATION_TIMEOUT_MONTHS, OPIUM_CRISIS_EMBARGO_MONTHS }
 
 export const SITUATION_STANCES: SituationStance[] = [
   'crackdown',
@@ -116,16 +118,16 @@ function opiumImportsTotal(world: WorldState): number {
 export function opiumCrisisDue(world: WorldState): boolean {
   if (world.situations.some(one => one.id === OPIUM_CRISIS_ID)) return false
   const year = world.date.year
-  if (year < WINDOW_START_YEAR || year > WINDOW_END_YEAR) return false
+  if (year < OPIUM_WINDOW_START_YEAR || year > OPIUM_WINDOW_END_YEAR) return false
   if (world.countries.QING === undefined || world.countries.GBR === undefined) return false
   if (atWar(world, 'QING', 'GBR')) return false
   const relation = world.countries.QING.diplo.relations.GBR ?? 0
-  if (relation > -10) return false
+  if (relation > OPIUM_TRIGGER_RELATION_MAX) return false
   const fromGbr = opiumImportsFrom(world, 'GBR')
-  if (fromGbr >= TRIGGER_IMPORT_UNITS) return true
+  if (fromGbr >= OPIUM_TRIGGER_IMPORT_UNITS) return true
   const own = inspectEconomy(world.countries.QING).production.opium
   const consumption = opiumImportsTotal(world) + Math.max(0, own)
-  return consumption > 0 && fromGbr / consumption >= TRIGGER_IMPORT_SHARE
+  return consumption > 0 && fromGbr / consumption >= OPIUM_TRIGGER_IMPORT_SHARE
 }
 
 function addLog(log: LogEntry[], world: WorldState, text: string): void {

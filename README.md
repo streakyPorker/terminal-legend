@@ -35,7 +35,7 @@
   `econ.buildingProfits`（产出价 − 投入价 − 分摊工资），`v3_inspect economy` 可读。
   全国工资按 `WAGE_ALLOCATION`（`basis: 'labor' | 'valueAdded' | 'capitalPlusLabor'`，当前
   `valueAdded`）分摊到各建筑类型，`weights?` 可按类型再加权；三种 basis 都精确满足
-  `Σ buildingProfits.wages === 全国工资`（plan 0008 B5；plan 0009 将迁到 `engine/config/economy.ts`）。
+  `Σ buildingProfits.wages === 全国工资`（plan 0008 B5；plan 0009 D1 已迁到 `engine/config/economy.ts`）。
   利用率门控产能、亏损类目闲置萎缩、私人投资只看盈利类目（ADR 0021/0022，World v9）；
   企业税按逐类利润累加（ADR 0023，World v10）。B5 重定工厂配方（调轻材料单、下调成衣/酒/家具
   产出）使其可盈利（7 大国产量加权聚合毛利 ≈ 15.8%）；成衣/酒/家具/军械按设计为**本地自给**
@@ -210,7 +210,7 @@ node statusline/install.mjs
 4. `docs/plans/0002-agent-event-trees.md`：主要大国专属国策/事件树，再到多国交互事件树。
    **⏸ 暂停**，等经济系统打磨完成后再恢复。其「逐回合事件」部分已由
    `docs/plans/0010-live-events.md`（ADR 0025）承接。
-5. `docs/plans/0009-config-refactor.md`（ADR 0024，取代 ADR 0004）：配置分层（`engine/config/` + `engine/data/`）与统一「配置块」乘数机制，增量 TDD、第一刀行为保持。
+5. `docs/plans/0009-config-refactor.md`（ADR 0024，取代 ADR 0004）：配置分层（`engine/config/` + `engine/data/`）与统一「配置块」乘数机制，增量 TDD、第一刀行为保持。**块引擎 C1–C7 与字面量抽取 D1 已完成**（`engine/config/{balance,economy,society,military,tech,diplomacy,trade,tax,fiscal,construction,events,situations}.ts`；D2 拆 `engine/data.ts` 待做）。
 6. `docs/plans/0010-live-events.md`（ADR 0025）：AI 生成的逐回合实时事件，引擎按经济/政治/外交/民生挑显著题材，LLM 现场生成 0 至 2 个可交互事件，效果编译回既有事件结构并持久化。**proposed，待批准实现。**
 7. `docs/plans/0011-building-expansion.md`（ADR 0026）：建筑扩张与统一基础设施——矿场拆成煤矿/铁矿/伐木场、工厂拆成七个单产工业建筑、加学校/运河/电报/要塞/船坞，新增 `steel` 商品（`iron` 转为「铁矿石」），把「交通基础设施」升级为统一的「基础设施」（供给/需求/线性短缺 debuff/维护），建筑加 `unlock` 前向字段。**已完成（F1–F7 全部实现，World v11）。**
 

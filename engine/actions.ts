@@ -45,18 +45,39 @@ import { inspectEconomy } from './economy'
 import { applyEventOption } from './events'
 import { asGood, asWarGoal, clamp, num, type Decision } from './internal'
 import type { Rng } from './rng'
+import { FREE_TRADE_TARIFF_FLOOR, TARIFF_RATE_MAX } from './config/tax'
+import { SPENDING_MAX } from './config/fiscal'
+import { CONSCRIPT_MAX, CONSCRIPT_MANPOWER_COST, CONSCRIPT_POP_COST, CONSCRIPT_RADICALS_COST } from './config/military'
+import { INVEST_AMOUNT_MAX, INVEST_CONFIDENCE_RANGE } from './config/economy'
+import {
+  DIPLOMACY_ALLIANCE_MIN_RELATION,
+  DIPLOMACY_EMBARGO_BACK,
+  DIPLOMACY_EMBARGO_RELATION,
+  DIPLOMACY_GIFT_BACK_FACTOR,
+  DIPLOMACY_GIFT_DEFAULT,
+  DIPLOMACY_GIFT_FACTOR,
+  DIPLOMACY_GIFT_MAX,
+  DIPLOMACY_IMPROVE_BACK_FACTOR,
+  DIPLOMACY_IMPROVE_DEFAULT,
+  DIPLOMACY_IMPROVE_MAX,
+  DIPLOMACY_INSULT,
+  DIPLOMACY_INSULT_BACK,
+  DIPLOMACY_PEACE_SCORE,
+  DIPLOMACY_RIVAL_RELATION,
+  DIPLOMACY_UNEMBARGO_RELATION,
+  DIPLOMACY_WAR_INFAMY,
+  DIPLOMACY_WAR_RELATION,
+} from './config/diplomacy'
 
 function relationLine(country: Country, other: Country): string {
   const value = Math.round(country.diplo.relations[other.id] ?? 0)
   return `[${other.flag}]${other.name} ${value >= 0 ? '+' : ''}${value}`
 }
 
-/**
- * Free trade lowers the tariff but never below this floor: a state still needs
- * a customs administration, and a 0% default makes the whole tax look absent
- * (playtest feedback, ADR 0009). The rate applies to both imports and exports.
- */
-export const FREE_TRADE_TARIFF_FLOOR = 5
+/** Free trade lowers the tariff but never below this floor (ADR 0009). The
+ *  value lives in `config/tax.ts`; re-exported so the `./actions` / `./sim`
+ *  import surface is unchanged. */
+export { FREE_TRADE_TARIFF_FLOOR }
 
 /** Political capital each law consumes (plan §7.6). */
 const LAW_AUTHORITY_COST: Record<string, number> = {
@@ -154,7 +175,7 @@ export function applyDecision(
           text: `${tag} 需要税基 base（land/profit/consumption/tariff）。当前：${taxMenuText(country)}`,
         }
       }
-      const rate = clamp(num(params.rate, country.econ.taxes[base]), 0, 60)
+      const rate = clamp(num(params.rate, country.econ.taxes[base]), 0, TARIFF_RATE_MAX)
       if (base === 'tariff') {
         country.econ.tariff = rate
         country.econ.taxes.tariff = rate
@@ -164,7 +185,7 @@ export function applyDecision(
       return { ok: true, text: `${tag} 将${TAX_BASE_NAMES[base]}税率调整为 ${rate.toFixed(0)}%` }
     }
     case 'tariff': {
-      const rate = clamp(num(params.rate, country.econ.tariff), 0, 60)
+      const rate = clamp(num(params.rate, country.econ.tariff), 0, TARIFF_RATE_MAX)
       country.econ.tariff = rate
       country.econ.taxes.tariff = rate
       // Without a separate export rate the old single-rate behaviour stands;
@@ -172,7 +193,7 @@ export function applyDecision(
       const exportRate =
         params.exportRate === undefined
           ? rate
-          : clamp(num(params.exportRate, rate), 0, 60)
+          : clamp(num(params.exportRate, rate), 0, TARIFF_RATE_MAX)
       country.econ.exportTariff = exportRate
       return {
         ok: true,
@@ -184,7 +205,7 @@ export function applyDecision(
       if (!(category in country.econ.spending)) {
         return { ok: false, text: `${tag} 未知支出类别 ${category}` }
       }
-      const amount = clamp(num(params.amount, country.econ.spending[category]), 0, 50)
+      const amount = clamp(num(params.amount, country.econ.spending[category]), 0, SPENDING_MAX)
       country.econ.spending[category] = amount
       return {
         ok: true,
@@ -200,8 +221,12 @@ export function applyDecision(
       // AI investment confidence, bounded to ±10 around the country's base
       // and ±3 per month (plan 0003 §4/§6).
       const base = country.politicalEconomy.investmentConfidence
-      const delta = clamp(num(params.amount, 1), -3, 3)
-      const next = clamp(country.econ.investmentConfidence + delta, base - 10, base + 10)
+      const delta = clamp(num(params.amount, 1), -INVEST_AMOUNT_MAX, INVEST_AMOUNT_MAX)
+      const next = clamp(
+        country.econ.investmentConfidence + delta,
+        base - INVEST_CONFIDENCE_RANGE,
+        base + INVEST_CONFIDENCE_RANGE,
+      )
       country.econ.investmentConfidence = next
       return {
         ok: true,
@@ -209,13 +234,13 @@ export function applyDecision(
       }
     }
     case 'conscript': {
-      const wanted = clamp(num(params.amount, 1), 1, 20)
-      const possible = Math.min(wanted, country.military.manpower / 2)
+      const wanted = clamp(num(params.amount, 1), 1, CONSCRIPT_MAX)
+      const possible = Math.min(wanted, country.military.manpower / CONSCRIPT_MANPOWER_COST)
       if (possible <= 0.1) return { ok: false, text: `${tag} 没有可用的人力` }
       country.military.army += possible
-      country.military.manpower -= possible * 2
-      country.pops.radicals = clamp(country.pops.radicals + possible * 0.4, 0, 100)
-      country.pops.total = Math.max(1, country.pops.total - possible * 0.4)
+      country.military.manpower -= possible * CONSCRIPT_MANPOWER_COST
+      country.pops.radicals = clamp(country.pops.radicals + possible * CONSCRIPT_RADICALS_COST, 0, 100)
+      country.pops.total = Math.max(1, country.pops.total - possible * CONSCRIPT_POP_COST)
       return { ok: true, text: `${tag} 征召了 ${possible.toFixed(1)} 万兵力` }
     }
     case 'cancel': {
@@ -308,26 +333,26 @@ export function applyDecision(
       const current = country.diplo.relations[target.id] ?? 0
       switch (move) {
         case 'improve': {
-          const amount = clamp(num(params.amount, 8), 1, 30)
+          const amount = clamp(num(params.amount, DIPLOMACY_IMPROVE_DEFAULT), 1, DIPLOMACY_IMPROVE_MAX)
           country.diplo.relations[target.id] = clamp(current + amount, -100, 100)
           target.diplo.relations[country.id] = clamp(
-            (target.diplo.relations[country.id] ?? 0) + amount * 0.6,
+            (target.diplo.relations[country.id] ?? 0) + amount * DIPLOMACY_IMPROVE_BACK_FACTOR,
             -100,
             100,
           )
           return { ok: true, text: `${tag} 改善了与${target.name}的关系（${relationLine(country, target)}）` }
         }
         case 'insult': {
-          country.diplo.relations[target.id] = clamp(current - 15, -100, 100)
+          country.diplo.relations[target.id] = clamp(current - DIPLOMACY_INSULT, -100, 100)
           target.diplo.relations[country.id] = clamp(
-            (target.diplo.relations[country.id] ?? 0) - 12,
+            (target.diplo.relations[country.id] ?? 0) - DIPLOMACY_INSULT_BACK,
             -100,
             100,
           )
           return { ok: true, text: `${tag} 与${target.name}交恶` }
         }
         case 'alliance': {
-          if (country.diplo.rivals.includes(target.id) || current < 30) {
+          if (country.diplo.rivals.includes(target.id) || current < DIPLOMACY_ALLIANCE_MIN_RELATION) {
             return { ok: false, text: `${tag} 与${target.name}的关系不足以结盟` }
           }
           if (!country.diplo.alliances.includes(target.id)) country.diplo.alliances.push(target.id)
@@ -336,16 +361,16 @@ export function applyDecision(
         }
         case 'rival': {
           if (!country.diplo.rivals.includes(target.id)) country.diplo.rivals.push(target.id)
-          country.diplo.relations[target.id] = clamp(current - 30, -100, 100)
+          country.diplo.relations[target.id] = clamp(current - DIPLOMACY_RIVAL_RELATION, -100, 100)
           return { ok: true, text: `${tag} 将${target.name}列为竞争对手` }
         }
         case 'gift': {
-          const amount = clamp(num(params.amount, 3), 1, 20)
+          const amount = clamp(num(params.amount, DIPLOMACY_GIFT_DEFAULT), 1, DIPLOMACY_GIFT_MAX)
           if (country.econ.treasury < amount) return { ok: false, text: `${tag} 国库不足以赠礼` }
           country.econ.treasury -= amount
-          country.diplo.relations[target.id] = clamp(current + amount * 2, -100, 100)
+          country.diplo.relations[target.id] = clamp(current + amount * DIPLOMACY_GIFT_FACTOR, -100, 100)
           target.diplo.relations[country.id] = clamp(
-            (target.diplo.relations[country.id] ?? 0) + amount * 1.6,
+            (target.diplo.relations[country.id] ?? 0) + amount * DIPLOMACY_GIFT_BACK_FACTOR,
             -100,
             100,
           )
@@ -360,13 +385,13 @@ export function applyDecision(
             String(params.reason ?? '边境争端'),
           )
           if (war === undefined) return { ok: false, text: `${tag} 与${target.name}已经在战争中` }
-          country.diplo.relations[target.id] = clamp(current - 50, -100, 100)
+          country.diplo.relations[target.id] = clamp(current - DIPLOMACY_WAR_RELATION, -100, 100)
           target.diplo.relations[country.id] = clamp(
-            (target.diplo.relations[country.id] ?? 0) - 50,
+            (target.diplo.relations[country.id] ?? 0) - DIPLOMACY_WAR_RELATION,
             -100,
             100,
           )
-          country.diplo.infamy = clamp(country.diplo.infamy + 10, 0, 100)
+          country.diplo.infamy = clamp(country.diplo.infamy + DIPLOMACY_WAR_INFAMY, 0, 100)
           return { ok: true, text: `${tag} 向${target.name}宣战（${war.defenders.length} 国应战）` }
         }
         case 'peace': {
@@ -391,11 +416,11 @@ export function applyDecision(
           endWar(
             world,
             war,
-            war.warScore > 10
+            war.warScore > DIPLOMACY_PEACE_SCORE
               ? war.attackers.includes(country.id)
                 ? 'attackers'
                 : 'defenders'
-              : war.warScore < -10
+              : war.warScore < -DIPLOMACY_PEACE_SCORE
                 ? war.attackers.includes(country.id)
                   ? 'defenders'
                   : 'attackers'
@@ -437,9 +462,9 @@ export function applyDecision(
             })
           }
           // The file's `insult` convention: the sender cools more than the target.
-          country.diplo.relations[target.id] = clamp(current - 15, -100, 100)
+          country.diplo.relations[target.id] = clamp(current - DIPLOMACY_EMBARGO_RELATION, -100, 100)
           target.diplo.relations[country.id] = clamp(
-            (target.diplo.relations[country.id] ?? 0) - 12,
+            (target.diplo.relations[country.id] ?? 0) - DIPLOMACY_EMBARGO_BACK,
             -100,
             100,
           )
@@ -465,9 +490,9 @@ export function applyDecision(
           })
           const lifted = before - country.embargoes.length
           // Gift-style symmetry: both sides warm by the same amount (plan §3).
-          country.diplo.relations[target.id] = clamp(current + 5, -100, 100)
+          country.diplo.relations[target.id] = clamp(current + DIPLOMACY_UNEMBARGO_RELATION, -100, 100)
           target.diplo.relations[country.id] = clamp(
-            (target.diplo.relations[country.id] ?? 0) + 5,
+            (target.diplo.relations[country.id] ?? 0) + DIPLOMACY_UNEMBARGO_RELATION,
             -100,
             100,
           )

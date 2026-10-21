@@ -16,6 +16,33 @@ import {
 } from './construction'
 import type { EconomySnapshot } from './economy'
 import { clamp } from './internal'
+import {
+  CAPITAL_COST_FLOOR,
+  DEPRECIATION_PER_MONTH,
+  INFRA_SCORE_BASE,
+  INFRA_SCORE_LITERACY,
+  INFRA_SCORE_OFFICE_BONUS,
+  INFRA_SCORE_OFFICE_MIN,
+  INFRA_SCORE_OFFICES,
+  INFRA_SCORE_PORT,
+  INFRA_SCORE_TRANSPORT,
+  INVESTMENT_CONFIDENCE_MIN,
+  INVESTMENT_DEBT_COEF,
+  INVESTMENT_INDUSTRIAL_MAX,
+  INVESTMENT_INDUSTRIAL_MIN,
+  INVESTMENT_MONTHS_PER_YEAR,
+  INVESTMENT_RATIO_MAX,
+  INVESTMENT_RATIO_MIN,
+  INVESTMENT_RENEWAL_SCORE,
+  INVESTMENT_RESERVE_BASE,
+  INVESTMENT_RESERVE_MULTIPLE,
+  INVESTMENT_RETURN_BASE,
+  MAX_PRIVATE_PROJECTS,
+  PRIVATE_START_INTERVAL,
+  SUPPLY_DEMAND_GUARD,
+} from './config/economy'
+
+export { DEPRECIATION_PER_MONTH, MAX_PRIVATE_PROJECTS, PRIVATE_START_INTERVAL }
 
 /**
  * Expected-return proxy for one building at current prices and demand. It
@@ -35,8 +62,8 @@ export function investmentScore(
     (resourceMultiplier(country.econ.resources, 'coal') +
       resourceMultiplier(country.econ.resources, 'iron')) /
       2,
-    0.7,
-    1.3,
+    INVESTMENT_INDUSTRIAL_MIN,
+    INVESTMENT_INDUSTRIAL_MAX,
   )
   let weightSum = 0
   let pressureSum = 0
@@ -48,7 +75,7 @@ export function investmentScore(
         ? resource * industrial
         : resource
     const weight = quantity * GOODS[id].basePrice
-    const ratio = clamp(demand[id] / Math.max(0.01, production[id]), 0.3, 2)
+    const ratio = clamp(demand[id] / Math.max(SUPPLY_DEMAND_GUARD, production[id]), INVESTMENT_RATIO_MIN, INVESTMENT_RATIO_MAX)
     weightSum += weight
     pressureSum += weight * ratio
     potentialSum += weight * potential
@@ -64,14 +91,18 @@ function infrastructureScore(country: Country, building: BuildingId): number {
   const b = country.econ.buildings
   switch (building) {
     case 'railroads':
-      return 0.55 + (1 - country.econ.transportInfrastructure / 100) * 0.5
+      return INFRA_SCORE_BASE + (1 - country.econ.transportInfrastructure / 100) * INFRA_SCORE_TRANSPORT
     case 'ports':
-      return 0.55 + (1 - country.econ.marketAccess) * 0.5
+      return INFRA_SCORE_BASE + (1 - country.econ.marketAccess) * INFRA_SCORE_PORT
     case 'universities':
-      return 0.55 + (1 - country.pops.literacy) * 0.3
+      return INFRA_SCORE_BASE + (1 - country.pops.literacy) * INFRA_SCORE_LITERACY
     case 'offices': {
       const ceiling = country.bureaucracy.ceiling / 100
-      return 0.55 + (1 - clamp(ceiling, 0, 1)) * 0.3 + (b.offices < 4 ? 0.1 : 0)
+      return (
+        INFRA_SCORE_BASE +
+        (1 - clamp(ceiling, 0, 1)) * INFRA_SCORE_OFFICES +
+        (b.offices < INFRA_SCORE_OFFICE_MIN ? INFRA_SCORE_OFFICE_BONUS : 0)
+      )
     }
     default:
       return 0
@@ -84,20 +115,11 @@ function capitalThreshold(country: Country): number {
   // policies lower the hurdle rate, so `privateInvestment` boosts both savings
   // and the range of projects that clear it.
   const confidence = 1 + totalsFor(country, 'privateInvestment').percent / 100
-  return (1 + (0.04 + debtRatio * 0.02) / 12) / Math.max(0.5, confidence)
+  return (
+    (1 + (INVESTMENT_RETURN_BASE + debtRatio * INVESTMENT_DEBT_COEF) / INVESTMENT_MONTHS_PER_YEAR) /
+    Math.max(INVESTMENT_CONFIDENCE_MIN, confidence)
+  )
 }
-
-/** Monthly depreciation of the building stock; replacement investment keeps
- *  the private-investment loop alive after the initial industrialisation. */
-export const DEPRECIATION_PER_MONTH = 0.0015
-
-/**
- * Private builders start at most one project every other month, with at most
- * three in flight. Without the brake the queue filled with ten mine projects
- * within a year and the private sector felt like a second state (PT-029).
- */
-export const MAX_PRIVATE_PROJECTS = 3
-export const PRIVATE_START_INTERVAL = 2
 
 /**
  * Allocates this month's private savings to at most one new private project.
@@ -137,7 +159,7 @@ export function investPrivateCapital(
   // return on capital, the deterministic tie-break between equally-attractive
   // candidates (ADR 0022).
   const capitalCost = (building: BuildingId): number =>
-    Math.max(0.01, constructionTotalCost(draftProject(building, 1)))
+    Math.max(CAPITAL_COST_FLOOR, constructionTotalCost(draftProject(building, 1)))
   const scores = (Object.keys(BUILDINGS) as BuildingId[]).map(building => {
     const hasOutput = Object.keys(BUILDING_OUTPUT[building]).length > 0
     const profitable = snap.buildingProfits[building].profitPerBuilding > 0
@@ -177,7 +199,7 @@ export function investPrivateCapital(
   // single highest-scoring factory. Unprofitable capacity is not renewed; it
   // idles and shrinks instead (ADR 0022).
   const renewalCandidates = scores.filter(
-    row => row.stock > 0 && row.score > 0.55 && row.profitable,
+    row => row.stock > 0 && row.score > INVESTMENT_RENEWAL_SCORE && row.profitable,
   )
   const renewal =
     renewalCandidates.length > 0
@@ -266,7 +288,7 @@ export function investPrivateCapital(
   const totalPrivateCost = country.econ.constructionQueue
     .filter(project => (project.owner ?? 'state') === 'private')
     .reduce((sum, project) => sum + project.monthlyCost, 0)
-  const reserve = Math.max(10, totalPrivateCost * 3)
+  const reserve = Math.max(INVESTMENT_RESERVE_BASE, totalPrivateCost * INVESTMENT_RESERVE_MULTIPLE)
   const idle = Math.max(0, country.econ.privateCapital - reserve)
   const released = idle * (1 - country.politicalEconomy.idleRetained)
   if (released > 0) {

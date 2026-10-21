@@ -22,45 +22,77 @@ import {
 import { embargoed, type TradeBlocker } from './trade'
 import { advanceDate, clamp, dateDistance } from './internal'
 import type { Rng } from './rng'
+import { LEGITIMACY_MAX, PRESTIGE_MAX, RADICALS_MAX, RELATION_MAX, RELATION_MIN } from './config/balance'
+import { TARIFF_RATE_MAX } from './config/tax'
+import {
+  EMBARGO_MONTHS_MAX,
+  HUMILIATION_LOSER_LEGITIMACY,
+  HUMILIATION_LOSER_PRESTIGE,
+  HUMILIATION_PRESTIGE,
+  HUMILIATION_DEFEAT_LEGITIMACY,
+  INFAMY_DRAG,
+  OPEN_MARKET_LOSER_LEGITIMACY,
+  OPEN_MARKET_LOSER_PRESTIGE,
+  OPEN_MARKET_LOSER_RELATION,
+  OPEN_MARKET_TARIFF_CUT,
+  RELATION_ALLIANCE_TARGET,
+  RELATION_DRIFT,
+  RELATION_RIVAL_TARGET,
+  REPARATIONS_CAPACITY_INCOME_SHARE,
+  REPARATIONS_CAPACITY_MIN,
+  REPARATIONS_DEFAULT_GDP_SHARE,
+  REPARATIONS_DEFAULT_MONTHS,
+  REPARATIONS_DEFEAT_LEGITIMACY,
+  REPARATIONS_LOSER_LEGITIMACY,
+  REPARATIONS_LOSER_PRESTIGE,
+  REPARATIONS_MAX_GDP,
+  REPARATIONS_MAX_MONTHS,
+  REPARATIONS_MIN_MONTHS,
+  REPARATIONS_MIN_REMAINING,
+  REPARATIONS_WINNER_PRESTIGE,
+  SENSITIVE_DRAG,
+  SENSITIVE_GOODS,
+  SPHERE_LOSER_LEGITIMACY,
+  SPHERE_LOSER_PRESTIGE,
+  SPHERE_RELATION_PENALTY,
+  TRADE_RELATION_ENVELOPE,
+  TRADE_RELATION_FLOOR,
+  TRADE_TENSION_RETENTION_MONTHS,
+  TRADE_WARMTH_MAX,
+} from './config/diplomacy'
+import {
+  LEADER_MEMORY_MAX,
+  MORALE_MAX,
+  MORALE_MIN,
+  WAR_END_EXHAUSTION_LOSE,
+  WAR_END_EXHAUSTION_WIN,
+  WAR_END_MORALE_WIN,
+  WAR_END_RELATION_PENALTY,
+  WAR_EXHAUSTION_PER_MONTH,
+  WAR_MONTHS_LIMIT,
+  WAR_MORALE_LOSS_PER_MONTH,
+  WAR_RADICALS_PER_MONTH,
+  WAR_SCORE_CLAMP,
+  WAR_SCORE_DECISIVE,
+  WAR_SCORE_LIMIT,
+  WAR_SCORE_NOISE,
+  WAR_SCORE_STEP,
+  WAR_SCORE_WIN,
+  WAR_STRENGTH_MORALE_DIVISOR,
+  WAR_STRENGTH_TECH_COEF,
+} from './config/military'
 
-/**
- * Goods whose trade sours relations (plan §2.7/§6): importing any of these
- * from a partner adds a monthly tension. Tuned against the 60-month baseline.
- */
-export const SENSITIVE_GOODS: GoodId[] = ['opium', 'arms', 'grain']
-/**
- * §11 calibration knob: the automatic *warmth* a full trade share earns (plan
- * §2.7 "最多 +2"). Scaled by `(1 - sensitiveShare)` so the sensitive slice of
- * trade earns no warmth — otherwise a monopoly partner's warmth swamps the drag.
- */
-export const TRADE_WARMTH_MAX = 2
-/**
- * §11 calibration knob: monthly relation *drag* per unit of sensitive-import
- * share (plan §2.7). The flat −0.5 draft was calibrated away (see §11.2): a
- * monopoly partner's import share is almost entirely sensitive, so a flat
- * penalty could never outrun the share-scaled warmth and the crisis bar
- * (§4.1, 中英关系 ≤ −10) was unreachable. This scales with how much of the
- * bilateral trade is actually sensitive, so opium dependency sinks relations.
- * It intentionally exceeds the ±10 monthly envelope: a fully sensitive
- * partner always moves at the cap, while a marginal sensitive slice can still
- * outrun the warmth term.
- */
-export const SENSITIVE_DRAG = 15
-/** Per ordered pair per month: auto + sensitive + agent tension is clamped here (plan §2.7). */
-export const TRADE_RELATION_ENVELOPE = 10
-/**
- * §11 calibration knob: floor for the *automatic* trade effects. Trade friction
- * alone must not reach the hard trade cut at `RELATION_CUTOFF` (−50, plan §1.2) —
- * severance is a diplomatic act (tension, embargo, war). Without it a monopoly
- * opium partner's drag crossed −50, closed the route, mean-reversion reopened it
- * trading only opium (sensitiveShare → 1) and shoved it back under: a limit cycle
- * that killed the opium flow through 1840–42.
- */
-export const TRADE_RELATION_FLOOR = -45
-/** Months of trade-tension history kept for the diplomacy UI (plan §2.7). */
-export const TRADE_TENSION_RETENTION_MONTHS = 24
-/** Longest embargo an action may set; absent means permanent (plan §3). */
-export const EMBARGO_MONTHS_MAX = 60
+/** The diplomacy calibration constants live in `config/diplomacy.ts`; they are
+ *  re-exported here so the `./diplomacy` / `./sim` import surface is unchanged. */
+export {
+  SENSITIVE_GOODS,
+  TRADE_WARMTH_MAX,
+  SENSITIVE_DRAG,
+  TRADE_RELATION_ENVELOPE,
+  TRADE_RELATION_FLOOR,
+  TRADE_TENSION_RETENTION_MONTHS,
+  EMBARGO_MONTHS_MAX,
+}
 
 export function atWar(world: WorldState, a: string, b: string): boolean {
   return world.wars.some(
@@ -227,7 +259,7 @@ export function applyTradeRelations(world: WorldState, log: LogEntry[]): void {
       // The floor binds the automatic effects only; an explicit agent tension may
       // still drive the pair all the way to -100 (plan §2.7).
       if (agentDelta === 0) next = Math.max(next, TRADE_RELATION_FLOOR)
-      country.diplo.relations[partnerId] = clamp(next, -100, 100)
+      country.diplo.relations[partnerId] = clamp(next, RELATION_MIN, RELATION_MAX)
     }
   }
   world.tradeTensions = world.tradeTensions.filter(
@@ -241,14 +273,14 @@ export function driftRelations(world: WorldState): void {
       if (other.id === country.id) continue
       const current = country.diplo.relations[other.id] ?? 0
       // Infamy drags every relationship's resting point down.
-      const infamyDrag = country.diplo.infamy * 0.1
+      const infamyDrag = country.diplo.infamy * INFAMY_DRAG
       const target =
         (country.diplo.alliances.includes(other.id)
-          ? 55
+          ? RELATION_ALLIANCE_TARGET
           : country.diplo.rivals.includes(other.id)
-            ? -35
+            ? RELATION_RIVAL_TARGET
             : 0) - infamyDrag
-      country.diplo.relations[other.id] = current + (target - current) * 0.012
+      country.diplo.relations[other.id] = current + (target - current) * RELATION_DRIFT
     }
   }
 }
@@ -263,8 +295,8 @@ export function strength(world: WorldState, ids: string[]): number {
       'armyStrength',
       country.military.army *
         country.military.quality *
-        (country.military.morale / 60) *
-        (1 + country.tech.level * 0.03),
+        (country.military.morale / WAR_STRENGTH_MORALE_DIVISOR) *
+        (1 + country.tech.level * WAR_STRENGTH_TECH_COEF),
     )
   }
   return total
@@ -339,26 +371,38 @@ export function applyWarGoal(
       if (country === undefined) continue
       switch (war.goal) {
         case 'reparations':
-          country.diplo.prestige = clamp(country.diplo.prestige - 10, 0, 240)
-          country.government.legitimacy = clamp(country.government.legitimacy - 3, 0, 100)
+          country.diplo.prestige = clamp(country.diplo.prestige - REPARATIONS_LOSER_PRESTIGE, 0, PRESTIGE_MAX)
+          country.government.legitimacy = clamp(
+            country.government.legitimacy - REPARATIONS_DEFEAT_LEGITIMACY,
+            0,
+            LEGITIMACY_MAX,
+          )
           break
         case 'openMarket':
           for (const otherId of otherSide) {
             country.diplo.relations[otherId] = clamp(
-              (country.diplo.relations[otherId] ?? 0) - 10,
-              -100,
-              100,
+              (country.diplo.relations[otherId] ?? 0) - OPEN_MARKET_LOSER_RELATION,
+              RELATION_MIN,
+              RELATION_MAX,
             )
           }
-          country.diplo.prestige = clamp(country.diplo.prestige - 5, 0, 240)
+          country.diplo.prestige = clamp(country.diplo.prestige - OPEN_MARKET_LOSER_PRESTIGE, 0, PRESTIGE_MAX)
           break
         case 'sphere':
-          country.diplo.prestige = clamp(country.diplo.prestige - 8, 0, 240)
-          country.government.legitimacy = clamp(country.government.legitimacy - 2, 0, 100)
+          country.diplo.prestige = clamp(country.diplo.prestige - SPHERE_LOSER_PRESTIGE, 0, PRESTIGE_MAX)
+          country.government.legitimacy = clamp(
+            country.government.legitimacy - SPHERE_LOSER_LEGITIMACY,
+            0,
+            LEGITIMACY_MAX,
+          )
           break
         case 'humiliation':
-          country.diplo.prestige = clamp(country.diplo.prestige - 8, 0, 240)
-          country.government.legitimacy = clamp(country.government.legitimacy - 3, 0, 100)
+          country.diplo.prestige = clamp(country.diplo.prestige - HUMILIATION_LOSER_PRESTIGE, 0, PRESTIGE_MAX)
+          country.government.legitimacy = clamp(
+            country.government.legitimacy - HUMILIATION_DEFEAT_LEGITIMACY,
+            0,
+            LEGITIMACY_MAX,
+          )
           break
       }
     }
@@ -374,27 +418,34 @@ export function applyWarGoal(
         if (loser === undefined) continue
         const rawTotal = terms?.total
         const total = clamp(
-          Number.isFinite(rawTotal) ? (rawTotal as number) : loser.econ.gdp * 0.1,
+          Number.isFinite(rawTotal) ? (rawTotal as number) : loser.econ.gdp * REPARATIONS_DEFAULT_GDP_SHARE,
           0,
-          loser.econ.gdp * 2,
+          loser.econ.gdp * REPARATIONS_MAX_GDP,
         )
         const rawMonths = terms?.maxMonths
         const maxMonths = clamp(
-          Number.isFinite(rawMonths) ? Math.round(rawMonths as number) : 60,
-          1,
-          240,
+          Number.isFinite(rawMonths) ? Math.round(rawMonths as number) : REPARATIONS_DEFAULT_MONTHS,
+          REPARATIONS_MIN_MONTHS,
+          REPARATIONS_MAX_MONTHS,
         )
         // The loser pays what it can without going into debt, then spreads the
         // rest over at most `maxMonths`. The victor only set the total and the
         // term; this split is the loser's own plan.
         const lump = clamp(loser.econ.treasury, 0, total)
         loser.econ.treasury -= lump
-        loser.government.legitimacy = clamp(loser.government.legitimacy - 5, 0, 100)
+        loser.government.legitimacy = clamp(
+          loser.government.legitimacy - REPARATIONS_LOSER_LEGITIMACY,
+          0,
+          LEGITIMACY_MAX,
+        )
         if (recipient !== undefined && lump > 0) recipient.econ.treasury += lump
 
         const remaining = total - lump
-        if (remaining > 0.01) {
-          const capacity = Math.max(0.5, loser.econ.income * 0.15)
+        if (remaining > REPARATIONS_MIN_REMAINING) {
+          const capacity = Math.max(
+            REPARATIONS_CAPACITY_MIN,
+            loser.econ.income * REPARATIONS_CAPACITY_INCOME_SHARE,
+          )
           const months = Math.min(
             maxMonths,
             Math.max(1, Math.ceil(remaining / capacity)),
@@ -414,7 +465,7 @@ export function applyWarGoal(
       for (const id of winnerIds) {
         const winner = world.countries[id]
         if (winner === undefined) continue
-        winner.diplo.prestige = clamp(winner.diplo.prestige + 10, 0, 240)
+        winner.diplo.prestige = clamp(winner.diplo.prestige + REPARATIONS_WINNER_PRESTIGE, 0, PRESTIGE_MAX)
       }
       break
     }
@@ -422,8 +473,12 @@ export function applyWarGoal(
       for (const id of loserIds) {
         const loser = world.countries[id]
         if (loser === undefined) continue
-        loser.econ.tariff = clamp(loser.econ.tariff - 10, 0, 60)
-        loser.government.legitimacy = clamp(loser.government.legitimacy - 4, 0, 100)
+        loser.econ.tariff = clamp(loser.econ.tariff - OPEN_MARKET_TARIFF_CUT, 0, TARIFF_RATE_MAX)
+        loser.government.legitimacy = clamp(
+          loser.government.legitimacy - OPEN_MARKET_LOSER_LEGITIMACY,
+          0,
+          LEGITIMACY_MAX,
+        )
         installWarModifiers(loser, war.id, 'openMarket', 'loser')
       }
       for (const id of winnerIds) {
@@ -448,16 +503,16 @@ export function applyWarGoal(
         if (winner === undefined) continue
         for (const loserId of loserIds) {
           winner.diplo.relations[loserId] = clamp(
-            (winner.diplo.relations[loserId] ?? 0) - 10,
-            -100,
-            100,
+            (winner.diplo.relations[loserId] ?? 0) - SPHERE_RELATION_PENALTY,
+            RELATION_MIN,
+            RELATION_MAX,
           )
           const loser = world.countries[loserId]
           if (loser === undefined) continue
           loser.diplo.relations[id] = clamp(
-            (loser.diplo.relations[id] ?? 0) - 10,
-            -100,
-            100,
+            (loser.diplo.relations[id] ?? 0) - SPHERE_RELATION_PENALTY,
+            RELATION_MIN,
+            RELATION_MAX,
           )
         }
       }
@@ -467,13 +522,17 @@ export function applyWarGoal(
       for (const id of winnerIds) {
         const winner = world.countries[id]
         if (winner === undefined) continue
-        winner.diplo.prestige = clamp(winner.diplo.prestige + 15, 0, 240)
+        winner.diplo.prestige = clamp(winner.diplo.prestige + HUMILIATION_PRESTIGE, 0, PRESTIGE_MAX)
       }
       for (const id of loserIds) {
         const loser = world.countries[id]
         if (loser === undefined) continue
-        loser.diplo.prestige = clamp(loser.diplo.prestige - 15, 0, 240)
-        loser.government.legitimacy = clamp(loser.government.legitimacy - 8, 0, 100)
+        loser.diplo.prestige = clamp(loser.diplo.prestige - HUMILIATION_PRESTIGE, 0, PRESTIGE_MAX)
+        loser.government.legitimacy = clamp(
+          loser.government.legitimacy - HUMILIATION_LOSER_LEGITIMACY,
+          0,
+          LEGITIMACY_MAX,
+        )
       }
       break
     }
@@ -497,17 +556,17 @@ export function endWar(
   for (const id of winnerIds) {
     const country = world.countries[id]
     if (country === undefined) continue
-    country.military.exhaustion = clamp(country.military.exhaustion - 15, 0, 100)
-    country.military.morale = clamp(country.military.morale + 10, 20, 100)
+    country.military.exhaustion = clamp(country.military.exhaustion - WAR_END_EXHAUSTION_WIN, 0, 100)
+    country.military.morale = clamp(country.military.morale + WAR_END_MORALE_WIN, MORALE_MIN, MORALE_MAX)
     country.leader.memory.push(`${war.name}以胜利告终`)
-    if (country.leader.memory.length > 8) country.leader.memory.shift()
+    if (country.leader.memory.length > LEADER_MEMORY_MAX) country.leader.memory.shift()
   }
   for (const id of loserIds) {
     const country = world.countries[id]
     if (country === undefined) continue
-    country.military.exhaustion = clamp(country.military.exhaustion + 5, 0, 100)
+    country.military.exhaustion = clamp(country.military.exhaustion + WAR_END_EXHAUSTION_LOSE, 0, 100)
     country.leader.memory.push(`${war.name}以失败告终`)
-    if (country.leader.memory.length > 8) country.leader.memory.shift()
+    if (country.leader.memory.length > LEADER_MEMORY_MAX) country.leader.memory.shift()
   }
 
   // A white peace or the 60-month timeout settles no goal (plan §5).
@@ -528,7 +587,7 @@ export function endWar(
     for (const otherId of [...attackerIds, ...defenderIds]) {
       if (otherId === id) continue
       const current = country.diplo.relations[otherId] ?? 0
-      country.diplo.relations[otherId] = clamp(current - 20, -100, 100)
+      country.diplo.relations[otherId] = clamp(current - WAR_END_RELATION_PENALTY, RELATION_MIN, RELATION_MAX)
     }
   }
 
@@ -549,28 +608,36 @@ export function resolveWars(world: WorldState, rng: Rng, log: LogEntry[]): void 
     war.battles += 1
     const attack = strength(world, war.attackers) / Math.max(1, war.attackers.length)
     const defend = strength(world, war.defenders) / Math.max(1, war.defenders.length)
-    const delta = clamp(((attack - defend) / Math.max(1, attack + defend)) * 12, -12, 12)
-    war.warScore = clamp(war.warScore + delta + rng.range(-2, 2), -100, 100)
+    const delta = clamp(
+      ((attack - defend) / Math.max(1, attack + defend)) * WAR_SCORE_STEP,
+      -WAR_SCORE_CLAMP,
+      WAR_SCORE_CLAMP,
+    )
+    war.warScore = clamp(
+      war.warScore + delta + rng.range(-WAR_SCORE_NOISE, WAR_SCORE_NOISE),
+      -WAR_SCORE_LIMIT,
+      WAR_SCORE_LIMIT,
+    )
     war.lastEvent =
-      delta > 3
+      delta > WAR_SCORE_DECISIVE
         ? '进攻方在战场上占了上风'
-        : delta < -3
+        : delta < -WAR_SCORE_DECISIVE
           ? '防守方稳住了阵线'
           : '双方在战线上僵持'
 
     for (const id of [...war.attackers, ...war.defenders]) {
       const country = world.countries[id]
       if (country === undefined) continue
-      country.military.exhaustion = clamp(country.military.exhaustion + 1.2, 0, 100)
-      country.military.morale = clamp(country.military.morale - 0.4, 20, 100)
-      country.pops.radicals = clamp(country.pops.radicals + 0.5, 0, 100)
+      country.military.exhaustion = clamp(country.military.exhaustion + WAR_EXHAUSTION_PER_MONTH, 0, 100)
+      country.military.morale = clamp(country.military.morale - WAR_MORALE_LOSS_PER_MONTH, MORALE_MIN, MORALE_MAX)
+      country.pops.radicals = clamp(country.pops.radicals + WAR_RADICALS_PER_MONTH, 0, RADICALS_MAX)
     }
 
-    if (war.warScore >= 75) {
+    if (war.warScore >= WAR_SCORE_WIN) {
       endWar(world, war, 'attackers', log)
-    } else if (war.warScore <= -75) {
+    } else if (war.warScore <= -WAR_SCORE_WIN) {
       endWar(world, war, 'defenders', log)
-    } else if (war.months >= 60) {
+    } else if (war.months >= WAR_MONTHS_LIMIT) {
       endWar(world, war, 'white', log)
     }
   }

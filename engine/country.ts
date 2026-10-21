@@ -19,10 +19,109 @@ import { DEPRECIATION_PER_MONTH, investPrivateCapital } from './investment'
 import { appliedPart, clamp, sumParts } from './internal'
 import type { TradeSettlement } from './trade'
 import type { Rng } from './rng'
+import {
+  HISTORY_MONTHS,
+  LEGITIMACY_MAX,
+  LOYALISTS_MAX,
+  PRESTIGE_MAX,
+  RADICALS_MAX,
+} from './config/balance'
+import {
+  ARTISAN_SHIFT_INDUSTRY,
+  ARTISAN_SHIFT_PEASANT,
+  AUTHORITY_LEGITIMACY_COEF,
+  AUTHORITY_LOW_PENALTY,
+  AUTHORITY_LOW_THRESHOLD,
+  COLLAPSE_RADICALS,
+  FISCAL_ALERT_CHANCE,
+  FISCAL_ALERT_DEBT_RATIO,
+  GOVERNMENT_LEGITIMACY_BONUS,
+  GROWTH_BASE,
+  GROWTH_EXHAUSTION_DIVISOR,
+  GROWTH_RADICALS_DIVISOR,
+  GROWTH_SOL_BASE,
+  GROWTH_SOL_DIVISOR,
+  LEGITIMACY_BASE,
+  LEGITIMACY_EXHAUSTION_COEF,
+  LEGITIMACY_PULL,
+  LEGITIMACY_RADICALS_COEF,
+  LEGITIMACY_SUCCESSION_PENALTY,
+  LEGITIMACY_TREASURY_BONUS,
+  LEGITIMACY_TREASURY_PENALTY,
+  LEGITIMACY_WELFARE_COEF,
+  LITERACY_EDUCATION,
+  LITERACY_UNIVERSITY,
+  LOYALIST_LEGITIMACY_COEF,
+  LOYALIST_RADICAL_COEF,
+  RADICAL_EXHAUSTION_COEF,
+  RADICAL_SCARCITY_COEF,
+  RADICAL_SOL_BASE,
+  RADICAL_SOL_COEF,
+  RADICAL_TAX_BASE,
+  RADICAL_TAX_COEF,
+  RADICAL_TARIFF_BASE,
+  RADICAL_TARIFF_COEF,
+  RADICAL_UNEMPLOYMENT_COEF,
+  RELIEF_BASE,
+  RELIEF_EDUCATION,
+  RELIEF_LEGITIMACY,
+  RELIEF_LOYALISTS,
+  RELIEF_WELFARE,
+  SCARCITY_ESSENTIAL_WEIGHT,
+  SCARCITY_MAX,
+  SCARCITY_OTHER_WEIGHT,
+  SOL_BASE,
+  SOL_GDP_PER_CAPITA,
+  SOL_MAX,
+  SOL_MIN,
+  SOL_RADICALS,
+  SOL_TECH,
+  SOL_WELFARE,
+  UNEMPLOYMENT_LABOR_PENALTY,
+  UNEMPLOYMENT_MAX,
+  UNEMPLOYMENT_MAX_STEP,
+  UNEMPLOYMENT_MIN,
+  UNEMPLOYMENT_SMOOTHING,
+  URBAN_INDUSTRY_PULL,
+  URBAN_PEASANT_PULL,
+  URBAN_TECH_PULL,
+} from './config/society'
+import {
+  LEADER_AGE_PER_MONTH,
+  LEADER_DEATH_AGE,
+  LEADER_OLD_AGE,
+  LEADER_OLD_DEATH_CHANCE,
+  MANPOWER_ARMY_DRAW,
+  MANPOWER_CAP_RATIO,
+  MANPOWER_PER_POP,
+  MORALE_ARMY_THRESHOLD,
+  MORALE_GAIN,
+  MORALE_LOSS,
+  MORALE_MAX,
+  MORALE_MIN,
+} from './config/military'
+import {
+  RESEARCH_BASE,
+  RESEARCH_BUREAUCRACY_COEF,
+  RESEARCH_EDUCATION_COEF,
+  RESEARCH_LITERACY_COEF,
+  RESEARCH_TECH_LEVEL_COEF,
+  RESEARCH_UNIVERSITY_LITERACY_BASE,
+  RESEARCH_UNIVERSITY_PER_BUILDING,
+  TECH_MAX_LEVEL,
+} from './config/tech'
+import {
+  RESTRUCTURE_DEBT_RATIO,
+  RESTRUCTURE_LEGITIMACY,
+  RESTRUCTURE_MONTHS,
+  RESTRUCTURE_PRESTIGE,
+  RESTRUCTURE_RADICALS,
+  RESTRUCTURE_RESET_RATIO,
+} from './config/fiscal'
 
 function pushHistory(list: number[], value: number): void {
   list.push(Math.round(value * 100) / 100)
-  if (list.length > 36) list.shift()
+  if (list.length > HISTORY_MONTHS) list.shift()
 }
 
 export function simulateCountry(
@@ -61,9 +160,10 @@ export function simulateCountry(
     const demand = snap.demand[id]
     if (demand <= 0) continue
     const shortage = Math.max(0, demand - snap.supply[id])
-    scarcity += (shortage / demand) * (id === 'grain' || id === 'clothes' ? 1.6 : 0.5)
+    scarcity +=
+      (shortage / demand) * (id === 'grain' || id === 'clothes' ? SCARCITY_ESSENTIAL_WEIGHT : SCARCITY_OTHER_WEIGHT)
   }
-  scarcity = clamp(scarcity, 0, 8)
+  scarcity = clamp(scarcity, 0, SCARCITY_MAX)
 
   country.econ.gdp = snap.gdp
   country.econ.gdpComponents = snap.components
@@ -98,18 +198,22 @@ export function simulateCountry(
   // The treasury is signed net assets: a negative balance is national debt
   // and pays interest next month. There is no separate debt stock and no
   // principal-repayment step to reconcile.
-  if (country.econ.treasury < -country.econ.gdp * 3) {
+  if (country.econ.treasury < -country.econ.gdp * RESTRUCTURE_DEBT_RATIO) {
     const before = -country.econ.treasury
-    country.econ.treasury = -country.econ.gdp * 1.5
+    country.econ.treasury = -country.econ.gdp * RESTRUCTURE_RESET_RATIO
     // Halve import capacity and cap new external debt for the next 12 months
     // (plan §2.4).
     country.econ.restructuredUntilTick = Math.max(
       country.econ.restructuredUntilTick,
-      world.tick + 12,
+      world.tick + RESTRUCTURE_MONTHS,
     )
-    country.pops.radicals = clamp(country.pops.radicals + 8, 0, 100)
-    country.government.legitimacy = clamp(country.government.legitimacy - 8, 0, 100)
-    country.diplo.prestige = clamp(country.diplo.prestige - 8, 0, 240)
+    country.pops.radicals = clamp(country.pops.radicals + RESTRUCTURE_RADICALS, 0, RADICALS_MAX)
+    country.government.legitimacy = clamp(
+      country.government.legitimacy - RESTRUCTURE_LEGITIMACY,
+      0,
+      LEGITIMACY_MAX,
+    )
+    country.diplo.prestige = clamp(country.diplo.prestige - RESTRUCTURE_PRESTIGE, 0, PRESTIGE_MAX)
     log.push({
       date: { ...world.date },
       kind: 'economy',
@@ -182,10 +286,10 @@ export function simulateCountry(
   const growthRate = applyModifiers(
     country,
     'growth',
-    0.0012 +
-      (country.pops.sol - 40) / 20000 -
-      country.pops.radicals / 50000 -
-      country.military.exhaustion / 100000,
+    GROWTH_BASE +
+      (country.pops.sol - GROWTH_SOL_BASE) / GROWTH_SOL_DIVISOR -
+      country.pops.radicals / GROWTH_RADICALS_DIVISOR -
+      country.military.exhaustion / GROWTH_EXHAUSTION_DIVISOR,
   )
   country.pops.growth = growthRate
   const newTotal = Math.max(1, oldPops * (1 + growthRate))
@@ -200,15 +304,15 @@ export function simulateCountry(
 
   const industry = industrialBuildingCount(country)
   const urbanPull = Math.min(
-    country.pops.peasants * 0.0008,
-    industry * 0.015 * (1 + country.tech.level * 0.05),
+    country.pops.peasants * URBAN_PEASANT_PULL,
+    industry * URBAN_INDUSTRY_PULL * (1 + country.tech.level * URBAN_TECH_PULL),
   )
   country.pops.peasants -= urbanPull
   country.pops.workers += urbanPull
 
   const artisanShift = Math.min(
-    country.pops.artisans * 0.0006,
-    industry * 0.003,
+    country.pops.artisans * ARTISAN_SHIFT_PEASANT,
+    industry * ARTISAN_SHIFT_INDUSTRY,
   )
   country.pops.artisans -= artisanShift
   country.pops.workers += artisanShift
@@ -217,19 +321,19 @@ export function simulateCountry(
     applyModifiers(
       country,
       'sol',
-      20 +
-        (snap.realGdp / Math.max(1, country.pops.total)) * 250 +
-        country.tech.level * 1.2 -
-        country.pops.radicals * 0.08 +
-        country.econ.spending.welfare * 2,
+      SOL_BASE +
+        (snap.realGdp / Math.max(1, country.pops.total)) * SOL_GDP_PER_CAPITA +
+        country.tech.level * SOL_TECH -
+        country.pops.radicals * SOL_RADICALS +
+        country.econ.spending.welfare * SOL_WELFARE,
     ),
-    5,
-    95,
+    SOL_MIN,
+    SOL_MAX,
   )
 
   const literacyGain =
-    (country.econ.spending.education * 0.0008 +
-      country.econ.buildings.universities * 0.0002) *
+    (country.econ.spending.education * LITERACY_EDUCATION +
+      country.econ.buildings.universities * LITERACY_UNIVERSITY) *
     (1 - country.pops.literacy)
   country.pops.literacy = clamp(
     country.pops.literacy + applyModifiers(country, 'literacy', literacyGain),
@@ -240,23 +344,23 @@ export function simulateCountry(
   // Industry absorbs labour; literacy and unrest move the rate the other way.
   // Low labour utilisation (a vast idle peasantry) adds a modest penalty;
   // full utilisation removes it (plan 0003 §0.1).
-  const laborPenalty = (1 - snap.labor.utilization) * 2
+  const laborPenalty = (1 - snap.labor.utilization) * UNEMPLOYMENT_LABOR_PENALTY
   const unemploymentTarget = clamp(
     applyModifiers(country, 'unemployment', deriveUnemployment(country) + laborPenalty),
-    0,
-    30,
+    UNEMPLOYMENT_MIN,
+    UNEMPLOYMENT_MAX,
   )
   // Smooth the stock and cap the monthly move so the factory-absorption
   // threshold cannot swing unemployment from 6% to 29% in a year.
   const unemploymentStep = clamp(
-    (unemploymentTarget - country.econ.unemployment) * 0.25,
-    -1.5,
-    1.5,
+    (unemploymentTarget - country.econ.unemployment) * UNEMPLOYMENT_SMOOTHING,
+    -UNEMPLOYMENT_MAX_STEP,
+    UNEMPLOYMENT_MAX_STEP,
   )
   country.econ.unemployment = clamp(
     country.econ.unemployment + unemploymentStep,
-    0,
-    30,
+    UNEMPLOYMENT_MIN,
+    UNEMPLOYMENT_MAX,
   )
 
   // The most salient domestic tax (the highest of the three internal bases)
@@ -267,65 +371,55 @@ export function simulateCountry(
     country.econ.taxes.consumption,
   )
   const radicalPressure =
-    Math.max(0, taxLevel - 5) * 0.08 +
-    Math.max(0, country.econ.tariff - 10) * 0.03 +
-    Math.max(0, 40 - country.pops.sol) * 0.03 +
-    country.military.exhaustion * 0.06 +
-    country.econ.unemployment * 0.03 +
-    scarcity * 0.12
+    Math.max(0, taxLevel - RADICAL_TAX_BASE) * RADICAL_TAX_COEF +
+    Math.max(0, country.econ.tariff - RADICAL_TARIFF_BASE) * RADICAL_TARIFF_COEF +
+    Math.max(0, RADICAL_SOL_BASE - country.pops.sol) * RADICAL_SOL_COEF +
+    country.military.exhaustion * RADICAL_EXHAUSTION_COEF +
+    country.econ.unemployment * RADICAL_UNEMPLOYMENT_COEF +
+    scarcity * RADICAL_SCARCITY_COEF
   const relief =
-    0.3 +
-    (country.government.legitimacy / 100) * 0.35 +
-    country.econ.spending.welfare * 0.2 +
-    country.econ.spending.education * 0.08 +
-    country.pops.loyalists * 0.015
+    RELIEF_BASE +
+    (country.government.legitimacy / 100) * RELIEF_LEGITIMACY +
+    country.econ.spending.welfare * RELIEF_WELFARE +
+    country.econ.spending.education * RELIEF_EDUCATION +
+    country.pops.loyalists * RELIEF_LOYALISTS
   // Radicals and loyalists are stocks updated by a monthly flow; modifiers
   // scale the flow, not the stock, so a percent buff cannot compound monthly.
   country.pops.radicals = clamp(
     country.pops.radicals + applyModifiers(country, 'radicals', radicalPressure - relief),
     0,
-    100,
+    RADICALS_MAX,
   )
   country.pops.loyalists = clamp(
     country.pops.loyalists +
       applyModifiers(
         country,
         'loyalists',
-        country.government.legitimacy * 0.01 - radicalPressure * 0.3,
+        country.government.legitimacy * LOYALIST_LEGITIMACY_COEF -
+          radicalPressure * LOYALIST_RADICAL_COEF,
       ),
     0,
-    100,
+    LOYALISTS_MAX,
   )
 
-  const govBonus =
-    country.government.type === '专制君主制'
-      ? -4
-      : country.government.type === '君主立宪制'
-        ? 8
-        : country.government.type === '共和制'
-          ? 10
-          : country.government.type === '民主制'
-            ? 12
-            : country.government.type === '寡头制'
-              ? -2
-              : 0
+  const govBonus = GOVERNMENT_LEGITIMACY_BONUS[country.government.type] ?? 0
   const legitimacyTarget = clamp(
     applyModifiers(
       country,
       'legitimacy',
-      50 +
+      LEGITIMACY_BASE +
         govBonus -
-        country.pops.radicals * 0.5 +
-        (country.econ.treasury > 0 ? 4 : -6) -
+        country.pops.radicals * LEGITIMACY_RADICALS_COEF +
+        (country.econ.treasury > 0 ? LEGITIMACY_TREASURY_BONUS : LEGITIMACY_TREASURY_PENALTY) -
         debtPressure(country).legitimacyPenalty -
-        country.military.exhaustion * 0.2 +
-        country.econ.spending.welfare * 2,
+        country.military.exhaustion * LEGITIMACY_EXHAUSTION_COEF +
+        country.econ.spending.welfare * LEGITIMACY_WELFARE_COEF,
     ),
     0,
-    100,
+    LEGITIMACY_MAX,
   )
   country.government.legitimacy +=
-    (legitimacyTarget - country.government.legitimacy) * 0.08
+    (legitimacyTarget - country.government.legitimacy) * LEGITIMACY_PULL
 
   // Authority recovers in proportion to legitimacy; a discredited regime
   // loses it (round-2 P1-6). Standing policies also drain authority; if the
@@ -353,13 +447,13 @@ export function simulateCountry(
     }
   }
   const authorityFlow =
-    country.government.legitimacy * 0.03 -
-    (country.government.legitimacy < 30 ? 1.5 : 0) -
+    country.government.legitimacy * AUTHORITY_LEGITIMACY_COEF -
+    (country.government.legitimacy < AUTHORITY_LOW_THRESHOLD ? AUTHORITY_LOW_PENALTY : 0) -
     policyUpkeep
   country.government.authority = clamp(
     country.government.authority + applyModifiers(country, 'authority', authorityFlow),
     0,
-    100,
+    LEGITIMACY_MAX,
   )
 
   // Bureaucratic effectiveness and the four constraints it feeds.
@@ -370,23 +464,23 @@ export function simulateCountry(
   // still for decades (PT-007); universities, literacy, education spending and
   // the tech level itself multiply on top of it.
   const researchBase =
-    2 +
-    country.pops.literacy * 3 +
-    country.bureaucracy.score * 0.06
+    RESEARCH_BASE +
+    country.pops.literacy * RESEARCH_LITERACY_COEF +
+    country.bureaucracy.score * RESEARCH_BUREAUCRACY_COEF
   country.tech.pointsPerMonth =
     researchBase +
     country.econ.buildings.universities *
-      0.9 *
-      (0.4 + country.pops.literacy) *
-      (1 + country.econ.spending.education * 0.03) *
-      (1 + country.tech.level * 0.02)
+      RESEARCH_UNIVERSITY_PER_BUILDING *
+      (RESEARCH_UNIVERSITY_LITERACY_BASE + country.pops.literacy) *
+      (1 + country.econ.spending.education * RESEARCH_EDUCATION_COEF) *
+      (1 + country.tech.level * RESEARCH_TECH_LEVEL_COEF)
   country.tech.points += applyModifiers(
     country,
     'techPoints',
     country.tech.pointsPerMonth,
   )
   const nextCost = techCost(country.tech.level + 1)
-  if (country.tech.level < 10 && country.tech.points >= nextCost) {
+  if (country.tech.level < TECH_MAX_LEVEL && country.tech.points >= nextCost) {
     country.tech.points -= nextCost
     country.tech.level += 1
     const unlocked = techName(country.tech.level)
@@ -406,30 +500,38 @@ export function simulateCountry(
       applyModifiers(
         country,
         'manpower',
-        country.pops.total * 0.0004 - country.military.army * 0.0006,
+        country.pops.total * MANPOWER_PER_POP - country.military.army * MANPOWER_ARMY_DRAW,
       ),
     0,
-    country.pops.total * 0.06,
+    country.pops.total * MANPOWER_CAP_RATIO,
   )
   // Morale is a stock fed by a monthly flow; scale the flow.
   country.military.morale = clamp(
     country.military.morale +
-      applyModifiers(country, 'morale', country.econ.spending.army > 1 ? 0.15 : -0.15),
-    20,
-    100,
+      applyModifiers(
+        country,
+        'morale',
+        country.econ.spending.army > MORALE_ARMY_THRESHOLD ? MORALE_GAIN : MORALE_LOSS,
+      ),
+    MORALE_MIN,
+    MORALE_MAX,
   )
 
   country.diplo.prestige = computePrestige(country)
 
   // Leaders age; an old one eventually gives way to the next generation.
-  country.leader.age += 1 / 12
+  country.leader.age += LEADER_AGE_PER_MONTH
   if (
-    country.leader.age >= 82 ||
-    (country.leader.age >= 70 && rng.chance(0.002))
+    country.leader.age >= LEADER_DEATH_AGE ||
+    (country.leader.age >= LEADER_OLD_AGE && rng.chance(LEADER_OLD_DEATH_CHANCE))
   ) {
     const oldName = `${country.leader.title}${country.leader.name}`
     country.leader = successorFor(country, rng)
-    country.government.legitimacy = clamp(country.government.legitimacy - 5, 0, 100)
+    country.government.legitimacy = clamp(
+      country.government.legitimacy - LEGITIMACY_SUCCESSION_PENALTY,
+      0,
+      LEGITIMACY_MAX,
+    )
     log.push({
       date: { ...world.date },
       kind: 'leader',
@@ -453,7 +555,7 @@ export function simulateCountry(
 
   // State collapse tears up the policy programme; permanent buffs do not
   // survive a revolution.
-  if (country.pops.radicals >= 92) {
+  if (country.pops.radicals >= COLLAPSE_RADICALS) {
     const before = country.modifiers.filter(modifier => modifier.source.startsWith('policy:'))
     if (before.length > 0) {
       country.modifiers = country.modifiers.filter(
@@ -486,8 +588,8 @@ export function simulateCountry(
   if (
     country.econ.treasury <= 0 &&
     snap.income - country.econ.expense < 0 &&
-    debt > country.econ.gdp * 0.5 &&
-    rng.chance(0.03)
+    debt > country.econ.gdp * FISCAL_ALERT_DEBT_RATIO &&
+    rng.chance(FISCAL_ALERT_CHANCE)
   ) {
     log.push({
       date: { ...world.date },

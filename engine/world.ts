@@ -49,6 +49,14 @@ import { simulateCountry } from './country'
 import { applyDecision } from './actions'
 import { advanceDate, appliedPart, clamp, sumParts, type Decision } from './internal'
 import type { Rng } from './rng'
+import {
+  EVENTS_MAX,
+  HISTORY_MONTHS,
+  LOG_MAX_ENTRIES,
+  MAX_DECISIONS_PER_MONTH,
+  MAX_MONTHS_PER_RUN,
+} from './config/balance'
+import { REPARATIONS_MIN_REMAINING } from './config/diplomacy'
 
 export type AdvanceReport = {
   start: GameDate
@@ -138,7 +146,7 @@ function recordTrade(
   trade.history.nx.push(trade.nx)
   trade.history.tariffRevenue.push(trade.tariffRevenue)
   for (const series of Object.values(trade.history)) {
-    if (series.length > 36) series.shift()
+    if (series.length > HISTORY_MONTHS) series.shift()
   }
 }
 
@@ -174,7 +182,7 @@ function prepareIndemnities(world: WorldState): void {
     receiver.econ.reparationsReceived += amount
     schedule.remaining = Math.max(0, schedule.remaining - amount)
     schedule.monthsLeft -= 1
-    if (schedule.remaining > 0.01 && schedule.monthsLeft > 0) {
+    if (schedule.remaining > REPARATIONS_MIN_REMAINING && schedule.monthsLeft > 0) {
       active.push(schedule)
     }
   }
@@ -341,7 +349,7 @@ export function advance(
   const pending: GameEvent[] = []
 
   // One decision per AI country, plus the player's own actions.
-  for (const decision of decisions.slice(0, 12)) {
+  for (const decision of decisions.slice(0, MAX_DECISIONS_PER_MONTH)) {
     const result = applyDecision(world, decision, rng)
     if (result.ok) {
       log.push({
@@ -358,7 +366,7 @@ export function advance(
     }
   }
 
-  const total = clamp(Math.floor(months), 1, 120)
+  const total = clamp(Math.floor(months), 1, MAX_MONTHS_PER_RUN)
   for (let index = 0; index < total; index += 1) {
     world.date = advanceDate(world.date)
     world.tick += 1
@@ -426,9 +434,9 @@ export function advance(
   }
 
   world.log.push(...log)
-  if (world.log.length > 400) world.log.splice(0, world.log.length - 400)
+  if (world.log.length > LOG_MAX_ENTRIES) world.log.splice(0, world.log.length - LOG_MAX_ENTRIES)
   world.events.push(...pending)
-  if (world.events.length > 80) world.events.splice(0, world.events.length - 80)
+  if (world.events.length > EVENTS_MAX) world.events.splice(0, world.events.length - EVENTS_MAX)
 
   return { start, end: { ...world.date }, log, events: pending }
 }

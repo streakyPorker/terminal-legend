@@ -43,6 +43,51 @@ import { effectiveResources } from './trade'
 import { clamp, ensureConstructionFields, techMultiplier } from './internal'
 import { curveOutput } from './scale'
 import { PRODUCTION_GATE_CURVES } from './config/blocks/gates'
+import {
+  ARMS_PER_SHIP,
+  ARMS_PER_SOLDIER,
+  ARTISAN_SERVICE_ACCESS_SHARE,
+  ARMY_DEMAND_PER_UNIT,
+  FABRIC_DEMAND_PER_POP,
+  GOV_ARMY_BASE_SHARE,
+  GOV_ARMY_SPENDING_SHARE,
+  GOV_BUREAUCRACY_PER_POP,
+  GOV_EDUCATION_PER_POP,
+  GOV_NAVY_BASE_SHARE,
+  GOV_NAVY_SPENDING_SHARE,
+  INDUSTRIAL_COAL_PER_POP,
+  INDUSTRIAL_IRON_PER_POP,
+  LABOR_SHARE_MAX,
+  LABOR_SHARE_MIN,
+  LABOR_SHARE_UNEMPLOYMENT_BASE,
+  LABOR_SHARE_UNEMPLOYMENT_COEF,
+  NAVY_DEMAND_PER_UNIT,
+  OPIUM_DEMAND_BASE,
+  OPIUM_DEMAND_INCOME_DIVISOR,
+  POP_FACTOR_DIVISOR,
+  POP_FACTOR_MIN,
+  PRESTIGE_ARMY,
+  PRESTIGE_GDP,
+  PRESTIGE_NAVY,
+  PRESTIGE_PORT,
+  PRESTIGE_TECH,
+  PRICE_CEILING_FACTOR,
+  PRICE_DISCRETIONARY_FLOOR,
+  PRICE_FLOOR_FACTOR,
+  PRICE_LUXURY_FLOOR,
+  PRICE_RATIO_MAX,
+  PRICE_RATIO_MIN,
+  PRICE_SMOOTHING,
+  SAVINGS_RATE_CAP,
+  SHRINK_MAX,
+  STEEL_DEMAND_PER_POP,
+  SUPPLY_DEMAND_GUARD,
+  UTIL_IDLE_FLOOR,
+  UTIL_SMOOTHING,
+  WELFARE_TRANSFER_RATE,
+  WOOD_DEMAND_PER_POP,
+} from './config/economy'
+import { PRESTIGE_MAX } from './config/balance'
 
 export type EconomySnapshot = {
   production: Record<GoodId, number>
@@ -96,21 +141,11 @@ export function resourceFactors(country: Country): Record<GoodId, number> {
 // one-month lag and cannot close in the same month.
 
 /**
- * Floor an unprofitable type's operating rate decays to. A type that loses
- * money still runs at half speed rather than stopping dead, so a price recovery
- * can revive it and the idle state has a fixed point.
+ * Utilization feedback (ADR 0022) now lives in `config/economy.ts`: the idle
+ * floor, the first-order smoothing and the deep-loss decay cap. Re-exported so
+ * the `./economy` and `./sim` import surface is unchanged.
  */
-export const UTIL_IDLE_FLOOR = 0.5
-
-/** First-order smoothing: the rate moves a quarter of the way to its target
- *  each month (ADR 0022). */
-export const UTIL_SMOOTHING = 0.25
-
-/**
- * Cap on the extra monthly decay applied to a deeply loss-making building count
- * on top of `DEPRECIATION_PER_MONTH`. Deterministic, no RNG (ADR 0022).
- */
-export const SHRINK_MAX = 0.02
+export { UTIL_IDLE_FLOOR, UTIL_SMOOTHING, SHRINK_MAX }
 
 /**
  * Last month's stored operating rate for a building type (ADR 0022).
@@ -220,7 +255,8 @@ function computeProduction(country: Country): Record<GoodId, number> {
   raw.liquor += country.pops.artisans * (ARTISAN_OUTPUT.liquor ?? 0)
   raw.furniture += country.pops.artisans * (ARTISAN_OUTPUT.furniture ?? 0)
   raw.services +=
-    (country.pops.total / 1000) * 0.5 * access + country.pops.artisans * ARTISAN_SERVICE_OUTPUT
+    (country.pops.total / POP_FACTOR_DIVISOR) * ARTISAN_SERVICE_ACCESS_SHARE * access +
+    country.pops.artisans * ARTISAN_SERVICE_OUTPUT
   for (const id of GOOD_IDS) out[id] = output(id, raw[id])
   return out
 }
@@ -251,13 +287,13 @@ export function effectiveSavingsRate(country: Country): number {
       country.politicalEconomy.savingsRate * confidence,
     ),
     0,
-    0.9,
+    SAVINGS_RATE_CAP,
   )
 }
 
 function computeDemand(country: Country): DemandBreakdown {
   ensureConstructionFields(country)
-  const popFactor = Math.max(0.1, country.pops.total / 1000)
+  const popFactor = Math.max(POP_FACTOR_MIN, country.pops.total / POP_FACTOR_DIVISOR)
   const prices = country.econ.prices
   const b = country.econ.buildings
   const sp = country.econ.spending
@@ -279,7 +315,7 @@ function computeDemand(country: Country): DemandBreakdown {
       ? country.econ.profits
       : country.econ.gdp * (1 - country.politicalEconomy.laborShareBase)
   const savingsRate = effectiveSavingsRate(country)
-  const welfareTransfer = sp.welfare * popFactor * 0.03
+  const welfareTransfer = sp.welfare * popFactor * WELFARE_TRANSFER_RATE
   // The private tax burden is the land + profit + consumption take computed
   // from the four real bases (ADR 0023), not a GDP share. Using last month's
   // stored base quantities keeps the loop one month behind, like wages/profits.
@@ -293,7 +329,8 @@ function computeDemand(country: Country): DemandBreakdown {
   for (const id of CONSUMER_GOODS) {
     const subsistence = popFactor * SUBSISTENCE[id]
     const discretionary =
-      (popFactor * INCOME_ELASTICITY[id] * supernumerary) / Math.max(0.05, prices[id])
+      (popFactor * INCOME_ELASTICITY[id] * supernumerary) /
+      Math.max(PRICE_DISCRETIONARY_FLOOR, prices[id])
     // `consumption` scales discretionary spending, never the survival floor.
     consumer[id] = demand(
       id,
@@ -303,7 +340,7 @@ function computeDemand(country: Country): DemandBreakdown {
 
   // Idle profits held back last month that were released as luxury spending.
   if (country.econ.idlePurchases > 0) {
-    consumer.luxury += country.econ.idlePurchases / Math.max(0.1, prices.luxury)
+    consumer.luxury += country.econ.idlePurchases / Math.max(PRICE_LUXURY_FLOOR, prices.luxury)
   }
 
   // Opium is a separate demand block, not part of the Stone-Geary basket
@@ -311,7 +348,9 @@ function computeDemand(country: Country): DemandBreakdown {
   // demand factor, and is not counted as a survival good.
   const opiumDemand = demand(
     'opium',
-    popFactor * country.opium.demandFactor * (0.5 + supernumerary / 10),
+    popFactor *
+      country.opium.demandFactor *
+      (OPIUM_DEMAND_BASE + supernumerary / OPIUM_DEMAND_INCOME_DIVISOR),
   )
 
   for (const id of GOOD_IDS) out[id] = consumer[id]
@@ -337,8 +376,8 @@ function computeDemand(country: Country): DemandBreakdown {
   // Industrial towns buy food off the market; this puts agrarian and
   // industrial economies on opposite sides of the grain trade instead of
   // every country holding a permanent grain mountain.
-  intermediate.coal += popFactor * 1.2
-  intermediate.iron += popFactor * 0.6
+  intermediate.coal += popFactor * INDUSTRIAL_COAL_PER_POP
+  intermediate.iron += popFactor * INDUSTRIAL_IRON_PER_POP
   // Plan 0011 F5: the infrastructure network is itself an intermediate consumer
   // — throughput materials scale with supply, administration with the level, and
   // offices/universities/schools already supply the services it burns.
@@ -351,13 +390,16 @@ function computeDemand(country: Country): DemandBreakdown {
   // economies (QING, RUS) bid, factory-dense ones (GBR, FRA, PRU) offer. The
   // ore is consumed only by the factories that smelt it, so `iron` is the
   // single input of the ore→steel chain.
-  intermediate.steel += popFactor * 0.2
-  intermediate.fabric += popFactor * 0.5
-  intermediate.wood += popFactor * 0.3
+  intermediate.steel += popFactor * STEEL_DEMAND_PER_POP
+  intermediate.fabric += popFactor * FABRIC_DEMAND_PER_POP
+  intermediate.wood += popFactor * WOOD_DEMAND_PER_POP
   for (const good of GOOD_IDS) {
     if (intermediate[good] !== 0) out[good] += demand(good, intermediate[good])
   }
-  out.arms += demand('arms', country.military.army * 0.02 + country.military.navy * 0.01)
+  out.arms += demand(
+    'arms',
+    country.military.army * ARMS_PER_SOLDIER + country.military.navy * ARMS_PER_SHIP,
+  )
 
   // ---- investment demand from last month's actual construction spend ----
   // The settlement writes the goods quantities here, so a slot that finished
@@ -373,13 +415,13 @@ function computeDemand(country: Country): DemandBreakdown {
 
   // ---- government demand from appropriations (plan 0003 §2.3) ----
   const militaryBase =
-    country.military.army * 0.05 * (1 + country.military.quality) +
-    country.military.navy * 0.04
+    country.military.army * ARMY_DEMAND_PER_UNIT * (1 + country.military.quality) +
+    country.military.navy * NAVY_DEMAND_PER_UNIT
   const governmentGold: Record<keyof typeof sp, number> = {
-    army: sp.army * 0.5 + militaryBase * 0.7,
-    navy: sp.navy * 0.5 + militaryBase * 0.3,
-    bureaucracy: sp.bureaucracy * popFactor * 0.02,
-    education: sp.education * popFactor * 0.03,
+    army: sp.army * GOV_ARMY_SPENDING_SHARE + militaryBase * GOV_ARMY_BASE_SHARE,
+    navy: sp.navy * GOV_NAVY_SPENDING_SHARE + militaryBase * GOV_NAVY_BASE_SHARE,
+    bureaucracy: sp.bureaucracy * popFactor * GOV_BUREAUCRACY_PER_POP,
+    education: sp.education * popFactor * GOV_EDUCATION_PER_POP,
     // Welfare is a transfer to households (counted in C); construction is
     // investment (counted in I when actually paid). Counting either as
     // government purchases would double-count it.
@@ -392,7 +434,7 @@ function computeDemand(country: Country): DemandBreakdown {
   ][]) {
     const shares = GOVERNMENT_DEMAND[category]
     for (const [id, share] of Object.entries(shares) as [GoodId, number][]) {
-      const quantity = (gold * share) / Math.max(0.1, prices[id])
+      const quantity = (gold * share) / Math.max(PRICE_LUXURY_FLOOR, prices[id])
       government[id] += quantity
       out[id] += quantity
     }
@@ -449,13 +491,14 @@ export function computeEconomy(
   const nx = override?.nx ?? 0
 
   for (const id of GOOD_IDS) {
-    const available = Math.max(0.01, supply[id])
+    const available = Math.max(SUPPLY_DEMAND_GUARD, supply[id])
     const ratio = demand[id] / available
-    const target = GOODS[id].basePrice * clamp(Math.sqrt(ratio), 0.35, 3)
-    const floor = GOODS[id].basePrice * 0.25
-    const ceiling = GOODS[id].basePrice * 4
+    const target =
+      GOODS[id].basePrice * clamp(Math.sqrt(ratio), PRICE_RATIO_MIN, PRICE_RATIO_MAX)
+    const floor = GOODS[id].basePrice * PRICE_FLOOR_FACTOR
+    const ceiling = GOODS[id].basePrice * PRICE_CEILING_FACTOR
     country.econ.prices[id] = clamp(
-      country.econ.prices[id] + (target - country.econ.prices[id]) * 0.3,
+      country.econ.prices[id] + (target - country.econ.prices[id]) * PRICE_SMOOTHING,
       floor,
       ceiling,
     )
@@ -467,7 +510,7 @@ export function computeEconomy(
   // not scaled by the `gdp` statistical modifier.
   const components: GdpComponents = { c: 0, i: 0, g: 0, nx }
   for (const id of GOOD_IDS) {
-    const fill = clamp(supply[id] / Math.max(0.01, demand[id]), 0, 1)
+    const fill = clamp(supply[id] / Math.max(SUPPLY_DEMAND_GUARD, demand[id]), 0, 1)
     const price = GOODS[id].basePrice
     components.c += breakdown.consumer[id] * price * fill
     components.i += breakdown.investment[id] * price * fill
@@ -503,8 +546,13 @@ export function computeEconomy(
 
   const labor = deriveLabor(country)
   const rawShare =
-    country.politicalEconomy.laborShareBase - (country.econ.unemployment - 5) * 0.01
-  const laborShare = clamp(applyModifiers(country, 'laborShare', rawShare), 0.35, 0.7)
+    country.politicalEconomy.laborShareBase -
+    (country.econ.unemployment - LABOR_SHARE_UNEMPLOYMENT_BASE) * LABOR_SHARE_UNEMPLOYMENT_COEF
+  const laborShare = clamp(
+    applyModifiers(country, 'laborShare', rawShare),
+    LABOR_SHARE_MIN,
+    LABOR_SHARE_MAX,
+  )
   const wages = realGdp * laborShare
   const profits = realGdp * (1 - laborShare)
 
@@ -625,14 +673,14 @@ function computePrestige(country: Country): number {
     applyModifiers(
       country,
       'prestige',
-      country.econ.gdp * 0.05 +
-        country.military.army * 0.18 +
-        country.military.navy * 0.22 +
-        country.tech.level * 4 +
-        country.econ.buildings.ports * 0.2,
+      country.econ.gdp * PRESTIGE_GDP +
+        country.military.army * PRESTIGE_ARMY +
+        country.military.navy * PRESTIGE_NAVY +
+        country.tech.level * PRESTIGE_TECH +
+        country.econ.buildings.ports * PRESTIGE_PORT,
     ),
     0,
-    240,
+    PRESTIGE_MAX,
   )
 }
 

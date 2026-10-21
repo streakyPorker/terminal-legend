@@ -1,4 +1,5 @@
 import type { Country, GoodId, ResourceId, Resources } from '../types'
+import { RESOURCE_IMPORT_BONUS_MAX, RESOURCE_IMPORT_BONUS_SCALE } from './config/trade'
 
 /**
  * Resource-endowment readings, extracted to a leaf so the block engine's read
@@ -22,7 +23,7 @@ export const RESOURCE_IMPORT_GOOD: Record<ResourceId, GoodId | undefined> = {
  */
 export function resourceImportBonus(imports: number, domesticProduction: number): number {
   const share = imports / Math.max(1, domesticProduction + imports)
-  return Math.min(15, Math.max(0, share * 20))
+  return Math.min(RESOURCE_IMPORT_BONUS_MAX, Math.max(0, share * RESOURCE_IMPORT_BONUS_SCALE))
 }
 
 /** Effective endowments after last month's imports; the base array is untouched. */

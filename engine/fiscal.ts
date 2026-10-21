@@ -8,6 +8,61 @@ import {
   debtPressureLabel,
 } from './config/blocks/fiscal'
 import { scaleProduct } from './scale'
+import { LEGITIMACY_MAX } from './config/balance'
+import {
+  COLLECTION_BASE,
+  COLLECTION_BUREAUCRACY_DIVISOR,
+  COLLECTION_LEGITIMACY_DIVISOR,
+  COLLECTION_MAX,
+  COLLECTION_MIN,
+  COMPLIANCE_COEF,
+  COMPLIANCE_MAX,
+  COMPLIANCE_MIN,
+  COMPLIANCE_THRESHOLD,
+  CONSTRUCTION_SUBSIDY_COST_PER_LEVEL,
+  PORT_INCOME_PER_BUILDING,
+  TAX_EFFICIENCY_BASE,
+  TAX_EFFICIENCY_LEGITIMACY_DIVISOR,
+} from './config/tax'
+import {
+  ADMIN_BUREAUCRACY_PER_POP,
+  ADMIN_EXPENSE_PER_POP,
+  ARMY_EXPENSE_PER_UNIT,
+  ARMY_SPENDING_SHARE,
+  DEBT_LOW_PRESTIGE_BASE,
+  DEBT_LOW_PRESTIGE_COEF,
+  DEBT_RATE_BASE,
+  DEBT_RATE_MAX,
+  DEBT_RATE_MIN,
+  DEBT_RESTRUCTURE_SPREAD,
+  DEBT_UNREST_BASE,
+  DEBT_UNREST_SPREAD,
+  DEBT_WAR_SPREAD,
+  DEBT_WEAK_MANDATE_BASE,
+  DEBT_WEAK_MANDATE_COEF,
+  EDUCATION_EXPENSE_PER_POP,
+  FUND_ACCESS_COEF,
+  FUND_LEGITIMACY_COEF,
+  FUND_PRESTIGE_COEF,
+  FUND_RATE_BASE,
+  FUND_RATE_MAX,
+  FUND_RATE_MIN,
+  FUND_WAR_SPREAD,
+  MARKET_LOSS_COEF,
+  NAVY_EXPENSE_PER_UNIT,
+  NAVY_SPENDING_SHARE,
+  UPKEEP_PER_BUILDING,
+  WELFARE_EXPENSE_PER_POP,
+} from './config/fiscal'
+
+/** Land-value-per-unit and the construction subsidy dials live in
+ *  `config/tax.ts`; re-exported here so the `./fiscal` import surface is
+ *  unchanged. */
+export {
+  LAND_VALUE_PER_UNIT,
+  CONSTRUCTION_SUBSIDY_POINTS_PER_LEVEL,
+  CONSTRUCTION_SUBSIDY_COST_PER_LEVEL,
+} from './config/tax'
 
 export { DEBT_PRESSURE_FULL, DEBT_PRESSURE_START }
 
@@ -105,22 +160,12 @@ export const TAX_BASE_NAMES: Record<TaxBaseId, string> = {
 }
 
 /**
- * Land-value-per-unit: farmland endowment (0..100) × this constant gives the
- * land tax base in gold. Chosen at 4 so a default 2% land rate yields a land
- * take comparable to the other bases at the 1836 starting point.
+ * The land-value-per-unit scale and the construction-subsidy dials are declared
+ * in `config/tax.ts` and re-exported above (ADR 0015 / ADR 0023).
  */
-export const LAND_VALUE_PER_UNIT = 4
 
 /** Tax-base quantities for one month (the "税基量" shown by v3_inspect fiscal). */
 export type TaxBaseQuantities = Record<TaxBaseId, number>
-
-/**
- * State subsidy to the construction bureaus: every spending level adds
- * capacity points and costs gold (ADR 0015). Kept here because it is a fiscal
- * outlay; the capacity side reads the same points constant in `sim.ts`.
- */
-export const CONSTRUCTION_SUBSIDY_POINTS_PER_LEVEL = 1.5
-export const CONSTRUCTION_SUBSIDY_COST_PER_LEVEL = 0.45
 
 /** Raw monthly expense by category, before the `expense` modifier. */
 export type ExpenseParts = {
@@ -176,7 +221,7 @@ export function taxEfficiency(country: Country): number {
   return applyModifiers(
     country,
     'taxEfficiency',
-    0.5 + country.government.legitimacy / 200,
+    TAX_EFFICIENCY_BASE + country.government.legitimacy / TAX_EFFICIENCY_LEGITIMACY_DIVISOR,
   )
 }
 
@@ -188,16 +233,20 @@ export function taxEfficiency(country: Country): number {
 export function collectionEfficiency(country: Country): number {
   return (
     clamp(
-      0.35 + country.bureaucracy.score / 200 + country.government.legitimacy / 400,
-      0.3,
-      1.1,
+      COLLECTION_BASE +
+        country.bureaucracy.score / COLLECTION_BUREAUCRACY_DIVISOR +
+        country.government.legitimacy / COLLECTION_LEGITIMACY_DIVISOR,
+      COLLECTION_MIN,
+      COLLECTION_MAX,
     ) * taxEfficiency(country)
   )
 }
 
 /** Beyond 25% a single base erodes (evasion, flight, informal work). */
 export function taxCompliance(rate: number): number {
-  return rate <= 25 ? 1 : clamp(1 - (rate - 25) * 0.015, 0.45, 1)
+  return rate <= COMPLIANCE_THRESHOLD
+    ? 1
+    : clamp(1 - (rate - COMPLIANCE_THRESHOLD) * COMPLIANCE_COEF, COMPLIANCE_MIN, COMPLIANCE_MAX)
 }
 
 /**
@@ -245,7 +294,7 @@ export function incomeParts(
   const bases = taxBaseRevenues(country, tariffRevenue, context, quantities)
   return {
     taxes: bases.land + bases.profit + bases.consumption + bases.tariff,
-    ports: country.econ.buildings.ports * 0.02 * debtCut,
+    ports: country.econ.buildings.ports * PORT_INCOME_PER_BUILDING * debtCut,
     sovereignIncome: sovereignFund(country) * fundRate(country, context),
     reparations: (country.econ.reparationsReceived ?? 0) * debtCut,
     // Construction-capacity rent is collected this month and booked as income
@@ -263,26 +312,29 @@ export function debtRate(
   context: FiscalContext = DEFAULT_CONTEXT,
 ): number {
   const weakMandate =
-    clamp((50 - country.government.legitimacy) / 50, 0, 1) * 0.004
-  const lowPrestige = clamp((20 - country.diplo.prestige) / 20, 0, 1) * 0.004
-  const unrest = country.pops.radicals >= 50 ? 0.002 : 0
+    clamp((DEBT_WEAK_MANDATE_BASE - country.government.legitimacy) / DEBT_WEAK_MANDATE_BASE, 0, 1) *
+    DEBT_WEAK_MANDATE_COEF
+  const lowPrestige =
+    clamp((DEBT_LOW_PRESTIGE_BASE - country.diplo.prestige) / DEBT_LOW_PRESTIGE_BASE, 0, 1) *
+    DEBT_LOW_PRESTIGE_COEF
+  const unrest = country.pops.radicals >= DEBT_UNREST_BASE ? DEBT_UNREST_SPREAD : 0
   // Mirrors the trade-capacity window (`tick <= restructuredUntilTick`).
   const restructuring =
     country.econ.restructuredUntilTick > 0 &&
     context.tick <= country.econ.restructuredUntilTick
-      ? 0.004
+      ? DEBT_RESTRUCTURE_SPREAD
       : 0
   const pressure = debtPressure(country).interestSpread
   return clamp(
-    0.004 +
-      (context.atWar ? 0.002 : 0) +
+    DEBT_RATE_BASE +
+      (context.atWar ? DEBT_WAR_SPREAD : 0) +
       weakMandate +
       lowPrestige +
       unrest +
       restructuring +
       pressure,
-    0.002,
-    0.02,
+    DEBT_RATE_MIN,
+    DEBT_RATE_MAX,
   )
 }
 
@@ -294,17 +346,17 @@ export function fundRate(
   country: Country,
   context: FiscalContext = DEFAULT_CONTEXT,
 ): number {
-  const legitimacy = (country.government.legitimacy / 100) * 0.002
-  const prestige = clamp(country.diplo.prestige / 100, 0, 1) * 0.002
-  const access = country.econ.marketAccess * 0.001
+  const legitimacy = (country.government.legitimacy / LEGITIMACY_MAX) * FUND_LEGITIMACY_COEF
+  const prestige = clamp(country.diplo.prestige / LEGITIMACY_MAX, 0, 1) * FUND_PRESTIGE_COEF
+  const access = country.econ.marketAccess * FUND_ACCESS_COEF
   return clamp(
-    0.0015 +
+    FUND_RATE_BASE +
       legitimacy +
       prestige +
       access -
-      (context.atWar ? 0.0005 : 0),
-    0.0002,
-    0.006,
+      (context.atWar ? FUND_WAR_SPREAD : 0),
+    FUND_RATE_MIN,
+    FUND_RATE_MAX,
   )
 }
 
@@ -318,17 +370,19 @@ export function expenseParts(
   const popFactor = Math.max(0.1, country.pops.total / 1000)
   return {
     army:
-      country.military.army * 0.05 * (1 + country.military.quality) + sp.army * 0.5,
-    navy: country.military.navy * 0.04 + sp.navy * 0.5,
-    administration: popFactor * 0.12 + sp.bureaucracy * popFactor * 0.02,
-    education: sp.education * popFactor * 0.03,
-    welfare: sp.welfare * popFactor * 0.03,
+      country.military.army * ARMY_EXPENSE_PER_UNIT * (1 + country.military.quality) +
+      sp.army * ARMY_SPENDING_SHARE,
+    navy: country.military.navy * NAVY_EXPENSE_PER_UNIT + sp.navy * NAVY_SPENDING_SHARE,
+    administration:
+      popFactor * ADMIN_EXPENSE_PER_POP + sp.bureaucracy * popFactor * ADMIN_BUREAUCRACY_PER_POP,
+    education: sp.education * popFactor * EDUCATION_EXPENSE_PER_POP,
+    welfare: sp.welfare * popFactor * WELFARE_EXPENSE_PER_POP,
     debtInterest: nationalDebt(country) * debtRate(country, context),
     marketLoss:
       gdp *
       (1 - applyModifiers(country, 'marketAccess', country.econ.marketAccess)) *
-      0.02,
-    upkeep: (b.universities + b.barracks) * 0.01,
+      MARKET_LOSS_COEF,
+    upkeep: (b.universities + b.barracks) * UPKEEP_PER_BUILDING,
     reparations: country.econ.reparationsPaid ?? 0,
     constructionSubsidy:
       Math.max(0, sp.construction) * CONSTRUCTION_SUBSIDY_COST_PER_LEVEL,

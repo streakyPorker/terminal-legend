@@ -24,64 +24,46 @@ import { computeProduction } from './economy'
 import { clamp, ensureConstructionFields, techMultiplier } from './internal'
 import type { Rng } from './rng'
 
-/** Construction points one workshop produces per month before input limits. */
-export const WORKSHOP_CAPACITY_OUTPUT = 4
+import {
+  BUILDING_COST_ADDEND,
+  BUILDING_COST_MULTIPLIER,
+  CANAL_MARKET_ACCESS,
+  CAPACITY_COST,
+  CONSTRUCTION_ACCESS_BASE,
+  CONSTRUCTION_ACCESS_SLOPE,
+  CONSTRUCTION_COST_PER_POINT,
+  CONSTRUCTION_RENT_PER_POINT,
+  CONSTRUCTION_SCHEDULE_MONTHS,
+  MAX_BUILDINGS_PER_SLOT,
+  OFFICE_ADMIN_CAPACITY,
+  PORT_MARKET_ACCESS,
+  PRIVATE_OWN_CAPACITY_SHARE,
+  RAILROAD_MARKET_ACCESS,
+  SCHOOL_LITERACY_GAIN,
+  TELEGRAPH_MARKET_ACCESS,
+  UNIVERSITY_ADMIN_CAPACITY,
+  WORKLOAD_MULTIPLIER,
+  WORKSHOP_CAPACITY_OUTPUT,
+} from './config/construction'
+import { RESTRUCTURE_DEBT_RATIO } from './config/fiscal'
 
 /** Goods one workshop consumes per month to run at full capacity. */
 export const WORKSHOP_INPUTS: Partial<Record<GoodId, number>> =
   BUILDING_RECIPES.workshops.input
 
-/** Construction points a project needs each month, per building in the slot. */
-export const CAPACITY_COST: Record<BuildingId, number> = {
-  farms: 0.5,
-  coalMines: 1,
-  ironMines: 1,
-  lumberMills: 0.8,
-  textileMills: 2,
-  furnitureWorks: 1.5,
-  distilleries: 1.5,
-  machineryWorks: 2.5,
-  steelMills: 2.5,
-  arsenals: 2,
-  luxuryWorks: 2,
-  schools: 1,
-  canals: 3,
-  telegraphs: 1.5,
-  forts: 2,
-  navalYards: 2.5,
-  railroads: 4,
-  ports: 1.5,
-  universities: 2,
-  barracks: 1,
-  offices: 1,
-  workshops: 1.5,
+/** The construction constants live in `config/construction.ts`; re-exported so
+ *  the `./construction` / `./sim` import surface is unchanged. */
+export {
+  WORKSHOP_CAPACITY_OUTPUT,
+  CAPACITY_COST,
+  PRIVATE_OWN_CAPACITY_SHARE,
+  CONSTRUCTION_RENT_PER_POINT,
+  MAX_BUILDINGS_PER_SLOT,
+  WORKLOAD_MULTIPLIER,
+  CONSTRUCTION_COST_PER_POINT,
+  BUILDING_COST_MULTIPLIER,
+  BUILDING_COST_ADDEND,
 }
-
-/**
- * Private builders can do half a slot's monthly work with their own
- * organisation; the other half can rent idle state construction points, which
- * pays the treasury. State slots always have first claim on the points.
- */
-export const PRIVATE_OWN_CAPACITY_SHARE = 0.5
-/** Gold the state charges per rented construction point. */
-export const CONSTRUCTION_RENT_PER_POINT = 0.3
-/**
- * A slot may hold at most 5 buildings. There is no monthly point ceiling per
- * slot: the queue is the brake, and an entry may take every idle point up to
- * its remaining workload (ADR 0013).
- */
-export const MAX_BUILDINGS_PER_SLOT = 5
-
-/**
- * Total construction workload per unit of monthly point requirement. A slot
- * with one workshop (1.5 points of monthly need) carries 30 × 1.5 = 45 points
- * of workload. A slot is not limited to its own monthly need: it can draw any
- * idle state capacity, up to its remaining workload, so a small project
- * finishes faster when the workshops are otherwise idle. Duration is always
- * workload / points actually invested (ADR 0012/0013), never a stored month
- * count.
- */
-export const WORKLOAD_MULTIPLIER = 30
 
 export const capacityCost = (project: ConstructionProject): number =>
   (CAPACITY_COST[project.building] ?? 1) * project.count
@@ -93,58 +75,8 @@ export const projectWorkload = (project: ConstructionProject): number =>
 export const maxSlotCapacity = (building: BuildingId): number =>
   MAX_BUILDINGS_PER_SLOT * (CAPACITY_COST[building] ?? 1)
 
-/** Base gold paid per construction-workload point (ADR 0012). */
-export const CONSTRUCTION_COST_PER_POINT = 0.2
-/** Per-building gold tuning; v1 is 1 for every type. */
-export const BUILDING_COST_MULTIPLIER: Record<BuildingId, number> = {
-  farms: 1,
-  coalMines: 1,
-  ironMines: 1,
-  lumberMills: 1,
-  textileMills: 1,
-  furnitureWorks: 1,
-  distilleries: 1,
-  machineryWorks: 1,
-  steelMills: 1,
-  arsenals: 1,
-  luxuryWorks: 1,
-  schools: 1,
-  canals: 1,
-  telegraphs: 1,
-  forts: 1,
-  navalYards: 1,
-  railroads: 1,
-  ports: 1,
-  universities: 1,
-  barracks: 1,
-  offices: 1,
-  workshops: 1,
-}
-/** Per-building fixed gold addend; v1 is 0 for every type. */
-export const BUILDING_COST_ADDEND: Record<BuildingId, number> = {
-  farms: 0,
-  coalMines: 0,
-  ironMines: 0,
-  lumberMills: 0,
-  textileMills: 0,
-  furnitureWorks: 0,
-  distilleries: 0,
-  machineryWorks: 0,
-  steelMills: 0,
-  arsenals: 0,
-  luxuryWorks: 0,
-  schools: 0,
-  canals: 0,
-  telegraphs: 0,
-  forts: 0,
-  navalYards: 0,
-  railroads: 0,
-  ports: 0,
-  universities: 0,
-  barracks: 0,
-  offices: 0,
-  workshops: 0,
-}
+/** Base gold per construction point and the per-building cost tuning live in
+ *  `config/construction.ts`; both are re-exported above. */
 
 /**
  * Gold per workload point for a project: the fixed base times the building
@@ -184,7 +116,7 @@ export function constructionCapacity(country: Country): number {
   ensureConstructionFields(country)
   const workshops = country.econ.buildings.workshops ?? 0
   if (workshops <= 0) return 0
-  const access = 0.55 + applyModifiers(country, 'marketAccess', country.econ.marketAccess) * 0.9
+  const access = CONSTRUCTION_ACCESS_BASE + applyModifiers(country, 'marketAccess', country.econ.marketAccess) * CONSTRUCTION_ACCESS_SLOPE
   // Plan 0011 F5: workshops ride the unified infrastructure multiplier like
   // every other building (the old `0.6 + transport / 160` curve retired).
   const infra = infrastructureMultiplier(
@@ -258,13 +190,13 @@ export function constructionSchedule(country: Country): ConstructionSchedule {
     const take = Math.min(left, remainingWorkload)
     left -= take
     result[project.id] = {
-      turns: 60,
+      turns: CONSTRUCTION_SCHEDULE_MONTHS,
       currentShare: need > 0 ? Math.min(1, take / need) : 1,
       remainingPoints: Math.max(0, remainingWorkload - take),
     }
   }
 
-  for (let month = 1; month <= 60 && active.size > 0; month += 1) {
+  for (let month = 1; month <= CONSTRUCTION_SCHEDULE_MONTHS && active.size > 0; month += 1) {
     let monthCapacity = capacity
     for (const project of state) {
       if (!active.has(project.id)) continue
@@ -402,10 +334,10 @@ export function completeBuilding(country: Country, building: BuildingId, count: 
     (country.econ.buildings[building] ?? 0) + count,
   )
   if (building === 'railroads') {
-    country.econ.marketAccess = clamp(country.econ.marketAccess + count * 0.02, 0, 1)
+    country.econ.marketAccess = clamp(country.econ.marketAccess + count * RAILROAD_MARKET_ACCESS, 0, 1)
   }
   if (building === 'ports') {
-    country.econ.marketAccess = clamp(country.econ.marketAccess + count * 0.01, 0, 1)
+    country.econ.marketAccess = clamp(country.econ.marketAccess + count * PORT_MARKET_ACCESS, 0, 1)
   }
   // Plan 0011 F4/F5. schools resolves the plan's §10 待定 ("建成时加识字率"): a
   // completed primary school raises literacy on the spot. canals/telegraphs keep
@@ -414,24 +346,24 @@ export function completeBuilding(country: Country, building: BuildingId, count: 
   // telegraphs supply it), refreshed below from the building counts. forts/
   // navalYards have no completion side effect beyond their small output.
   if (building === 'schools') {
-    country.pops.literacy = clamp(country.pops.literacy + count * 0.002, 0, 1)
+    country.pops.literacy = clamp(country.pops.literacy + count * SCHOOL_LITERACY_GAIN, 0, 1)
   }
   if (building === 'canals') {
-    country.econ.marketAccess = clamp(country.econ.marketAccess + count * 0.01, 0, 1)
+    country.econ.marketAccess = clamp(country.econ.marketAccess + count * CANAL_MARKET_ACCESS, 0, 1)
   }
   if (building === 'telegraphs') {
-    country.econ.marketAccess = clamp(country.econ.marketAccess + count * 0.005, 0, 1)
+    country.econ.marketAccess = clamp(country.econ.marketAccess + count * TELEGRAPH_MARKET_ACCESS, 0, 1)
   }
   if (building === 'universities') {
     country.econ.administrativeCapacity = clamp(
-      country.econ.administrativeCapacity + count * 0.5,
+      country.econ.administrativeCapacity + count * UNIVERSITY_ADMIN_CAPACITY,
       0,
       100,
     )
   }
   if (building === 'offices') {
     country.econ.administrativeCapacity = clamp(
-      country.econ.administrativeCapacity + count,
+      country.econ.administrativeCapacity + count * OFFICE_ADMIN_CAPACITY,
       0,
       100,
     )
@@ -515,7 +447,7 @@ export function settleConstruction(
   let capacityLeft = constructionCapacity(country)
   // Deficit-financed construction: a small negative balance is normal debt,
   // not a stop sign. Only the 3× GDP restructuring floor removes the cash.
-  const debtFloor = -country.econ.gdp * 3
+  const debtFloor = -country.econ.gdp * RESTRUCTURE_DEBT_RATIO
   const kept = new Set<string>()
   let stateSpent = 0
   let privateSpent = 0

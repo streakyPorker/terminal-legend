@@ -16,6 +16,15 @@ import {
   instantiateEventBlock,
 } from './config/blocks/events'
 import type { Rng } from './rng'
+import {
+  EVENT_AI_AGGRESSIVE_CHANCE,
+  EVENT_AI_REFORMIST_CHANCE,
+  EVENT_BASE_CHANCE,
+  EVENT_PLAYER_OPEN_MAX,
+  EVENT_RADICAL_CHANCE_DIVISOR,
+  EVENT_RELATION_BACK_FACTOR,
+} from './config/events'
+import { LEADER_MEMORY_MAX } from './config/military'
 
 /**
  * Installs an option's `effects.modifiers` through the block engine (ADR 0024).
@@ -59,8 +68,14 @@ function aiEventChoice(country: Country, options: EventOption[], rng: Rng): Even
   const reformist = country.leader.traits.some(trait =>
     ['改革', '贸易', '务实', '维新'].includes(trait),
   )
-  if (aggressive && rng.chance(0.65)) return options[0] as EventOption
-  if (reformist && options.length > 1 && rng.chance(0.65)) return options[1] as EventOption
+  if (aggressive && rng.chance(EVENT_AI_AGGRESSIVE_CHANCE)) return options[0] as EventOption
+  if (
+    reformist &&
+    options.length > 1 &&
+    rng.chance(EVENT_AI_REFORMIST_CHANCE)
+  ) {
+    return options[1] as EventOption
+  }
   return rng.pick(options)
 }
 
@@ -111,7 +126,11 @@ export function applyEventOption(
       const current = country.diplo.relations[target.id] ?? 0
       country.diplo.relations[target.id] = clamp(current + effects.relationAmount, -100, 100)
       const back = target.diplo.relations[country.id] ?? 0
-      target.diplo.relations[country.id] = clamp(back + effects.relationAmount * 0.6, -100, 100)
+      target.diplo.relations[country.id] = clamp(
+        back + effects.relationAmount * EVENT_RELATION_BACK_FACTOR,
+        -100,
+        100,
+      )
     }
   }
   if (effects.modifiers !== undefined) {
@@ -133,7 +152,7 @@ export function applyEventOption(
   event.isResolved = true
   event.resolvedOption = option.id
   country.leader.memory.push(`「${event.title}」：${option.label}`)
-  if (country.leader.memory.length > 8) country.leader.memory.shift()
+  if (country.leader.memory.length > LEADER_MEMORY_MAX) country.leader.memory.shift()
 
   const line: LogEntry = {
     date: { ...world.date },
@@ -149,13 +168,13 @@ export function applyEventOption(
 export function tickEvents(world: WorldState, rng: Rng, log: LogEntry[]): GameEvent[] {
   const pending: GameEvent[] = []
   for (const country of Object.values(world.countries)) {
-    const chance = 0.055 + country.pops.radicals / 1200
+    const chance = EVENT_BASE_CHANCE + country.pops.radicals / EVENT_RADICAL_CHANCE_DIVISOR
     if (!rng.chance(chance)) continue
     if (country.isPlayer) {
       const open = world.events.filter(
         event => event.countryId === country.id && !event.isResolved,
       )
-      if (open.length >= 3) continue
+      if (open.length >= EVENT_PLAYER_OPEN_MAX) continue
     }
     const event = spawnEvent(world, country, rng)
     if (event === undefined) continue

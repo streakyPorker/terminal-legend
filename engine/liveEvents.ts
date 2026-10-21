@@ -8,6 +8,29 @@ import type {
 import { GOODS } from './data'
 import { MODIFIER_STATS } from './modifiers'
 import { clamp } from './internal'
+import {
+  LIVE_DEBT_RATIO_MIN,
+  LIVE_EFFECT_CAPS as EFFECT_CAPS,
+  LIVE_FAMINE_GRAIN,
+  LIVE_FAMINE_SALIENCE,
+  LIVE_FAMINE_SOL,
+  LIVE_GDP_CHANGE_MIN,
+  LIVE_GRAIN_DEVIATION_MIN,
+  LIVE_INFAMY_SALIENCE_COEF,
+  LIVE_LEGITIMACY_CENTER,
+  LIVE_LEGITIMACY_STRESS_MIN,
+  LIVE_LITERACY_TARGET,
+  LIVE_MAX_EVENTS,
+  LIVE_MAX_MODIFIERS,
+  LIVE_MAX_OPTIONS,
+  LIVE_MAX_TOPICS,
+  LIVE_MODIFIER_MONTHS_MAX as MODIFIER_MONTHS_MAX,
+  LIVE_MODIFIER_VALUE_CAP as MODIFIER_VALUE_CAP,
+  LIVE_RADICALS_MIN,
+  LIVE_SOL_LOW,
+  LIVE_UNEMPLOYMENT_MIN,
+  LIVE_WAR_SALIENCE,
+} from './config/events'
 
 /**
  * Live (per-turn, AI-generated) events: the pure engine half of plan 0010 /
@@ -104,7 +127,7 @@ function dimensionSignal(
   }
   switch (dimension) {
     case 'economy': {
-      if (grainDev > 0.06) {
+      if (grainDev > LIVE_GRAIN_DEVIATION_MIN) {
         const base = GOODS.grain.basePrice
         const price = country.econ.prices.grain ?? base
         keep({
@@ -118,7 +141,7 @@ function dimensionSignal(
       const prev = series[series.length - 2]
       if (prev !== undefined && last !== undefined && prev > 0) {
         const change = Math.abs(last - prev) / prev
-        if (change > 0.04) {
+        if (change > LIVE_GDP_CHANGE_MIN) {
           keep({
             salience: change * 100,
             key: 'economy:gdp',
@@ -126,9 +149,9 @@ function dimensionSignal(
           })
         }
       }
-      if (country.econ.unemployment > 12) {
+      if (country.econ.unemployment > LIVE_UNEMPLOYMENT_MIN) {
         keep({
-          salience: country.econ.unemployment - 12,
+          salience: country.econ.unemployment - LIVE_UNEMPLOYMENT_MIN,
           key: 'economy:unemployment',
           note: `失业率 ${country.econ.unemployment.toFixed(1)}%`,
         })
@@ -136,15 +159,15 @@ function dimensionSignal(
       break
     }
     case 'politics': {
-      if (country.pops.radicals > 20) {
+      if (country.pops.radicals > LIVE_RADICALS_MIN) {
         keep({
-          salience: country.pops.radicals - 20,
+          salience: country.pops.radicals - LIVE_RADICALS_MIN,
           key: 'politics:radicals',
           note: `激进 ${Math.round(country.pops.radicals)}`,
         })
       }
-      const legitStress = Math.abs(country.government.legitimacy - 50)
-      if (legitStress > 20) {
+      const legitStress = Math.abs(country.government.legitimacy - LIVE_LEGITIMACY_CENTER)
+      if (legitStress > LIVE_LEGITIMACY_STRESS_MIN) {
         keep({
           salience: legitStress,
           key: 'politics:legitimacy',
@@ -154,9 +177,9 @@ function dimensionSignal(
       const gdp = Math.max(1, country.econ.gdp)
       const debt = Math.max(0, -country.econ.treasury)
       const debtRatio = debt / gdp
-      if (debtRatio > 0.25) {
+      if (debtRatio > LIVE_DEBT_RATIO_MIN) {
         keep({
-          salience: (debtRatio - 0.25) * 100,
+          salience: (debtRatio - LIVE_DEBT_RATIO_MIN) * 100,
           key: 'politics:debt',
           note: `债务/GDP ${Math.round(debtRatio * 100)}%`,
         })
@@ -169,14 +192,14 @@ function dimensionSignal(
       )
       if (war !== undefined) {
         keep({
-          salience: 80,
+          salience: LIVE_WAR_SALIENCE,
           key: 'diplomacy:war',
           note: `战争「${war.name}」分数 ${Math.round(war.warScore)}`,
         })
       }
       if (country.diplo.infamy > 0) {
         keep({
-          salience: country.diplo.infamy * 0.5,
+          salience: country.diplo.infamy * LIVE_INFAMY_SALIENCE_COEF,
           key: 'diplomacy:infamy',
           note: `恶名 ${Math.round(country.diplo.infamy)}`,
         })
@@ -184,14 +207,14 @@ function dimensionSignal(
       break
     }
     case 'livelihood': {
-      if (country.pops.sol < 50) {
+      if (country.pops.sol < LIVE_SOL_LOW) {
         keep({
-          salience: 50 - country.pops.sol,
+          salience: LIVE_SOL_LOW - country.pops.sol,
           key: 'livelihood:sol',
           note: `生活水平 ${Math.round(country.pops.sol)}`,
         })
       }
-      const literacyLow = Math.max(0, 0.3 - country.pops.literacy) * 100
+      const literacyLow = Math.max(0, LIVE_LITERACY_TARGET - country.pops.literacy) * 100
       if (literacyLow > 0) {
         keep({
           salience: literacyLow,
@@ -199,9 +222,9 @@ function dimensionSignal(
           note: `识字率 ${Math.round(country.pops.literacy * 100)}%`,
         })
       }
-      if (country.pops.sol < 45 && grainDev > 0.05) {
+      if (country.pops.sol < LIVE_FAMINE_SOL && grainDev > LIVE_FAMINE_GRAIN) {
         keep({
-          salience: 60,
+          salience: LIVE_FAMINE_SALIENCE,
           key: 'livelihood:famine',
           note: `饥荒风险：生活水平 ${Math.round(country.pops.sol)}，粮价高企`,
         })
@@ -222,9 +245,9 @@ function dimensionSignal(
 export function salientTopics(
   world: WorldState,
   country: Country,
-  max = 2,
+  max = LIVE_MAX_TOPICS,
 ): SalientTopic[] {
-  const limit = clamp(Math.floor(max), 1, 2)
+  const limit = clamp(Math.floor(max), 1, LIVE_MAX_TOPICS)
   const grainDev = grainDeviation(country)
   const topics: SalientTopic[] = []
   for (const dimension of LIVE_DIMENSIONS) {
@@ -358,20 +381,7 @@ export type LiveEventParseOptions = {
   maxEvents?: number
 }
 
-/** Magnitude caps per direct effect field (plan 0010 §4). */
-const EFFECT_CAPS = {
-  treasury: 300,
-  radicals: 30,
-  legitimacy: 30,
-  prestige: 40,
-  army: 20,
-  popsPercent: 10,
-  techPoints: 500,
-  relationAmount: 50,
-} as const
-
-const MODIFIER_VALUE_CAP = 500
-const MODIFIER_MONTHS_MAX = 240
+/** The magnitude caps and salience thresholds live in `config/events.ts`. */
 
 const EFFECT_KEYS = new Set([
   'treasury',
@@ -400,7 +410,7 @@ function parseModifiers(
   raw: unknown,
 ): NonNullable<EventOption['effects']['modifiers']> | undefined {
   if (!Array.isArray(raw)) return undefined
-  if (raw.length > 8) return undefined
+  if (raw.length > LIVE_MAX_MODIFIERS) return undefined
   const out: NonNullable<EventOption['effects']['modifiers']> = []
   for (const item of raw) {
     if (item === null || typeof item !== 'object' || Array.isArray(item)) return undefined
@@ -546,7 +556,7 @@ export function parseLiveEventResponse(
   text: string,
   options: LiveEventParseOptions = {},
 ): LiveEventCandidate[] {
-  const maxEvents = clamp(options.maxEvents ?? 2, 1, 2)
+  const maxEvents = clamp(options.maxEvents ?? LIVE_MAX_EVENTS, 1, LIVE_MAX_EVENTS)
   const start = text.indexOf('[')
   const end = text.lastIndexOf(']')
   if (start < 0 || end <= start) return []
@@ -570,7 +580,7 @@ export function parseLiveEventResponse(
     const eventOptions: EventOption[] = []
     const seen = new Set<string>()
     source.options.forEach((rawOption, index) => {
-      if (eventOptions.length >= 4) return
+      if (eventOptions.length >= LIVE_MAX_OPTIONS) return
       const option = parseOption(rawOption, index, options.countryIds)
       if (option === undefined) return
       if (seen.has(option.id)) option.id = `opt${index + 1}`

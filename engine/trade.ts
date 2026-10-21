@@ -8,45 +8,47 @@ import type {
 } from '../types'
 import { GOODS, GOOD_IDS, REGION_COST } from './data'
 import { RESOURCE_IMPORT_GOOD } from './endowment'
+import {
+  ACCESS_FACTOR_BASE,
+  ACCESS_FACTOR_COEF,
+  IMPORT_CAPACITY_ACCESS,
+  IMPORT_CAPACITY_BASE,
+  IMPORT_CAPACITY_PORT,
+  IMPORT_CAPACITY_RESTRUCTURE_FACTOR,
+  IMPORT_CAPACITY_TRANSPORT,
+  MAX_MONTHLY_DEFICIT_SHARE,
+  RELATION_CUTOFF,
+  RELATION_RISK_DIVISOR,
+  ROUTE_CAPACITY_PORT_COEF,
+  ROUTE_CAPACITY_TRANSPORT_DIVISOR,
+  ROUTE_RESIDUAL_FRICTION,
+  ROUTE_RESIDUAL_TOP_PARTNERS,
+  ROUTE_SPOT_DISCOUNT,
+  ROUTE_UNIT_VOLUME,
+  TOP_PARTNERS,
+  TRADE_DEBT_GDP_CAP,
+  TRANSPORT_FACTOR_BASE,
+  TRANSPORT_FACTOR_DIVISOR,
+} from './config/trade'
 
 export { REGION_COST }
 export { RESOURCE_IMPORT_GOOD, resourceImportBonus, effectiveResources } from './endowment'
 
-/** How many candidate exporters one importer may draw on per good (plan §2.2). */
-export const TOP_PARTNERS = 6
-/** Relations below this cut a partner out of the candidate list (plan §1.2). */
-export const RELATION_CUTOFF = -50
-
-/**
- * Persistent-route constants (ADR 0020). The route pass runs before the spot
- * market, so a routed pair trades at a discounted landed price with no relation
- * risk; only the residual (un-routed) surplus/deficit clears as spot, with a
- * friction markup and a narrower candidate list. These are the calibration
- * knobs for the soft gate.
- */
-/** Units a level-1 route can carry per month, before the port/transport factor. */
-export const ROUTE_UNIT_VOLUME = 2
-/** Largest a route may grow to. */
-export const ROUTE_MAX_LEVEL = 5
-/** Percentage-point progress of a partner's route before it may grow. */
-export const ROUTE_GROW_UTILIZATION = 0.8
-/** Multiplier on the residual (spot) landed price; spot pays a friction. */
-export const ROUTE_RESIDUAL_FRICTION = 1.15
-/** Candidate exporters per importer in the residual pass (narrower than spot). */
-export const ROUTE_RESIDUAL_TOP_PARTNERS = 3
-/** Discount on a route's landed price: no spot friction, no relation risk. */
-export const ROUTE_SPOT_DISCOUNT = 0.9
-/** Most routes a single country may hold (as either endpoint). */
-export const ROUTE_MAX_PER_COUNTRY = 12
-/** Seeded routes kept per (importer, good) at world creation. */
-export const ROUTE_SEED_PER_PAIR = 3
-/**
- * Share of GDP the private sector may borrow abroad in one month to fund the
- * import bill it cannot pay from export revenue or private capital (plan §10
- * mitigation, §11 calibration knob). Small so a trade deficit is contained
- * instead of being allowed to compound unbounded into external debt.
- */
-export const MAX_MONTHLY_DEFICIT_SHARE = 0.03
+/** The trade calibration constants live in `config/trade.ts`; they are
+ *  re-exported here so the `./trade` import surface is unchanged. */
+export {
+  TOP_PARTNERS,
+  RELATION_CUTOFF,
+  ROUTE_UNIT_VOLUME,
+  ROUTE_MAX_LEVEL,
+  ROUTE_GROW_UTILIZATION,
+  ROUTE_RESIDUAL_FRICTION,
+  ROUTE_RESIDUAL_TOP_PARTNERS,
+  ROUTE_SPOT_DISCOUNT,
+  ROUTE_MAX_PER_COUNTRY,
+  ROUTE_SEED_PER_PAIR,
+  MAX_MONTHLY_DEFICIT_SHARE,
+} from './config/trade'
 
 /** Services are the one good that never crosses a border (plan §0). */
 const NON_TRADABLE: GoodId[] = ['services']
@@ -116,9 +118,9 @@ export const exportDutyRate = (country: Country): number =>
  */
 export function landedPrice(from: Country, to: Country, good: GoodId): number {
   const regionCost = REGION_COST[from.region][to.region]
-  const accessFactor = 1.15 - to.econ.marketAccess * 0.25
-  const transportFactor = 1.2 - to.econ.transportInfrastructure / 500
-  const relationRisk = 1 + Math.max(0, -relationOf(to, from.id)) / 200
+  const accessFactor = ACCESS_FACTOR_BASE - to.econ.marketAccess * ACCESS_FACTOR_COEF
+  const transportFactor = TRANSPORT_FACTOR_BASE - to.econ.transportInfrastructure / TRANSPORT_FACTOR_DIVISOR
+  const relationRisk = 1 + Math.max(0, -relationOf(to, from.id)) / RELATION_RISK_DIVISOR
   return (
     from.econ.prices[good] *
     (1 + exportDutyRate(from) / 100) *
@@ -138,8 +140,8 @@ export function landedPrice(from: Country, to: Country, good: GoodId): number {
  */
 export function routeLandedPrice(from: Country, to: Country, good: GoodId): number {
   const regionCost = REGION_COST[from.region][to.region]
-  const accessFactor = 1.15 - to.econ.marketAccess * 0.25
-  const transportFactor = 1.2 - to.econ.transportInfrastructure / 500
+  const accessFactor = ACCESS_FACTOR_BASE - to.econ.marketAccess * ACCESS_FACTOR_COEF
+  const transportFactor = TRANSPORT_FACTOR_BASE - to.econ.transportInfrastructure / TRANSPORT_FACTOR_DIVISOR
   return (
     from.econ.prices[good] *
     (1 + exportDutyRate(from) / 100) *
@@ -155,8 +157,9 @@ export function routeLandedPrice(from: Country, to: Country, good: GoodId): numb
 export function routeCapacityFactor(from: Country, to: Country): number {
   return (
     1 +
-    (from.econ.transportInfrastructure + to.econ.transportInfrastructure) / 400 +
-    to.econ.buildings.ports * 0.02
+    (from.econ.transportInfrastructure + to.econ.transportInfrastructure) /
+      ROUTE_CAPACITY_TRANSPORT_DIVISOR +
+    to.econ.buildings.ports * ROUTE_CAPACITY_PORT_COEF
   )
 }
 
@@ -422,11 +425,13 @@ export function clearTrade(
  */
 export function importCapacity(country: Country, tick: number): number {
   const base =
-    50 +
-    country.econ.buildings.ports * 8 +
-    country.econ.marketAccess * 200 +
-    country.econ.transportInfrastructure * 1
-  return tick <= country.econ.restructuredUntilTick ? base * 0.5 : base
+    IMPORT_CAPACITY_BASE +
+    country.econ.buildings.ports * IMPORT_CAPACITY_PORT +
+    country.econ.marketAccess * IMPORT_CAPACITY_ACCESS +
+    country.econ.transportInfrastructure * IMPORT_CAPACITY_TRANSPORT
+  return tick <= country.econ.restructuredUntilTick
+    ? base * IMPORT_CAPACITY_RESTRUCTURE_FACTOR
+    : base
 }
 
 /**
@@ -597,7 +602,7 @@ export function settleTrade(
     drawnFromCapital = Math.min(Math.max(0, country.econ.privateCapital), need)
     let remainder = need - drawnFromCapital
     if (tick <= country.econ.restructuredUntilTick) {
-      const cap = country.econ.gdp * 0.2
+      const cap = country.econ.gdp * TRADE_DEBT_GDP_CAP
       if (remainder > cap) {
         dropped = remainder - cap
         remainder = cap
