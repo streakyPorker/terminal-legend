@@ -337,6 +337,86 @@ export type PolicyProposal = {
   effects: PolicyEffect[]
 }
 
+/**
+ * The stats a ConfigBlock condition may read (ADR 0024 §6). ADR 0024 says
+ * conditions share `ModifierStat` with effects, but real threshold conditions
+ * also read raw readings that are NOT modifier seams (`debtRatio`, `factories`,
+ * `treasury`, `debt`, `army`, `navy`, `techLevel`). Those are added here rather
+ * than lossy-mapped onto a ModifierStat, so no condition is silently dropped.
+ * See docs/plans/0009-config-refactor.md §7 (待定) for the follow-up note.
+ */
+export type ConditionStat =
+  | ModifierStat
+  | 'treasury'
+  | 'debt'
+  | 'debtRatio'
+  | 'army'
+  | 'navy'
+  | 'techLevel'
+  | 'factories'
+
+export type ConditionOp = '>' | '>=' | '<' | '<=' | '==' | '!='
+
+/** One declarative condition; a block's list is AND-connected (ADR 0024 §3). */
+export type Condition = {
+  stat: ConditionStat
+  op: ConditionOp
+  value: number
+}
+
+/** A scale factor read off a stat, then optionally clamped (ADR 0024 §3). */
+export type Curve =
+  | { kind: 'linear'; slope: number; offset?: number; min?: number; max?: number }
+  | {
+      kind: 'steps'
+      points: { at: number; value: number }[]
+      min?: number
+      max?: number
+    }
+
+/** One `scales_with` entry; curve outputs multiply together (ADR 0024 §3). */
+export type ScaleSpec = { stat: ModifierStat; curve: Curve }
+
+export type BlockKind =
+  | 'threshold'
+  | 'policy'
+  | 'event'
+  | 'situation'
+  | 'tech'
+  | 'war'
+  | 'law'
+
+/** One effect of a block; its own trigger is ANDed with the block's (ADR 0024 §3). */
+export type EffectSpec = {
+  stat: ModifierStat
+  stack: ModifierStack
+  value: number
+  label?: string
+  months?: number
+  potential_trigger?: Condition[]
+}
+
+/**
+ * The unified declaration of every multiplier mechanism (ADR 0024 §3). A block
+ * fires once per month, installs Modifiers with `source = block.id`, and obeys
+ * its lifecycle (`while` / `once` / `duration`).
+ */
+export type ConfigBlock = {
+  /** Namespaced, e.g. `threshold:stability`, `policy:关税`. */
+  id: string
+  kind: BlockKind
+  label: string
+  description?: string
+  /** AND-connected conditions that gate the block. */
+  potential_trigger: Condition[]
+  lifecycle: 'while' | 'once' | 'duration'
+  /** Required when `lifecycle === 'duration'`. */
+  months?: number
+  /** Curve outputs multiply together to scale the effects' amplitude. */
+  scales_with: ScaleSpec[]
+  effects: EffectSpec[]
+}
+
 export type Bureaucracy = {
   /** 0..100, smoothed actual effectiveness. */
   score: number

@@ -1,4 +1,5 @@
 import type { Country, Modifier, ModifierStat } from '../types'
+import { effectiveModifierValue } from './scale'
 
 /** Every seam a modifier may target, with its Chinese display name. */
 export const MODIFIER_STAT_NAMES: Record<ModifierStat, string> = {
@@ -83,9 +84,11 @@ export function totalsFor(country: Country, stat: ModifierStat): ModifierTotals 
   const totals: ModifierTotals = { flat: 0, percent: 0, multiplier: 1 }
   for (const modifier of country.modifiers ?? []) {
     if (modifier.stat !== stat) continue
-    if (modifier.stack === 'flat') totals.flat += modifier.value
-    else if (modifier.stack === 'percent') totals.percent += modifier.value
-    else totals.multiplier *= 1 + modifier.value / 100
+    // A block's `scales_with` is applied here, at the consume seam (ADR 0024 §5).
+    const value = effectiveModifierValue(country, modifier)
+    if (modifier.stack === 'flat') totals.flat += value
+    else if (modifier.stack === 'percent') totals.percent += value
+    else totals.multiplier *= 1 + value / 100
   }
   return totals
 }

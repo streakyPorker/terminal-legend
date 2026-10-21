@@ -74,7 +74,7 @@
 
 | 里程碑 | 内容 | 行为保持？ | 护栏测试 |
 | --- | --- | --- | --- |
-| **C1** | 立块引擎（`ConfigBlock` 类型 + 求值器 + 域注册表 + 全局聚合）；把 `engine/thresholds.ts` 的规则迁成块，拆除旧 `while`/`once` 路径 | 是 | 迁移等价测试：对多个种子 × 月的**触发块集合**与**最终修正值**逐位等于旧 `evaluateThresholds`；配置不变量测试（id 唯一、stat 合法、曲线有序、`scales_with.stat` 真实） |
+| **C1** ✅ | 立块引擎（`ConfigBlock` 类型 + 求值器 + 域注册表 + 全局聚合）；把 `engine/thresholds.ts` 的规则迁成块，拆除旧 `while`/`once` 路径 | 是 | 迁移等价测试：对多个种子 × 月的**触发块集合**与**最终修正值**逐位等于旧 `evaluateThresholds`；配置不变量测试（id 唯一、stat 合法、曲线有序、`scales_with.stat` 真实） |
 | **C2** | `policies` 迁到块；`v3_policy` 的 `{stat, stack, value, months}` 入口编译成块 | 是 | 迁移等价：相同政策提议产生相同的 `country.modifiers` 集合与 `applyModifiers` 结果；权威计价/维护费/同 id 覆盖行为不变（ADR 0002） |
 | **C3** | `events` 的 `effects.modifiers` 迁到块 | 是 | 迁移等价：事件选项结算产生的修正与旧路径一致；重复触发不无限叠加 |
 | **C4** | `situations` 迁到块 | 是 | 迁移等价：局势结果包的效果落账一致 |
@@ -93,6 +93,14 @@
 | 战争目标直接效果 | `engine/diplomacy.ts` | **行为迁移** | 区分「已是修正」与「直接改数」两种，前者机械迁移、后者记行为变更 |
 
 **C1 的首要动作**：先写迁移等价测试（红），再实现块引擎到绿，最后删旧路径。测试断言「旧规则集」与「块求值结果」在固定种子上一一对应。
+
+**C1 完成记录（本切片）**
+
+- 新增类型 `ConditionStat` / `Condition` / `Curve` / `ScaleSpec` / `EffectSpec` / `ConfigBlock`（`types/index.d.ts`）。
+- 块引擎 `engine/blocks.ts`：`evaluateBlocks`（`while`/`once`/`duration`）、`validateBlockConfig`、`testCondition`；域注册表 `engine/config/blocks.ts` + `engine/config/blocks/thresholds.ts`（9 条，1:1，`source` 仍为 `threshold:<id>`）。
+- `scales_with` 消费接缝在 `engine/scale.ts`（`curveOutput` / `scaleProduct` / `effectiveModifierValue`），由 `engine/modifiers.ts` 的 `totalsFor` 调用；ADR-0004 叠算公式未改。`engine/thresholds.ts` 退化为瘦适配器（`evaluateThresholds` / `logThresholds` 保持）。
+- `WorldState.version` **未**提升。测试 `tests/config-blocks.test.ts`（13 例）全绿，`claude plugin test .` 254 pass / 0 fail。
+- 行为保持要点：触发块集合与最终修正值用**冻结的旧算法副本**逐位比对（合成状态 + 3 种子 × 18 月 × 全国家）。
 
 ## 5. 验收
 
@@ -117,6 +125,7 @@
 
 以下未在 ADR 0024 定死，迁移中再定夺，**不预先猜**：
 
+- **ConditionStat（C1 已决定）**：ADR 0024 §6 说条件与效果共用 `ModifierStat`，但阈值条件实际要读非 `ModifierStat` 的原始读数（`debtRatio`、`factories`、`treasury`、`debt`、`army`、`navy`、`techLevel`）。C1 新增小联合 `ConditionStat = ModifierStat | 上述额外读数`，不做有损映射，**不静默丢条件**。`scales_with.stat` 与 `effects[].stat` 仍严格用 `ModifierStat`。后续若 `ModifierStat` 扩充到覆盖这些读数，可把 `ConditionStat` 收敛回 `ModifierStat`。
 - `situation` / `tech` / `war` / `law` 各自的块适配器细节。
 - 块在 `v3_inspect` 中的只读展示形态。
 - `duration` 到期移除的编年史日志口径（是否沿用 `tickModifiers` 写法）。

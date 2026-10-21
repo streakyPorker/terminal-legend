@@ -80,6 +80,8 @@ type EffectSpec = { stat: ModifierStat; stack: ModifierStack; value: number; lab
 
 `scales_with.stat` 与 `potential_trigger.stat`、`effects[].stat` 共用同一个 `ModifierStat` 联合类型（`types/index.d.ts`）。**效果入口与缩放依据共用一套词表**，不新建平行枚举。
 
+> 后续说明（C1 落地）：`effects[].stat` 与 `scales_with.stat` 仍严格是 `ModifierStat`；但阈值条件实际读了若干**非 `ModifierStat`** 的原始读数（`debtRatio`、`factories` 等）。为了逐位保持行为、又不静默丢条件，C1 新增小联合 `ConditionStat = ModifierStat | {那些额外读数}` 专供 `potential_trigger.stat`；细节见 `docs/plans/0009-config-refactor.md` §7。
+
 ### 7. 域注册表
 
 每个域一个注册表，其中的块用 `kind` 与带命名空间的 `id` 标注。另提供一个**全局聚合**（把各域注册表并起来），专供**校验**使用（唯一 id、stat 合法、曲线参数有序等）。
