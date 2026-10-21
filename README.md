@@ -240,7 +240,7 @@ claude plugin test .
 ```
 
 类型契约在 `types/index.d.ts`，`$.state` 的两个值（`world`、`ui`）都在那里声明。
-引擎是纯 TypeScript，不依赖渲染层；`view/panels.tsx` 只读世界状态，不写状态。
+引擎是纯 TypeScript，不依赖渲染层；`view/panels/` 只读世界状态，不写状态。
 
 ## 文件结构
 
@@ -283,7 +283,22 @@ engine/thresholds.ts         状态阈值触发的修正规则
 engine/cheat.ts              天命工具
 engine/save.ts               存档、版本校验与状态行激活文件
 view/format.ts               数字、进度条、火花线、状态行
-view/panels.tsx              御前/概览/市场/经济/人口/外交/军事/科技/事件/日志面板 + Band + Report
+view/panels/index.tsx        桶：原样再导出旧 view/panels.tsx 的全部公共符号，`./panels` 导入路径不变
+view/panels/shared.tsx       面板共享层：UiKit/控制类型、Heading/StatLine/Meter/TableRow、playerOf/pendingOf/partnerTotals、SituationCard、PanePlaceholder、helpText
+view/panels/panel.tsx        Panel 标签分发 + TABS
+view/panels/overview.tsx     概览面板
+view/panels/council.tsx      御前面板
+view/panels/market.tsx       市场面板
+view/panels/economy.tsx      经济面板
+view/panels/pops.tsx         人口面板
+view/panels/diplomacy.tsx    外交面板
+view/panels/military.tsx     军事面板
+view/panels/tech.tsx         科技面板
+view/panels/events.tsx       事件面板
+view/panels/log.tsx          日志面板
+view/panels/rankings.tsx     排名面板
+view/panels/band.tsx         Band（AbovePrompt 仪表盘）
+view/panels/report.tsx       Report + TurnReport（命令输出）
 statusline/install.mjs       状态行调度器安装脚本
 tests/game.test.tsx          引擎、命令与渲染测试
 tests/first-slice.test.ts    第一刀（M1–M6）引擎与命令测试

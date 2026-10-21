@@ -36,8 +36,12 @@
 - `engine/data/index.ts` — 桶，**显式具名再导出**旧 `data.ts` 的全部 72 个公共符号（60 值 + 12 类型），`import ... from './data'` 路径不变；原 `engine/data.ts` 已删除。
 - 完成后：`claude plugin test .` 388 pass / 0 fail，`validate` 通过，World 仍 v11，行为零改动。最大文件 `countries.ts` 669 行（纯种子数据，未超 900 硬拆线）。
 
-### S3 `view/panels.tsx` → `view/panels/`
-- 按面板拆分（overview / council / market / economy / pops / diplomacy / military / tech / events / log / rankings / band / report），`view/panels/index.tsx` 桶。
+### S3 ✅ `view/panels.tsx` → `view/panels/`
+- 实际布局：`view/panels/{shared,overview,council,market,economy,pops,diplomacy,military,tech,events,log,rankings,band,report,panel}.tsx` + `index.tsx` 桶；原 `view/panels.tsx` 已删除（`moduleResolution: bundler` 下 `./panels` 解析到 `panels/index.tsx`）。
+- 按面板拆分：overview / council / market / economy / pops / diplomacy / military / tech / events / log / rankings 各一文件；`band.tsx`（`Band`）、`report.tsx`（`Report` + `TurnReport`）、`panel.tsx`（`Panel` 标签分发 + `TABS`）。
+- `view/panels/shared.tsx` — 叶共享模块：类型（`UiKit`/`ControlAction`/`CouncilAction`/`CouncilHandlers`/`PanelProps`/`BandProps`/`ReportProps`）+ 共享 UI 原语（`Heading`/`StatLine`/`Meter`/`TableRow`）+ 共享助手（`playerOf`/`pendingOf`/`partnerTotals`）+ 御前与外交复用的 `SituationCard` + `PanePlaceholder`/`helpText`。各面板只依赖 `shared`、`view/format` 与 `engine/*`，无循环。
+- `view/panels/index.tsx` — 桶，重导出旧 `panels.tsx` 的全部 14 个公共符号（7 类型 + `Panel`/`Band`/`Report`/`PanePlaceholder`/`helpText` + 从 `view/format` 转出的 `eventSummary`/`clampText`），`import ... from '../view/panels'` 路径不变。
+- 完成后：`claude plugin test .` 388 pass / 0 fail（含 11 标签 × 2 surface 的渲染测试），`validate` 通过（警告与拆分前一致）；24 个具名函数体 + `TABS` + `playerOf` 经规范化 diff 与旧文件逐字节一致，导出集无缺无多，渲染零改动。最大文件 `economy.tsx` 240 行（远低于 600 软警）。
 
 ### S4 `engine/actions.ts` → `engine/actions/`
 - 按 action 拆（build / tax / tariff / spending / research / conscript / law / route …）+ `policy` / `randomDecision`；桶重导出。
