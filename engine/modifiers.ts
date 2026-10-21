@@ -115,13 +115,6 @@ export function addModifier(country: Country, modifier: Modifier): Modifier {
   return modifier
 }
 
-export function removeModifier(country: Country, id: string): boolean {
-  const index = country.modifiers.findIndex(one => one.id === id)
-  if (index < 0) return false
-  country.modifiers.splice(index, 1)
-  return true
-}
-
 /** Ages timed modifiers by one month and returns the labels that expired. */
 export function tickModifiers(country: Country): string[] {
   if (!Array.isArray(country.modifiers)) {

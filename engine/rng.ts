@@ -24,13 +24,3 @@ export function makeRng(seed: number): Rng {
 
   return { next, int, range, chance, pick }
 }
-
-/** A stable 32-bit hash, so a save keeps simulating the same world. */
-export function hashString(text: string): number {
-  let hash = 2166136261
-  for (let i = 0; i < text.length; i += 1) {
-    hash ^= text.charCodeAt(i)
-    hash = Math.imul(hash, 16777619)
-  }
-  return hash >>> 0
-}
