@@ -1,6 +1,6 @@
 # 经济系统 remake（配方经济 · 四税基 · 贸易路线）
 
-- Status: B1–B5 shipped（World v10）；**B6 = 文档同步（本次进行中）**。0002 事件树与 0005 科技树 v8 暂缓
+- Status: B1–B5 + B5-r2 shipped（World v11）；B6 = 文档同步（随 B5-r2 一并完成）。0002 事件树与 0005 科技树 v8 暂缓
 - Depends on: `0003-economic-loop.md`、`0004-trade-diplomacy.md`、ADR 0005（不做存档兼容）、ADR 0006–0019、ADR 0020（贸易路线，本系列第①步）
 - Scope: 把「抽象产出 + GDP 比例税」换成「逐建筑显式配方 + 要素/消费/贸易税基」。世界版本升到 **v10**。
 - 来源：试玩 PT-031（`docs/playtest-issues.md`）＋玩家口述：
@@ -184,8 +184,10 @@ export const WAGE_ALLOCATION: {
 - 工厂毛利落在 5–20% 带内（信号有意义、不可套利）。**参考点**取七大国产量的加权聚合
   （plan §5 允许「种子平均」）；工业核心 GBR/FRA/PRU 各自也在带内，资源富集、工资低的国家
   （RUS/QING/JAP）在上界之上，属预期。
-- 消费品（成衣/酒/家具）要么真双向贸易，要么**明确判为本地自给**。B5 取后者（手工匠供给），
-  并写入 `tests/economy-recipe-calibration.test.ts` 与 `docs/playtest-issues.md`。
+- 消费品（成衣/酒/家具）**真双向贸易**（B5-r2 反悔 B5 的「本地自给」判定，用户决议）：每 12 个月窗口
+  两侧都至少出现一次（`tests/economy-recipe-calibration.test.ts` 把成衣/酒/家具并入双向窗口 gate）。
+  军械仍是单侧（生产恒 > 需求，无 bid），但**有生产下限**断言并在测试中显式记录为「唯一的非双向商品」——
+  强行让它双向会把农业/采掘毛利推过 F7 上界。
 
 ## 6. 工作包与顺序
 
@@ -196,6 +198,7 @@ export const WAGE_ALLOCATION: {
 | **B3（决策联动）** ✅ | 私有投资改用利润率；加 utilization 门控与深度亏损折旧 | economic-loop 投资相关、60/84 基线 |
 | **B4（税基）** ✅ | 移除 `taxRate`，加 `taxes`；重写 `incomeParts`；`v3_action tax`；fiscal/sim/thresholds/inspect | fiscal.test「税是 GDP 份额」、经济循环高税侵蚀 |
 | **B5（再校准）** ✅ | 调配方系数与 `WAGE_ALLOCATION`；加校准测试；收敛 PT-002/PT-001 | economy-calibration、trade 基线 |
+| **B5-r2（消费品双向）** ✅ | 纺织厂转做布料、家具厂/酿酒厂配方 ×0.45、消费品需求侧重定；成衣/酒/家具并入双向 gate | 无（数值，行为重校准；鸦片门保持） |
 | **B6（文档）** | 🔧 ADR 0021–0023、README/GLOSSARY、`gm-handbook.md`、playtest 状态更新（**本次进行中**） | — |
 
 - **进度**：B1+B2+B3 已实现（ADR 0021、ADR 0022，World v9）。`BUILDING_RECIPES` 为产出与中间投入的单一真源，
@@ -215,10 +218,26 @@ export const WAGE_ALLOCATION: {
   工厂从「~87% 材料成本、整体亏损」变为在 7 个主要国家的**产量加权聚合毛利 ≈ 15.8%（5–20% 带内）**，
   工业核心 GBR/FRA/PRU 各自落在 5–20%（GBR 7%、FRA 12%、PRU 18%）。机械两侧基线恢复到
   `≥ months − 2`（0007-E1 原界，重新收紧）。新增 `tests/economy-recipe-calibration.test.ts`
-  （9 项 gate）。PT-002 按 §5 的另一允许路径收敛：成衣/酒/家具判定为**本地自给**（手工匠供给），
-  不做全球双向贸易——真双向会掏空农村真实收入并饿死鸦片危机门。**B6（文档同步）本次进行中**：
+  （9 项 gate）。**B6（文档同步）已随 B5-r2 一并进行**：
   更新 `docs/gm-handbook.md`、`README.md`、`GLOSSARY.md`、`docs/playtest-issues.md` 与 ADR 0021–0023
-  引用，使其与 shipped 状态（World v10）一致。
+  引用，使其与 shipped 状态（World v11）一致。
+
+  **B5-r2 已实现**（2026-10-21，**反悔 B5 的消费品「本地自给」判定**；用户决议：消费品应全球可交易）。
+  B5 判定本地自给的代价是 PT-002 未真正收敛（成衣/酒/家具全球 0 bid）。B5-r2 从**工厂侧**制造真实 bid，
+  不动手工匠（`ARTISAN_OUTPUT` 原值），因而**不伤 QING 真实收入、不饿死鸦片门**：
+  1. 纺织厂 `textileMills.output` 由 `{fabric 1.45, clothes 0.68}` 改为 `{fabric 2.0, clothes 0.2}`——
+     工厂转做中间品（布料），成衣交给手工匠；布料增产保持纺织厂增加值与工业毛利带。
+  2. 家具厂/酿酒厂整条配方（**产出 × 投入**同乘 0.45）缩到 0.45：`furnitureWorks.output.furniture
+     1.54→0.693`、`distilleries.output.liquor 1.9→0.855`（投入同比例缩），使其他国家对其出真 bid，
+     同时**保持每座经营毛利不变**（增加值随配方同缩）。
+  3. 消费品需求侧重定（`engine/data/goods.ts`）：`SUBSISTENCE` 成衣 `1.2→1.5`、酒类 `0.6→(5/6)`、
+     家具 `0.3→(5/12)`（均 ×`SUBSISTENCE_SCALE`）；`INCOME_ELASTICITY` 成衣 `0.18→0.25`、
+     服务 `0.27→0.2`（弹性份额仍和为 1）。
+  实测（seed 9100，84 月基线）：**成衣 81/84 月双侧（缺第 1–3 月，其后每 12 月窗口均 ≥9 月）、酒类 84/84、
+  家具 81/84**（各窗口 ≥9 月）；军械仍 0 bid（记录为唯一非双向商品）。**鸦片危机门保持**：37–84 月 QING
+  鸦片进口最小 **2.251**（门 ≥2，较基线 2.226 略升）、GBR 份额最小 **0.584**（门 ≥0.2）、关系最小 −43.4
+  （门 > −50）。工业 7 大国聚合毛利 24/48/84 月 = **16.6% / 14.4% / 12.3%**（5–20% 带内）；F7 各族毛利带全部通过；
+  `C+I+G+NX===GDP`、工资和恒等、60/120 月确定性、金币守恒均保持；World 仍 v11（**纯数值**）。
 
 - ①（贸易路线，ADR 0020）先于本计划落地；B5 再校准会顺带重定路线收益。
 - 每个包独立提交、测试全绿再进下一个。

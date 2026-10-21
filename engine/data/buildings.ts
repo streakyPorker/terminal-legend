@@ -216,22 +216,33 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
   // `{tech, industrial}` pair, with the old liquor-only-industrial override kept
   // on `distilleries`. All seven share the `factoryOutput` seam.
   textileMills: {
-    output: { fabric: 1.45, clothes: 0.68 },
+    // B5-r2: the mill now works the fibre (fabric) and leaves the finished
+    // garment mostly to the handicraft sector, so clothes can trade on both
+    // sides (PT-002 reversal). Fabric output is raised to keep the mill's
+    // value added — and with it the industrial margin band — intact.
+    output: { fabric: 2.0, clothes: 0.2 },
     input: { grain: 1.0, coal: 0.18, wood: 0.1, machinery: 0.18 },
     labor: 0.9,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
   },
   furnitureWorks: {
-    output: { furniture: 1.54 },
-    input: { wood: 0.06, coal: 0.1, fabric: 0.7, steel: 0.18, machinery: 0.1 },
+    // B5-r2: scaled to 0.45 of the F7 recipe (output × input together) so the
+    // work is small enough that other countries bid for furniture, while the
+    // operating margin is preserved (value added scales with the recipe).
+    output: { furniture: 0.693 },
+    input: { wood: 0.027, coal: 0.045, fabric: 0.315, steel: 0.081, machinery: 0.045 },
     labor: 0.7,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
   },
   distilleries: {
-    output: { liquor: 1.9 },
-    input: { grain: 1.35, coal: 0.2, wood: 0.11, machinery: 0.19 },
+    // B5-r2: scaled to 0.45 of the F7 recipe (output × input together). Cutting
+    // spirit output alone would have broken the light-industry margin band;
+    // scaling the input basket with it keeps value added per building intact
+    // while leaving room for other countries to bid for liquor (PT-002).
+    output: { liquor: 0.855 },
+    input: { grain: 0.6075, coal: 0.09, wood: 0.0495, machinery: 0.0855 },
     labor: 0.6,
     gates: { tech: true, industrial: true },
     // The old bundled factory gated liquor by `industrial` alone (plan 0011 F3).
@@ -337,13 +348,14 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
  * added by hand alongside `BUILDING_RECIPES` (ADR 0021 keeps them out of the
  * per-building recipes because they scale with the artisan pop, not buildings).
  *
- * B5 (plan 0008 §5) leaves these at their original values. Cutting them would
- * make clothes/liquor/furniture genuinely two-sided, but it also strips the
- * agrarian economies of their domestic handicraft, collapses real consumer
- * income downstream and — fatally — starves the QING→GBR opium trade that the
- * opium-crisis gates depend on (plan 0004 §4.1). The gate therefore resolves
- * PT-002 the other allowed way: these goods are documented as intentionally
- * local (artisan self-supply), not globally traded.
+ * B5-r2 (plan 0008 §5) keeps these coefficients at their B5 values. Cutting
+ * them was the other route to two-sided clothes/liquor/furniture, but it strips
+ * the agrarian economies of their handicraft, so their unfillable consumer
+ * demand cannot be paid for (imports are payment-capacity bound) and the
+ * QING→GBR opium trade collapses below its ≥2/month gate (plan 0004 §4.1). B5-r2
+ * therefore reaches two-sidedness from the factory side instead — the mills and
+ * works make intermediates / smaller consumer baskets — and leaves artisans as
+ * the bottom of the finished-goods market.
  */
 export const ARTISAN_OUTPUT: Partial<Record<GoodId, number>> = {
   clothes: 0.035,

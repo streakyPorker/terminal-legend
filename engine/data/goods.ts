@@ -90,14 +90,18 @@ export const CONSUMER_GOODS: GoodId[] = [
  * 60-month baseline showed the seed economies sitting below a 693-gold
  * subsistence line, which pinned them in a poverty trap. See
  * docs/plans/0003-economic-loop.md §0.2 for the recorded calibration.
+ *
+ * B5-r2 (plan 0008 §5) raised the clothes / liquor / furniture floors so the
+ * final consumer basket actually absorbs enough output for those goods to trade
+ * on both sides (PT-002 reversal). The other three floors are unchanged.
  */
 export const SUBSISTENCE_SCALE = 0.6
 
 export const SUBSISTENCE: Record<GoodId, number> = {
   grain: 7.0 * SUBSISTENCE_SCALE,
-  clothes: 1.2 * SUBSISTENCE_SCALE,
-  furniture: 0.3 * SUBSISTENCE_SCALE,
-  liquor: 0.6 * SUBSISTENCE_SCALE,
+  clothes: 1.5 * SUBSISTENCE_SCALE,
+  furniture: (5 / 12) * SUBSISTENCE_SCALE,
+  liquor: (5 / 6) * SUBSISTENCE_SCALE,
   services: 1.0 * SUBSISTENCE_SCALE,
   luxury: 0.02 * SUBSISTENCE_SCALE,
   wood: 0,
@@ -119,10 +123,10 @@ export const CONSUMPTION_PROPENSITY = 0.75
 
 export const INCOME_ELASTICITY: Record<GoodId, number> = {
   grain: 0.15,
-  clothes: 0.18,
+  clothes: 0.25,
   furniture: 0.1,
   liquor: 0.1,
-  services: 0.27,
+  services: 0.2,
   luxury: 0.2,
   wood: 0,
   coal: 0,

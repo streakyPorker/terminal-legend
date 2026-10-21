@@ -56,13 +56,27 @@ const INDUSTRIAL_BUILDINGS = [
 const GOOD_IDS_ALL = Object.keys(GOODS) as GoodId[]
 
 // Goods the plan requires to trade on both sides at least once per 12 months.
-const TWO_SIDED_GOODS: GoodId[] = ['grain', 'wood', 'coal', 'iron', 'fabric', 'machinery', 'steel']
+// B5-r2 (plan 0008 §5) reverses PT-002: the finished consumer goods are added
+// here too, so the world market now genuinely trades clothes/liquor/furniture
+// and not only raw/intermediate goods.
+const TWO_SIDED_GOODS: GoodId[] = [
+  'grain',
+  'wood',
+  'coal',
+  'iron',
+  'fabric',
+  'machinery',
+  'steel',
+  'clothes',
+  'liquor',
+  'furniture',
+]
 
-// Consumer goods the plan allows to be either two-sided or "intentionally
-// local" (plan §5 / PT-002). B5 picks local: artisans supply them everywhere, so
-// real two-sided trade would require strangling the handicraft sector, which
-// collapses agrarian real income and starves the opium-crisis gates.
-const LOCAL_CONSUMER_GOODS: GoodId[] = ['clothes', 'liquor', 'furniture']
+// Arms stays a one-sided good at the seed scale: making arsenals small enough to
+// force a bid also pushes the agriculture/extraction margin bands past their F7
+// ceilings, so B5-r2 documents it as intentionally not-yet-two-sided rather than
+// break those gates. It is checked for positive supply only.
+const ARMS_NOT_TWO_SIDED: GoodId[] = ['arms']
 
 type GlobalMarket = Record<GoodId, { bid: number; offer: number }>
 
@@ -109,7 +123,7 @@ describe('B5 recipe calibration gates (plan 0008 §5)', () => {
     expect(offenders).toEqual([])
   })
 
-  test('grain/wood/coal/iron/fabric/machinery are two-sided at least once every 12 months', async () => {
+  test('raw, intermediate and consumer goods are two-sided at least once every 12 months', async () => {
     const world = newWorld(BASELINE_SEED, 'QING')
     const windows = Math.ceil(MONTHS / 12)
     const perWindow: Record<string, number[]> = {}
@@ -214,15 +228,20 @@ describe('B5 recipe calibration gates (plan 0008 §5)', () => {
     }
   })
 
-  test('consumer goods are documented as intentionally local (artisan self-supply)', async () => {
-    // Plan §5's other allowed resolution for PT-002. Assert the documentation is
-    // real: every country supplies these goods from its own artisans.
-    for (const id of LOCAL_CONSUMER_GOODS) expect(ARTISAN_OUTPUT[id] ?? 0).toBeGreaterThan(0)
+  test('clothes/liquor/furniture supply real bids and offers, arms is a documented one-sided good', async () => {
+    // PT-002 reversal (B5-r2, plan §5). The two-sided window gate above already
+    // covers clothes/liquor/furniture; this test additionally pins the mechanism
+    // (artisans still supply the finished consumer goods, so no country is
+    // starved of them) and records arms as the one deliberately non-two-sided
+    // good with a production floor instead of a silent gap.
+    for (const id of ['clothes', 'liquor', 'furniture'] as const) {
+      expect(ARTISAN_OUTPUT[id] ?? 0).toBeGreaterThan(0)
+    }
     const world = newWorld(BASELINE_SEED, 'QING')
     for (let month = 1; month <= 12; month += 1) advance(world, 1, [], rngFor(world))
     for (const country of Object.values(world.countries)) {
-      for (const id of LOCAL_CONSUMER_GOODS) {
-        expect(inspectEconomy(country).production[id] ?? 0).toBeGreaterThan(0)
+      for (const id of ['clothes', 'liquor', 'furniture', ...ARMS_NOT_TWO_SIDED]) {
+        expect(inspectEconomy(country).production[id] ?? 0, `${country.id} supplies ${id}`).toBeGreaterThan(0)
       }
     }
   })
