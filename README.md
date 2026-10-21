@@ -189,6 +189,7 @@ node statusline/install.mjs
    `docs/plans/0010-live-events.md`（ADR 0025）承接。
 5. `docs/plans/0009-config-refactor.md`（ADR 0024，取代 ADR 0004）：配置分层（`engine/config/` + `engine/data/`）与统一「配置块」乘数机制，增量 TDD、第一刀行为保持。
 6. `docs/plans/0010-live-events.md`（ADR 0025）：AI 生成的逐回合实时事件，引擎按经济/政治/外交/民生挑显著题材，LLM 现场生成 0 至 2 个可交互事件，效果编译回既有事件结构并持久化。**proposed，待批准实现。**
+7. `docs/plans/0011-building-expansion.md`（ADR 0026）：建筑扩张与统一基础设施——矿场拆成煤矿/铁矿/伐木场、工厂拆成七个单产工业建筑、加学校/运河/电报/要塞/船坞，新增 `steel` 商品（`iron` 转为「铁矿石」），把「交通基础设施」升级为统一的「基础设施」（供给/需求/线性短缺 debuff/维护），建筑加 `unlock` 前向字段。**proposed，待批准实现（World v11）。**
 
 已完成、作为参考：`0003-economic-loop.md`（World v5）、`0004-trade-diplomacy.md`（World v6）、
 ADR 0006（World v7 净资产财政）、ADR 0020（World v8 持久贸易航线）、
@@ -280,5 +281,6 @@ tests/first-slice.test.ts    第一刀（M1–M6）引擎与命令测试
 | 0002 | 事件树 S1–S4：局势/提案/多国交互 | ⏸ 暂缓（先打磨经济） |
 | 0006 | GM ⇄ 引擎接口：查询/预测全部走 MCP，禁止读存档 | 📝 已规划 |
 | 0007 | 经济打磨：世界贸易校准、支付能力可见化、建造队列、GDP/科技/劳动力 | 🔧 当前优先（E1 第一轮已校准，32e624b） |
+| ADR 0026 / 0011 | 建筑扩张与统一基础设施：拆矿场/工厂为单产建筑、加学校/运河/电报/要塞/船坞、`steel` 商品、统一基础设施（供给/需求/线性 debuff/维护）、`unlock` 前向字段 | 📝 proposed（World v11，待批准实现） |
 
 规划文档在 `docs/plans/`；架构决策在 `docs/adr/`；术语以 `GLOSSARY.md` 为准；GM 机制参考见 `docs/gm-handbook.md`。
