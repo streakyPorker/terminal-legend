@@ -1,5 +1,12 @@
 import type { EngineInterface, Register } from 'claude-code'
-import type { LogEntry, PolicyProposal, TabId, UiState, WorldState } from '../types'
+import type {
+  GameEvent,
+  LogEntry,
+  PolicyProposal,
+  TabId,
+  UiState,
+  WorldState,
+} from '../types'
 import { MODIFIER_STATS } from '../engine/modifiers'
 import { BUILDINGS, COUNTRY_SEEDS, GOOD_IDS, WAR_GOAL_NAMES, initialUi, makeRngForWorld } from '../engine/data'
 import { decideForAi, describeWorldForNarrator } from '../engine/ai'
@@ -34,6 +41,12 @@ import {
   situationStatus,
 } from '../engine/situations'
 import {
+  buildLiveEventPrompt,
+  parseLiveEventResponse,
+  salientTopics,
+  type LiveEventCandidate,
+} from '../engine/liveEvents'
+import {
   countryTag,
   fmtDate,
   fmtDateLong,
@@ -59,6 +72,9 @@ const WORLD = { plugin: 'terminal-legend', key: 'world' } as const
 const UI = { plugin: 'terminal-legend', key: 'ui' } as const
 const SECRETARY_AGENT = 'terminal-legend:secretary'
 const SECRETARY_TIMEOUT_MS = 240_000
+// Live-event generation is a blocking call in the turn's critical path; this
+// bounds it so time never stalls (ADR 0025 §7; value is 待定, plan 0010 §10).
+const LIVE_EVENT_TIMEOUT_MS = 20_000
 // Full toolset per ADR 0001: misuse is caught by the prompt and audited
 // afterwards, not prevented by withholding tools.
 const SECRETARY_TOOLS = [
@@ -326,11 +342,73 @@ function arbiterCompleter(
   }
 }
 
+/**
+ * Live-event generator completer: one blocking `$.model.complete` returning the
+ * raw JSON, or '' on failure/timeout so the turn falls back to no AI event.
+ * Mirrors `arbiterCompleter`; mockable by mocking `$.model.complete` in tests.
+ */
+function liveEventCompleter(
+  $: EngineInterface,
+  world: WorldState,
+): (prompt: string) => Promise<string> {
+  return async (prompt: string): Promise<string> => {
+    try {
+      const result = await $.model.complete({
+        model: world.ai.model || 'haiku',
+        prompt,
+        maxTokens: 1200,
+        effort: 'low',
+        timeoutMs: LIVE_EVENT_TIMEOUT_MS,
+      })
+      return result.isAnswered ? result.text : ''
+    } catch {
+      return ''
+    }
+  }
+}
+
+/**
+ * The post-`advance` seam (ADR 0025 §1): scan salient topics, one blocking
+ * generation call, strict parse/validate, then wrap accepted candidates as
+ * self-contained `GameEvent`s for `world.events`. Returns [] on any failure so
+ * the caller never has to branch; never throws.
+ */
+async function generateTurnEvents(
+  $: EngineInterface,
+  world: WorldState,
+): Promise<GameEvent[]> {
+  const country = world.countries[world.playerId]
+  if (country === undefined) return []
+  const topics = salientTopics(world, country)
+  if (topics.length === 0) return []
+  const prompt = buildLiveEventPrompt(world, country, topics)
+  const text = await liveEventCompleter($, world)(prompt)
+  if (text === '') return []
+  const countryIds = Object.keys(world.countries)
+  const candidates: LiveEventCandidate[] = parseLiveEventResponse(text, {
+    countryIds,
+    maxEvents: 2,
+  })
+  return candidates.map((candidate, index) => ({
+    id: `live-${world.tick}-${world.playerId}-${index}`,
+    date: { ...world.date },
+    kind: candidate.kind,
+    title: candidate.title,
+    text: candidate.text,
+    countryId: world.playerId,
+    options: candidate.options,
+    isResolved: false,
+  }))
+}
+
 async function advanceGame(
   $: EngineInterface,
   months: number,
   announce: boolean,
   openCouncil = true,
+  // Delegated runs pass false: skipping generation there keeps a multi-month
+  // run from stalling on one model call per month (ADR 0025 §7).
+  allowLiveEvents = true,
 ): Promise<string> {
   if (isAdvancing) return '时间正在推进，请稍候。'
   const current = await activeWorld($)
@@ -370,6 +448,31 @@ async function advanceGame(
       const date = { ...world.date }
       for (const note of notes) world.log.push({ date, kind: 'leader', text: note })
       if (world.log.length > 400) world.log.splice(0, world.log.length - 400)
+    }
+
+    // Live events: engine picks salient topics, one blocking model call, strict
+    // parse; accepted events join world.events so the council shows them and the
+    // save records them (read never regenerates, ADR 0025 §5/§6).
+    if (allowLiveEvents) {
+      try {
+        const generated = await generateTurnEvents($, world)
+        if (generated.length > 0) {
+          world.events.push(...generated)
+          if (world.events.length > 80) world.events.splice(0, world.events.length - 80)
+          const player = world.countries[world.playerId]
+          for (const event of generated) {
+            world.log.push({
+              date: { ...world.date },
+              kind: 'event',
+              countryId: world.playerId,
+              text: `[${player?.flag ?? ''}] 新事件：${event.title} — ${event.text}`,
+            })
+          }
+          if (world.log.length > 400) world.log.splice(0, world.log.length - 400)
+        }
+      } catch (error) {
+        $.ui.log(`终末传奇：事件生成失败 ${String(error)}`, { to: 'debug' })
+      }
     }
 
     let summary = summarize(report, months)
@@ -662,7 +765,7 @@ async function runDelegated($: EngineInterface, total: number): Promise<void> {
       const before = await activeWorld($)
       if (before === undefined) break
       const snapshot = clone(before.world)
-      const summary = await advanceGame($, 1, false, false)
+      const summary = await advanceGame($, 1, false, false, false)
       if (!summary.startsWith('推进 ')) {
         reason = summary
         break
