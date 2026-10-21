@@ -189,3 +189,22 @@
 ## 8. 暂缓
 
 - `0005-tech-tree.md` 科技树 v8、`0002-agent-event-trees.md` 事件树：仍按既有计划排期，本重构只提供底层词汇，不改其内容。
+
+## 9. 物理布局与字面量抽取（剩余，D 系列）
+
+> C1–C7 只完成了**修正块引擎**。ADR 0024 §1 定的**物理布局**（`engine/config/*`、`engine/data/*`）与**散落数值字面量**的抽取**尚未做**。F 系列（建筑扩展）与 E 系列（实时事件）收口后执行，避免并发冲突。
+
+### D1 抽取有调参意义的字面量 → `engine/config/*.ts`
+- 按 ADR 0024 §1 建 `engine/config/{balance,economy,tax,trade,construction,diplomacy,military,society,tech}.ts`。
+- 抽取对象（据盘点，非穷举）：价格平滑 `0.3`、收敛钳位 `0.35/3`、价格上下限 `0.25×/4×`；门控系数（access `0.55+0.9`、infra `0.6+/160`、industrial `0.7..1.3`）；`tech 0.07`；工匠系数；增长 `0.0012`、sol/radicals/exhaustion 除数；城市化系数；sol 公式；识字增益；失业平滑与上下限；激进权重；政府类型表；合法性拉回 `0.08`；权威/研究/人力/士气/领袖年龄；私人投资率；关系漂移 `0.012`、结盟 `55`/对手 `-35`、恶名 `0.1`；战争目标常数；事件常数；trade/fiscal/situation 常数。
+- **行为零改动**：只把字面量换成具名导出，数值不变；按域分批提交。
+- 护栏：加「配置引用完整性」测试；跑全量测试 + 确定性基线。
+
+### D2 拆 `engine/data.ts` → `engine/data/*.ts`（桶）
+- 与 `0012-code-splits.md` 的 S2 合并执行，一次只搬一个域、逐提交验证，桶文件保证 `./data` 导入路径不变。
+
+### D3（可选）其它模块的域内常量归位
+- `engine/trade.ts` / `fiscal.ts` / `construction.ts` / `situations.ts` 的域内常量收进对应 `config/` 文件，模块按域 import。
+
+### 验收
+- 各 `config/*.ts` 的数值被模块引用而非就地字面量；`claude plugin test .` 全绿、`validate` 通过、行为零改动、无单文件超阈值。
