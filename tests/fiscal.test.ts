@@ -39,7 +39,6 @@ describe('fiscal ledger', () => {
     const ledger = fiscalLedger(qing)
     const incomeSum =
       ledger.income.taxes +
-      ledger.income.tariffs +
       ledger.income.ports +
       ledger.income.sovereignIncome +
       ledger.income.reparations +
@@ -83,7 +82,6 @@ describe('fiscal ledger', () => {
     // The composition still adds up to the stored income total.
     const sum =
       ledger.income.taxes +
-      ledger.income.tariffs +
       ledger.income.ports +
       ledger.income.sovereignIncome +
       ledger.income.reparations +
@@ -91,14 +89,21 @@ describe('fiscal ledger', () => {
     expect(Math.abs(sum - qing.econ.income)).toBeLessThan(1e-9)
   })
 
-  test('the tax take is a share of GDP, not the whole output', async () => {
+  test('tax revenue comes from the four real bases, not GDP', async () => {
     const world = newWorld(11, 'FRA')
-    const ledger = fiscalLedger(world.countries.FRA)
-    expect(ledger.gdp).toBeGreaterThan(0)
+    const fra = world.countries.FRA
+    expect(fra).toBeDefined()
+    if (fra === undefined) return
+    const ledger = fiscalLedger(fra)
+    const bases = ledger.income.taxBases
     expect(ledger.income.taxes).toBeGreaterThan(0)
-    expect(ledger.income.taxes / ledger.gdp).toBeLessThan(0.5)
-    // The treasury account and the output account are deliberately different.
+    expect(
+      Math.abs(bases.land + bases.profit + bases.consumption + bases.tariff - ledger.income.taxes),
+    ).toBeLessThan(1e-9)
+    // The treasury account and the output account are deliberately different:
+    // GDP is a derived output metric and is never a tax base (ADR 0023).
     expect(ledger.income.total).not.toBe(ledger.gdp)
+    expect(ledger.income.taxes).not.toBe(ledger.gdp)
   })
 
   test('a positive balance earns the sovereign-fund rate and pays no debt interest', async () => {

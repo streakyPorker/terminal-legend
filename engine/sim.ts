@@ -13,6 +13,7 @@ import type {
   LogKind,
   PolicyEffect,
   PolicyProposal,
+  TaxBaseId,
   TradeRoute,
   TradeTension,
   War,
@@ -51,12 +52,18 @@ import {
 } from './data'
 import {
   CONSTRUCTION_SUBSIDY_POINTS_PER_LEVEL,
+  LAND_VALUE_PER_UNIT,
+  TAX_BASE_IDS,
+  TAX_BASE_NAMES,
   debtPressure,
   expenseParts,
   incomeParts,
+  privateTaxBurden,
   nationalDebt,
+  taxBaseRevenues,
   type ExpenseParts,
   type IncomeParts,
+  type TaxBaseQuantities,
 } from './fiscal'
 import type { Rng } from './rng'
 import {
@@ -127,6 +134,8 @@ export type EconomySnapshot = {
   laborShare: number
   wages: number
   profits: number
+  /** This month's four tax-base quantities (ADR 0023). */
+  taxBaseQty: TaxBaseQuantities
   buildingProfits: Record<BuildingId, BuildingProfit>
   labor: LaborStats
 }
@@ -654,6 +663,8 @@ type DemandBreakdown = {
   consumer: Record<GoodId, number>
   investment: Record<GoodId, number>
   government: Record<GoodId, number>
+  /** Final consumer-goods spending at current prices, the consumption tax base. */
+  consumptionValue: number
 }
 
 /**
@@ -699,8 +710,10 @@ function computeDemand(country: Country): DemandBreakdown {
       : country.econ.gdp * (1 - country.politicalEconomy.laborShareBase)
   const savingsRate = effectiveSavingsRate(country)
   const welfareTransfer = sp.welfare * popFactor * 0.03
-  const taxEfficiency = 0.5 + country.government.legitimacy / 200
-  const taxTake = (wages + profits) * (country.econ.taxRate / 100) * 0.4 * taxEfficiency
+  // The private tax burden is the land + profit + consumption take computed
+  // from the four real bases (ADR 0023), not a GDP share. Using last month's
+  // stored base quantities keeps the loop one month behind, like wages/profits.
+  const taxTake = privateTaxBurden(country)
   const disposable = Math.max(0, wages + profits * (1 - savingsRate) - taxTake) + welfareTransfer
   const incomePerCapita = disposable / popFactor
   let subsistenceCost = 0
@@ -804,7 +817,11 @@ function computeDemand(country: Country): DemandBreakdown {
 
   // Every goods demand still reads through the generic per-good demand buffs
   // for the intermediate blocks above; consumer demand is already wrapped.
-  return { demand: out, consumer, investment, government }
+  // The consumption tax base values only the final consumer basket, never the
+  // intermediate demand above (ADR 0023 de-duplication rule).
+  let consumptionValue = 0
+  for (const id of CONSUMER_GOODS) consumptionValue += consumer[id] * prices[id]
+  return { demand: out, consumer, investment, government, consumptionValue }
 }
 
 /** Production and demand for display, with no side effects. */
@@ -818,6 +835,15 @@ export function inspectEconomy(country: Country): {
     demand: computeDemand(country).demand,
     resources: resourceFactors(country),
   }
+}
+
+/**
+ * The consumption tax base for this month (ADR 0023): the final consumer
+ * basket valued at current prices. Intermediate and investment demand are
+ * deliberately excluded.
+ */
+export function finalConsumptionBase(country: Country): number {
+  return computeDemand(country).consumptionValue
 }
 
 export function computeEconomy(
@@ -874,27 +900,8 @@ export function computeEconomy(
   components.g *= gdpFactor
   const gdp = realGdp * gdpFactor + nx
 
-  // Revenue and expense are split by source/category in fiscal.ts so the HUD
-  // can show a real cash account instead of a single net figure. Tariff
-  // revenue is the gold actually collected on this month's import flows
-  // (plan §2.4); construction is settled separately and folded in later.
+  // Fiscal context for the interest rates and the tax-collection reading.
   const context = { atWar: override?.atWar ?? false, tick: override?.tick ?? 0 }
-  const revenue = incomeParts(
-    country,
-    gdp,
-    override?.tariffRevenue ?? 0,
-    context,
-  )
-  const income = applyModifiers(
-    country,
-    'income',
-    revenue.taxes +
-      revenue.tariffs +
-      revenue.ports +
-      revenue.sovereignIncome +
-      revenue.reparations +
-      revenue.other,
-  )
   const outlay = expenseParts(country, gdp, context)
   const expense = applyModifiers(
     country,
@@ -958,6 +965,35 @@ export function computeEconomy(
     }
   }
 
+  // The four tax bases (ADR 0023): land endowment, per-building profit (only
+  // positive contributions), final consumer spending and the border duty. GDP
+  // is deliberately absent — it is a derived output, never a tax base.
+  let profitBase = 0
+  for (const id of BUILDING_IDS) {
+    profitBase += Math.max(0, buildingProfits[id].profit)
+  }
+  const taxBaseQty: TaxBaseQuantities = {
+    land: country.econ.resources.farmland * LAND_VALUE_PER_UNIT,
+    profit: profitBase,
+    consumption: breakdown.consumptionValue,
+    tariff: (country.econ.lastImportBill ?? 0) + (country.econ.lastExportRevenue ?? 0),
+  }
+  const revenue = incomeParts(
+    country,
+    override?.tariffRevenue ?? 0,
+    context,
+    taxBaseQty,
+  )
+  const income = applyModifiers(
+    country,
+    'income',
+    revenue.taxes +
+      revenue.ports +
+      revenue.sovereignIncome +
+      revenue.reparations +
+      revenue.other,
+  )
+
   return {
     production,
     supply,
@@ -972,6 +1008,7 @@ export function computeEconomy(
     laborShare,
     wages,
     profits,
+    taxBaseQty,
     buildingProfits,
     labor,
   }
@@ -995,6 +1032,7 @@ export function calibrateWorld(world: WorldState): void {
     country.econ.laborShare = snap.laborShare
     country.econ.wages = snap.wages
     country.econ.profits = snap.profits
+    country.econ.taxBaseQty = snap.taxBaseQty
     country.econ.buildingProfits = snap.buildingProfits
     country.econ.laborDemand = snap.labor.demand
     country.econ.laborForce = snap.labor.force
@@ -1627,6 +1665,7 @@ function simulateCountry(
   country.econ.laborShare = snap.laborShare
   country.econ.wages = snap.wages
   country.econ.profits = snap.profits
+  country.econ.taxBaseQty = snap.taxBaseQty
   country.econ.buildingProfits = snap.buildingProfits
   country.econ.laborDemand = snap.labor.demand
   country.econ.laborForce = snap.labor.force
@@ -1808,8 +1847,15 @@ function simulateCountry(
     30,
   )
 
+  // The most salient domestic tax (the highest of the three internal bases)
+  // replaces the single old rate; consumption and tariffs already bite elsewhere.
+  const taxLevel = Math.max(
+    country.econ.taxes.land,
+    country.econ.taxes.profit,
+    country.econ.taxes.consumption,
+  )
   const radicalPressure =
-    Math.max(0, country.econ.taxRate - 10) * 0.08 +
+    Math.max(0, taxLevel - 5) * 0.08 +
     Math.max(0, country.econ.tariff - 10) * 0.03 +
     Math.max(0, 40 - country.pops.sol) * 0.03 +
     country.military.exhaustion * 0.06 +
@@ -3058,6 +3104,14 @@ const LAW_AUTHORITY_COST: Record<string, number> = {
   宗教宽容: 5,
 }
 
+/** The four-base tax menu, shown when `v3_action tax` omits `base` (ADR 0023). */
+export function taxMenuText(country: Country): string {
+  return TAX_BASE_IDS.map(base => {
+    const rate = base === 'tariff' ? country.econ.tariff : country.econ.taxes[base]
+    return `${TAX_BASE_NAMES[base]}(${base}) ${rate.toFixed(0)}%`
+  }).join(' / ')
+}
+
 export function applyDecision(
   world: WorldState,
   decision: Decision,
@@ -3095,13 +3149,26 @@ export function applyDecision(
       }
     }
     case 'tax': {
-      const rate = clamp(num(params.rate, country.econ.taxRate), 0, 60)
-      country.econ.taxRate = rate
-      return { ok: true, text: `${tag} 将税率调整为 ${rate.toFixed(0)}%` }
+      const base = String(params.base ?? '') as TaxBaseId
+      if (!TAX_BASE_IDS.includes(base)) {
+        return {
+          ok: false,
+          text: `${tag} 需要税基 base（land/profit/consumption/tariff）。当前：${taxMenuText(country)}`,
+        }
+      }
+      const rate = clamp(num(params.rate, country.econ.taxes[base]), 0, 60)
+      if (base === 'tariff') {
+        country.econ.tariff = rate
+        country.econ.taxes.tariff = rate
+      } else {
+        country.econ.taxes[base] = rate
+      }
+      return { ok: true, text: `${tag} 将${TAX_BASE_NAMES[base]}税率调整为 ${rate.toFixed(0)}%` }
     }
     case 'tariff': {
       const rate = clamp(num(params.rate, country.econ.tariff), 0, 60)
       country.econ.tariff = rate
+      country.econ.taxes.tariff = rate
       // Without a separate export rate the old single-rate behaviour stands;
       // supplying `exportRate` splits the two directions (ADR 0014).
       const exportRate =
@@ -3778,18 +3845,22 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
       params: { stance, narrative: `${country.name}就鸦片危机表明立场` },
     }
   }
-  // Debt service is a hard constraint; the deterministic fallback raises
-  // taxes before a debt spiral becomes permanent.
-  if (
-    nationalDebt(country) > country.econ.gdp &&
-    country.econ.taxRate < 45 &&
-    rng.chance(0.5)
-  ) {
-    return {
-      countryId: country.id,
-      action: 'tax',
-      params: { rate: Math.min(45, country.econ.taxRate + 2) },
-      narrative: `${country.name}为偿债提高税率`,
+  // Debt service is a hard constraint; the deterministic fallback raises the
+  // lowest-yielding base (no RNG in the choice) before a debt spiral hardens.
+  if (nationalDebt(country) > country.econ.gdp && rng.chance(0.5)) {
+    const revenues = taxBaseRevenues(country, country.econ.lastTariffRevenue)
+    let base: TaxBaseId = 'land'
+    for (const id of TAX_BASE_IDS) {
+      if (revenues[id] < revenues[base]) base = id
+    }
+    const current = base === 'tariff' ? country.econ.tariff : country.econ.taxes[base]
+    if (current < 45) {
+      return {
+        countryId: country.id,
+        action: 'tax',
+        params: { base, rate: Math.min(45, current + 2) },
+        narrative: `${country.name}为偿债提高${TAX_BASE_NAMES[base]}`,
+      }
     }
   }
   if (

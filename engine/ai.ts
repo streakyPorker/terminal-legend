@@ -2,7 +2,7 @@ import type { EngineInterface } from 'claude-code'
 import type { Country, GameDate, SituationStance, WorldState } from '../types'
 import { BUILDING_IDS, GOODS, GOOD_IDS, SPENDING, WAR_GOAL_NAMES, techName } from './data'
 
-import { nationalDebt, sovereignFund } from './fiscal'
+import { TAX_BASE_IDS, nationalDebt, sovereignFund } from './fiscal'
 import type { Rng } from './rng'
 import { SENSITIVE_GOODS, randomDecision, type Decision } from './sim'
 import { SITUATION_STANCES } from './situations'
@@ -20,7 +20,7 @@ const SYSTEM = `你是 19 世纪大战略游戏的世界决策引擎。你为每
 - 每个国家最多 1 条；只为他国（非玩家国）决策。
 - action 只能是：build, tax, tariff, spending, research, conscript, law, diplomacy, invest, situation。
 - build 的 building 只能是：farms, mines, factories, railroads, ports, universities, barracks, offices；params.count 为 1..20 的数字。官署提供行政能力与官僚上限。
-- tax/tariff 用 params.rate（0..60）；spending 用 params.category（army/navy/bureaucracy/education/welfare/construction）与 params.amount（0..50）；数值必须是 JSON 数字，不能写成字符串。
+- tax 用 params.base（land=土地税, profit=企业所得税, consumption=消费税, tariff=关税）与 params.rate（0..60）；tariff 用 params.rate（0..60，可选 params.exportRate）；spending 用 params.category（army/navy/bureaucracy/education/welfare/construction）与 params.amount（0..50）；数值必须是 JSON 数字，不能写成字符串。
 - invest 调整投资信心：params.amount 取 -3..3，结果被限制在该国基准上下 10 点内。
 - diplomacy 需要 params.target（国家代码）与 params.move（improve, insult, alliance, rival, gift, war, peace, embargo, unembargo, tension）。
   - embargo/unembargo 可选 params.good（商品代码，缺省=全部）与 params.months（1..60，缺省=永久）。
@@ -85,7 +85,7 @@ function countryLine(country: Country, world: WorldState): string {
     `债务率:${n1(debt / Math.max(1, country.econ.gdp))}`,
     `赔款:付${n1(country.econ.reparationsPaid)}/收${n1(country.econ.reparationsReceived)}`,
     `GDP:${n1(country.econ.gdp)}金/月(消费${n1(country.econ.gdpComponents.c)}/投资${n1(country.econ.gdpComponents.i)}/政府${n1(country.econ.gdpComponents.g)})`,
-    `税:${country.econ.taxRate}%关税:进${country.econ.tariff}/出${country.econ.exportTariff ?? country.econ.tariff}%`,
+    `税:土${country.econ.taxes.land}/企${country.econ.taxes.profit}/消${country.econ.taxes.consumption}%关税:进${country.econ.tariff}/出${country.econ.exportTariff ?? country.econ.tariff}%`,
     `支出:陆${n1(country.econ.spending.army)}/海${n1(country.econ.spending.navy)}/官${n1(country.econ.spending.bureaucracy)}/教${n1(country.econ.spending.education)}/福${n1(country.econ.spending.welfare)}/建${n1(country.econ.spending.construction)}`,
     `在建:${country.econ.constructionQueue.length}(上月实付${n1(country.econ.lastStateConstructionSpend)})`,
     `建筑:农场${country.econ.buildings.farms}/矿${country.econ.buildings.mines}/工厂${country.econ.buildings.factories}/铁路${country.econ.buildings.railroads}/官署${country.econ.buildings.offices}`,
@@ -223,8 +223,12 @@ function validParams(
         finite(params.count, 1, 20)
       )
     case 'tax':
+      return (
+        (TAX_BASE_IDS as string[]).includes(String(params.base ?? '')) &&
+        finite(params.rate, 0, 60)
+      )
     case 'tariff':
-      return finite(params.rate, 0, 60)
+      return finite(params.rate, 0, 60) && finite(params.exportRate, 0, 60)
     case 'spending':
       return (
         Object.prototype.hasOwnProperty.call(SPENDING, String(params.category ?? '')) &&

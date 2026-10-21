@@ -35,7 +35,7 @@ describe('M1 types, data and migration', () => {
     expect(qing).toBeDefined()
     if (qing === undefined) return
 
-    expect(world.version).toBe(9)
+    expect(world.version).toBe(10)
     expect(world.ironman).toBe(false)
     expect(world.secretary.delegation).toEqual({
       internal: false,
@@ -106,7 +106,7 @@ describe('M1 types, data and migration', () => {
   test('a corrupt save is rejected', async () => {
     expect(parseWorld({})).toBeUndefined()
     expect(parseWorld('nope')).toBeUndefined()
-    expect(parseWorld({ version: 10, tick: 0, date: {}, countries: {} })).toBeUndefined()
+    expect(parseWorld({ version: 11, tick: 0, date: {}, countries: {} })).toBeUndefined()
   })
 })
 

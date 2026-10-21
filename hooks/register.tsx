@@ -144,8 +144,6 @@ function statusText(world: WorldState): string {
         war.attackers.includes(player.id) || war.defenders.includes(player.id),
     )
     const ledger = fiscalLedger(player, { atWar, tick: world.tick })
-    const taxShare =
-      ledger.gdp > 0 ? ((ledger.income.taxes / ledger.gdp) * 100).toFixed(1) : '0.0'
     const stock =
       ledger.debt > 0
         ? `国债 ${fmtMoney(ledger.debt)}（月息 ${(ledger.debtRate * 100).toFixed(2)}%）`
@@ -165,8 +163,8 @@ function statusText(world: WorldState): string {
       `GDP构成：消费 ${fmtNumber(player.econ.gdpComponents.c)} / 投资 ${fmtNumber(player.econ.gdpComponents.i)} / 政府 ${fmtNumber(player.econ.gdpComponents.g)}；工资 ${fmtNumber(player.econ.wages)}（劳动份额 ${Math.round(player.econ.laborShare * 100)}%）/ 利润 ${fmtNumber(player.econ.profits)}`,
       `国库净资产：${fmtMoney(player.econ.treasury)}（${stock}）`,
       debtPressureLine,
-      `税率 ${player.econ.taxRate}% · 进口关税 ${player.econ.tariff}% · 出口关税 ${player.econ.exportTariff ?? player.econ.tariff}%`,
-      `财政收入：税入 ${fmtNumber(ledger.income.taxes)} + 关税（进+出） ${fmtNumber(ledger.income.tariffs)} + 港口 ${fmtNumber(ledger.income.ports)} + 基金收益 ${fmtNumber(ledger.income.sovereignIncome)} + 赔款收入 ${fmtNumber(ledger.income.reparations)} + 其他（建造力出租） ${fmtNumber(ledger.income.other)} = ${fmtMoney(ledger.income.total)}/月（税入占 GDP ${taxShare}%）`,
+      `四税基：土地 ${player.econ.taxes.land}% · 企业 ${player.econ.taxes.profit}% · 消费 ${player.econ.taxes.consumption}% · 关税 进 ${player.econ.tariff}% / 出 ${player.econ.exportTariff ?? player.econ.tariff}%`,
+      `财政收入：税入 ${fmtNumber(ledger.income.taxes)}（土 ${fmtNumber(ledger.income.taxBases.land)}／企 ${fmtNumber(ledger.income.taxBases.profit)}／消 ${fmtNumber(ledger.income.taxBases.consumption)}／关 ${fmtNumber(ledger.income.taxBases.tariff)}）+ 港口 ${fmtNumber(ledger.income.ports)} + 基金收益 ${fmtNumber(ledger.income.sovereignIncome)} + 赔款收入 ${fmtNumber(ledger.income.reparations)} + 其他（建造力出租） ${fmtNumber(ledger.income.other)} = ${fmtMoney(ledger.income.total)}/月（四税基，GDP 是产出不作税基）`,
       `财政支出：陆军 ${fmtNumber(ledger.expense.army)} + 海军 ${fmtNumber(ledger.expense.navy)} + 行政 ${fmtNumber(ledger.expense.administration)} + 教育 ${fmtNumber(ledger.expense.education)} + 福利 ${fmtNumber(ledger.expense.welfare)} + 债息 ${fmtNumber(ledger.expense.debtInterest)} + 市场损耗 ${fmtNumber(ledger.expense.marketLoss)} + 设施维护 ${fmtNumber(ledger.expense.upkeep)} + 赔款支出 ${fmtNumber(ledger.expense.reparations)} + 国有建设 ${fmtNumber(ledger.expense.construction)} + 建设补贴 ${fmtNumber(ledger.expense.constructionSubsidy)} = ${fmtMoney(ledger.expense.total)}/月`,
       `国库净额：收入 − 支出 = ${fmtSigned(ledger.net)} 金/月；私人部门贸易逆差 ${fmtMoney(ledger.tradeGap)}（由私人资本/私人外债 ${fmtMoney(ledger.privateDebt)} 承担，不影响国库）；净资产实际变动 ${fmtSigned(ledger.net)} 金/月；GDP 是产出，与国库收支不是同一本账`,
       `赔款日程：${
@@ -866,7 +864,7 @@ const TOOL_SPECS: {
   {
     name: 'v3_action',
     description:
-      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count）、cancel（取消国有项目，需 projectId）、tax（税率，需 rate）、tariff（关税：rate 为进口税率，可选 exportRate 单独设出口税率；省略则进出口同率）、spending（支出，需 category/amount）、research（研究方向，需 tech）、conscript（征兵，需 amount）、law（法案，需 name）、route（贸易路线：op 取 open/raise/lower/close，需 good 与 partner）。',
+      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count）、cancel（取消国有项目，需 projectId）、tax（调整某一税基的税率，需 base（land=土地/profit=企业所得税/consumption=消费税/tariff=关税）与 rate；缺省 base 返回税菜单）、tariff（关税：rate 为进口税率，可选 exportRate 单独设出口税率；省略则进出口同率）、spending（支出，需 category/amount）、research（研究方向，需 tech）、conscript（征兵，需 amount）、law（法案，需 name）、route（贸易路线：op 取 open/raise/lower/close，需 good 与 partner）。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -901,7 +899,12 @@ const TOOL_SPECS: {
           description: 'build 时必填。',
         },
         count: { type: 'integer', minimum: 1, maximum: 5 },
-        rate: { type: 'number', minimum: 0, maximum: 60, description: '进口关税税率（tariff 时）。' },
+        rate: { type: 'number', minimum: 0, maximum: 60, description: '进口关税税率（tariff 时）或税基税率（tax 时，0..60）。' },
+        base: {
+          type: 'string',
+          enum: ['land', 'profit', 'consumption', 'tariff'],
+          description: 'tax 时必填：税基（land=土地税 / profit=企业所得税 / consumption=消费税 / tariff=关税）。缺省则返回税菜单。',
+        },
         exportRate: {
           type: 'number',
           minimum: 0,
@@ -1647,6 +1650,7 @@ export const register: Register = (on, options) => {
         'building',
         'count',
         'rate',
+        'base',
         'exportRate',
         'category',
         'amount',

@@ -432,7 +432,7 @@ describe('Round 2 regressions', () => {
   test('string or infinite model parameters cannot poison the economy', async () => {
     const world = newWorld(121, 'QING')
     for (const decision of [
-      { countryId: 'GBR', action: 'tax', params: { rate: 'abc' } },
+      { countryId: 'GBR', action: 'tax', params: { base: 'profit', rate: 'abc' } },
       { countryId: 'FRA', action: 'tariff', params: { rate: 'abc' } },
       { countryId: 'PRU', action: 'spending', params: { category: 'army', amount: 'abc' } },
       { countryId: 'RUS', action: 'build', params: { building: 'farms', count: 'abc' } },
@@ -446,7 +446,7 @@ describe('Round 2 regressions', () => {
       for (const value of [
         country.econ.gdp,
         country.econ.income,
-        country.econ.taxRate,
+        country.econ.taxes.profit,
         country.econ.tariff,
         country.military.army,
       ]) {
@@ -666,8 +666,8 @@ describe('Round 3 regressions', () => {
     expect(lowQing).toBeDefined()
     expect(highQing).toBeDefined()
     if (lowQing === undefined || highQing === undefined) return
-    lowQing.econ.taxRate = 40
-    highQing.econ.taxRate = 60
+    lowQing.econ.taxes.profit = 40
+    highQing.econ.taxes.profit = 60
     expect(computeEconomy(highQing).income).toBeLessThan(computeEconomy(lowQing).income)
   })
 

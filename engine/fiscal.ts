@@ -1,4 +1,4 @@
-import type { Country } from '../types'
+import type { Country, TaxBaseId } from '../types'
 import { applyModifiers } from './modifiers'
 
 /**
@@ -82,10 +82,8 @@ export const sovereignFund = (country: Country): number =>
 
 /** Raw monthly revenue by source, before the `income` modifier. */
 export type IncomeParts = {
-  /** Land/income tax collected off GDP at the current rate. */
+  /** Sum of the four real tax bases (ADR 0023); no longer a GDP share. */
   taxes: number
-  /** Tariff on this month's imports (plan 0004 §2.4). */
-  tariffs: number
   /** Port dues. */
   ports: number
   /** Interest earned by a positive net-assets balance. */
@@ -95,6 +93,31 @@ export type IncomeParts = {
   /** Other receipts, e.g. renting idle construction points to the private sector. */
   other: number
 }
+
+/**
+ * The four tax bases (ADR 0023). Revenue is computed per base and then summed;
+ * GDP is never an input. The tariff base is collected at the border, so its
+ * revenue is the settlement's duty (collection efficiency is 1 by design —
+ * `settleTrade` already produced the exact duty) rather than a base × rate.
+ */
+export const TAX_BASE_IDS: TaxBaseId[] = ['land', 'profit', 'consumption', 'tariff']
+
+export const TAX_BASE_NAMES: Record<TaxBaseId, string> = {
+  land: '土地税',
+  profit: '企业所得税',
+  consumption: '消费税',
+  tariff: '关税',
+}
+
+/**
+ * Land-value-per-unit: farmland endowment (0..100) × this constant gives the
+ * land tax base in gold. Chosen at 4 so a default 2% land rate yields a land
+ * take comparable to the other bases at the 1836 starting point.
+ */
+export const LAND_VALUE_PER_UNIT = 4
+
+/** Tax-base quantities for one month (the "税基量" shown by v3_inspect fiscal). */
+export type TaxBaseQuantities = Record<TaxBaseId, number>
 
 /**
  * State subsidy to the construction bureaus: every spending level adds
@@ -124,7 +147,11 @@ export type ExpenseParts = {
 export type FiscalLedger = {
   /** Output this month, for the "GDP ≠ budget" comparison. */
   gdp: number
-  income: IncomeParts & { total: number }
+  income: IncomeParts & {
+    /** Per-base revenue of the four bases that sum into `taxes` (ADR 0023). */
+    taxBases: TaxBaseQuantities
+    total: number
+  }
   expense: ExpenseParts & {
     /** State construction paid out of the treasury this month. */
     construction: number
@@ -158,11 +185,78 @@ export function taxEfficiency(country: Country): number {
   )
 }
 
-/** Beyond 25% the tax base erodes (evasion, flight, informal work). */
-export function taxCompliance(country: Country): number {
-  return country.econ.taxRate <= 25
-    ? 1
-    : clamp(1 - (country.econ.taxRate - 25) * 0.015, 0.45, 1)
+/**
+ * How much of the theoretically assessed tax an administration actually
+ * collects (ADR 0023): a bureaucracy/legitimacy floor times the `taxEfficiency`
+ * modifier. Tariff is exempt (collected at the border, ADR 0023).
+ */
+export function collectionEfficiency(country: Country): number {
+  return (
+    clamp(
+      0.35 + country.bureaucracy.score / 200 + country.government.legitimacy / 400,
+      0.3,
+      1.1,
+    ) * taxEfficiency(country)
+  )
+}
+
+/** Beyond 25% a single base erodes (evasion, flight, informal work). */
+export function taxCompliance(rate: number): number {
+  return rate <= 25 ? 1 : clamp(1 - (rate - 25) * 0.015, 0.45, 1)
+}
+
+/**
+ * Revenue of each of the four tax bases for one month, before the `income`
+ * modifier but after collection efficiency, per-base compliance and debt cut
+ * (ADR 0023). `quantities` defaults to this month's stored snapshot so callers
+ * that only have a settled `Country` (the ledger, the disposable-income loop)
+ * read the same numbers the treasury did.
+ */
+export function taxBaseRevenues(
+  country: Country,
+  tariffRevenue: number,
+  context: FiscalContext = DEFAULT_CONTEXT,
+  quantities: TaxBaseQuantities = country.econ.taxBaseQty,
+): TaxBaseQuantities {
+  const debtCut = 1 - debtPressure(country).incomePenalty
+  const collection = collectionEfficiency(country)
+  const rates = country.econ.taxes
+  const internal = (base: TaxBaseId, rate: number): number =>
+    quantities[base] * (rate / 100) * collection * taxCompliance(rate) * debtCut
+  return {
+    land: internal('land', rates.land),
+    profit: internal('profit', rates.profit),
+    consumption: internal('consumption', rates.consumption),
+    // Border duty is already the exact collected amount; no assessment step.
+    tariff: tariffRevenue * debtCut,
+  }
+}
+
+/** The part of the tax bill borne by private households (ADR 0023). */
+export function privateTaxBurden(country: Country): number {
+  const bases = taxBaseRevenues(country, country.econ.lastTariffRevenue)
+  return bases.land + bases.profit + bases.consumption
+}
+
+export function incomeParts(
+  country: Country,
+  tariffRevenue: number,
+  context: FiscalContext = DEFAULT_CONTEXT,
+  quantities: TaxBaseQuantities = country.econ.taxBaseQty,
+): IncomeParts {
+  // Debt pressure crowds out the state's non-interest income: part of the
+  // tax/tariff/port take is consumed by refinancing and arrears.
+  const debtCut = 1 - debtPressure(country).incomePenalty
+  const bases = taxBaseRevenues(country, tariffRevenue, context, quantities)
+  return {
+    taxes: bases.land + bases.profit + bases.consumption + bases.tariff,
+    ports: country.econ.buildings.ports * 0.02 * debtCut,
+    sovereignIncome: sovereignFund(country) * fundRate(country, context),
+    reparations: (country.econ.reparationsReceived ?? 0) * debtCut,
+    // Construction-capacity rent is collected this month and booked as income
+    // next month, when the ledger settles it into the treasury.
+    other: (country.econ.lastConstructionRent ?? 0) * debtCut,
+  }
 }
 
 /**
@@ -219,33 +313,6 @@ export function fundRate(
   )
 }
 
-export function incomeParts(
-  country: Country,
-  gdp: number,
-  tariffRevenue: number,
-  context: FiscalContext = DEFAULT_CONTEXT,
-): IncomeParts {
-  // Debt pressure crowds out the state's non-interest income: part of the
-  // tax/tariff/port take is consumed by refinancing and arrears.
-  const debtCut = 1 - debtPressure(country).incomePenalty
-  return {
-    taxes:
-      gdp *
-      (country.econ.taxRate / 100) *
-      0.45 *
-      taxEfficiency(country) *
-      taxCompliance(country) *
-      debtCut,
-    tariffs: tariffRevenue * debtCut,
-    ports: country.econ.buildings.ports * 0.02 * debtCut,
-    sovereignIncome: sovereignFund(country) * fundRate(country, context),
-    reparations: (country.econ.reparationsReceived ?? 0) * debtCut,
-    // Construction-capacity rent is collected this month and booked as income
-    // next month, when the ledger settles it into the treasury.
-    other: (country.econ.lastConstructionRent ?? 0) * debtCut,
-  }
-}
-
 export function expenseParts(
   country: Country,
   gdp: number,
@@ -284,7 +351,8 @@ export function fiscalLedger(
   context: FiscalContext = DEFAULT_CONTEXT,
 ): FiscalLedger {
   const econ = country.econ
-  const rawIncome = incomeParts(country, econ.gdp, econ.lastTariffRevenue, context)
+  const rawBases = taxBaseRevenues(country, econ.lastTariffRevenue, context)
+  const rawIncome = incomeParts(country, econ.lastTariffRevenue, context)
   // Rent is booked with a one-month lag: `lastConstructionRent` already holds
   // this month's rent by the time the ledger reads it, so use the "other"
   // amount that actually entered last month's income (PT-028).
@@ -293,7 +361,6 @@ export function fiscalLedger(
     : rawIncome.other
   const rawIncomeNoInterest =
     rawIncome.taxes +
-    rawIncome.tariffs +
     rawIncome.ports +
     rawIncome.reparations +
     rawOther
@@ -333,7 +400,12 @@ export function fiscalLedger(
     gdp: econ.gdp,
     income: {
       taxes: rawIncome.taxes * incomeFactor,
-      tariffs: rawIncome.tariffs * incomeFactor,
+      taxBases: {
+        land: rawBases.land * incomeFactor,
+        profit: rawBases.profit * incomeFactor,
+        consumption: rawBases.consumption * incomeFactor,
+        tariff: rawBases.tariff * incomeFactor,
+      },
       ports: rawIncome.ports * incomeFactor,
       sovereignIncome: fundIncome,
       reparations: rawIncome.reparations * incomeFactor,

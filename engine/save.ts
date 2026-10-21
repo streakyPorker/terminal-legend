@@ -1,10 +1,10 @@
 import type { EngineInterface } from 'claude-code'
 import type { WorldState } from '../types'
-import { BUILDING_IDS, emptyBuildingProfits } from './data'
+import { BUILDING_IDS, DEFAULT_TAX_RATES, emptyBuildingProfits, emptyTaxBaseQty } from './data'
 import { normalizeConstructionQueue } from './sim'
 
 /** Current world shape; older in-memory worlds are discarded like old saves. */
-export const CURRENT_WORLD_VERSION = 9
+export const CURRENT_WORLD_VERSION = 10
 
 const safeName = (name: string | undefined): string => {
   const cleaned = (name ?? 'save').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32)
@@ -68,6 +68,12 @@ function normalizeWorld(world: WorldState): WorldState {
     }
     if (typeof country.econ.buildingProfits !== 'object' || country.econ.buildingProfits === null) {
       country.econ.buildingProfits = emptyBuildingProfits()
+    }
+    if (typeof country.econ.taxBaseQty !== 'object' || country.econ.taxBaseQty === null) {
+      country.econ.taxBaseQty = emptyTaxBaseQty()
+    }
+    if (typeof country.econ.taxes !== 'object' || country.econ.taxes === null) {
+      country.econ.taxes = { ...DEFAULT_TAX_RATES, tariff: country.econ.tariff ?? 0 }
     }
     const history = country.econ.history as Record<string, unknown>
     for (const key of [

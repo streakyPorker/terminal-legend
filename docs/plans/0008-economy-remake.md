@@ -2,7 +2,7 @@
 
 - Status: proposed（当前最高优先级；0002 事件树与 0005 科技树 v8 暂缓）
 - Depends on: `0003-economic-loop.md`、`0004-trade-diplomacy.md`、ADR 0005（不做存档兼容）、ADR 0006–0019、ADR 0020（贸易路线，本系列第①步）
-- Scope: 把「抽象产出 + GDP 比例税」换成「逐建筑显式配方 + 要素/消费/贸易税基」。世界版本升到 **v9**。
+- Scope: 把「抽象产出 + GDP 比例税」换成「逐建筑显式配方 + 要素/消费/贸易税基」。世界版本升到 **v10**。
 - 来源：试玩 PT-031（`docs/playtest-issues.md`）＋玩家口述：
   - 「每类建筑都会消费指定数值的产品，产出指定数值的产品，这些产品的价格决定了这类建筑是否能够赢利，这要求你平衡各类物价与建筑产出的数值」。
   - 「建筑背后的运作实体 + 人头税 + 消费品消费税 + 关税是四大税基，不要基于 GDP 算比例了，按着四种数值来算税」。
@@ -165,7 +165,7 @@ export type TaxRates = Record<TaxBaseId, number>   // 百分比
 | **B1（v9 结构）** ✅ | 加 `BUILDING_RECIPES`；`computeProduction` 只读表；删硬编码系数与中间投入块；并 `WORKSHOP_INPUTS`；升 v9 | trade.test 版本断言（8→9），行为保持（A/B 逐位相同） |
 | **B2（利润率）** ✅ | 加 `buildingProfits`（算+存+inspect），不改决策 | 无（行为保持）；新增 building-recipes.test |
 | **B3（决策联动）** ✅ | 私有投资改用利润率；加 utilization 门控与深度亏损折旧 | economic-loop 投资相关、60/84 基线 |
-| **B4（税基）** | 移除 `taxRate`，加 `taxes`；重写 `incomeParts`；`v3_action tax`；fiscal/sim/thresholds/inspect | fiscal.test「税是 GDP 份额」、经济循环高税侵蚀 |
+| **B4（税基）** ✅ | 移除 `taxRate`，加 `taxes`；重写 `incomeParts`；`v3_action tax`；fiscal/sim/thresholds/inspect | fiscal.test「税是 GDP 份额」、经济循环高税侵蚀 |
 | **B5（再校准）** | 调 `GOODS.basePrice` 与配方系数；加校准测试；收敛 PT-002/PT-001 | economy-calibration、trade 基线 |
 | **B6（文档）** | ADR 0021–0023、README/GLOSSARY、playtest 状态更新 | — |
 
@@ -174,7 +174,12 @@ export type TaxRates = Record<TaxBaseId, number>   // 百分比
   产出按**上月** `utilization` 门控（`UTIL_IDLE_FLOOR=0.5`、`UTIL_SMOOTHING=0.25`），深度亏损按
   `SHRINK_MAX=0.02`/月额外萎缩（下限 0），私人投资只建 `profitPerBuilding > 0` 的类型
   （ADR 0017 节奏不变；短缺信号 `investmentScore` 在盈利类目间分配）。**行为变更**：
-  机械两侧基线（0007-E1）按计划 §5 过渡门槛放宽，待 B5 再校准。B4 尚未开始。
+  机械两侧基线（0007-E1）按计划 §5 过渡门槛放宽，待 B5 再校准。
+  **B4 已实现**（ADR 0023，World v10）：移除单一 `taxRate`，改四税基 `Economy.taxes`
+  （`land/profit/consumption/tariff`）与快照 `Economy.taxBaseQty`；`incomeParts` 按税基累加、
+  不再吃 GDP；`v3_action tax { base, rate }`；可支配收入按私人税负（土+企+消）扣减，关税在边境征清。
+  初始税率 `land 2 / profit 2 / consumption 3`（tariff 取种子）使 10 国合计 ≈ 旧制总额（无财政冲击）；
+  `C+I+G+NX === GDP`、金币守恒、60/120 月确定性、鸦片门全部保持。**B5/B6 尚未开始。**
 
 - ①（贸易路线，ADR 0020）先于本计划落地；B5 再校准会顺带重定路线收益。
 - 每个包独立提交、测试全绿再进下一个。
@@ -184,7 +189,7 @@ export type TaxRates = Record<TaxBaseId, number>   // 百分比
 - 每类建筑的投入/产出/利润率能在 `v3_inspect market/economy` 看到，账本能解释「为什么变了」。
 - 四税基各自可追溯；`v3_inspect fiscal` 显示每基税基量、税率、税额。
 - §5 的 gate 测试全绿；`claude plugin test .` 全绿、`claude plugin validate .` 通过。
-- 世界版本 v9；旧档按 ADR 0005 拒绝。
+- 世界版本 v10；旧档按 ADR 0005 拒绝。
 
 ## 8. 风险
 

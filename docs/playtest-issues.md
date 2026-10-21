@@ -51,7 +51,7 @@
 | PT-028 | 税入显示随建造力租金缩放 | 0007-E2 | fixed（0fbc0d0） |
 | PT-029 | 私人队列扩张过快（十单在途） | ADR 0017 | fixed（ADR 0017） |
 | PT-030 | 贸易僵化：无法自建贸易路线 | 0004 / ADR 0020 | fixed（ADR 0020） |
-| PT-031 | 建筑无配方/无利润率（B1+B2 已修）；决策联动（B3 已落地）；税制按 GDP 比例（待 B4） | 0008 B1–B4 | partial（B1+B2+B3 已落地，ADR 0021/0022，World v9；税制 open） |
+| PT-031 | 建筑无配方/无利润率（B1+B2）；决策联动（B3）；税制按 GDP 比例（B4） | 0008 B1–B4 | fixed（B1+B2 ADR 0021、B3 ADR 0022、B4 ADR 0023，World v10） |
 
 ---
 
@@ -498,4 +498,17 @@
     过渡门槛放宽（工厂被闲置 → 机械供给下降），待 B5 再校准。
   - 结构性不变量保持：`C+I+G+NX === GDP`、全部金币守恒、贸易路线金币恒等式、60 月确定性、
     鸦片危机门（§4.1 ≥2 单位/月、≥20% 来自英国）。
-- 状态：**部分修复**（B1+B2+B3 已落地；税制按 GDP 比例部分仍 open，待 B4）
+- 修复（四税基，B4，2026-10-21 本会话）：
+  - 移除单一 `Economy.taxRate`，改四税基 `Economy.taxes`（`land/profit/consumption/tariff`）与快照
+    `Economy.taxBaseQty`；`incomeParts` 按税基累加（`税额 = 税基量 × 税率 × 征收效率 × 合规 × 债务削减`），
+    **不再吃 GDP**。土地税 = `farmland × 4`；企业所得税 = `Σ max(0, buildingProfits[b].profit)`（逐类保留）；
+    消费税 = Stone-Geary 最终消费（中间投入不入基）；关税 = `settleTrade` 的既有 duty（边境征清）。
+  - 征收效率 `clamp(0.35+官僚/200+合法/400,0.3,1.1) × taxEfficiency`；逐基 25% 以上侵蚀合规。
+    私人可支配收入按私人税负（土+企+消，不含关税）扣减，闭合宏观循环、避免重复计征。
+  - `v3_action tax { base, rate }`（缺省 base 返回四基菜单）；`v3_inspect fiscal` 显示每基税基量/税率/税额；
+    `v3_status`、面板、AI/秘书提示改走税菜单；AI 偿债加税**确定性**选最低税基（无 RNG）。
+  - 初始税率 `land 2 / profit 2 / consumption 3`（tariff 取种子）：10 国合计 ≈ 99 金/月，≈ 旧制总额
+    （无财政冲击）。世界版本升到 **v10**（`createWorld`、`CURRENT_WORLD_VERSION`）；提交由编排者补。
+  - 新增 `tests/tax-bases.test.ts`（6 项）；`fiscal.test` 的「税是 GDP 份额」按设计迁移为「四真实税基」；
+    `economic-loop` 高税侵蚀改为逐基。结构不变量与鸦片门全部保持。
+- 状态：**已修复**（B1–B4 全部落地：ADR 0021/0022/0023，World v10）

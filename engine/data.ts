@@ -15,6 +15,8 @@ import type {
   SecretaryState,
   Spending,
   SpendingCategory,
+  TaxBaseId,
+  TaxRates,
   TradeState,
   UiState,
   WarGoal,
@@ -490,7 +492,6 @@ type CountrySeed = {
   gdp: number
   /** Signed net assets: the seed treasury minus the old seed debt. */
   treasury: number
-  taxRate: number
   tariff: number
   spending: Spending
   buildings: Record<BuildingId, number>
@@ -558,7 +559,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     },
     gdp: 780,
     treasury: 13,
-    taxRate: 12,
     tariff: 8,
     spending: spending(6, 0.8, 4, 1, 0.5, 1.5),
     buildings: buildings(3000, 35, 20, 0, 14, 4, 40, 4, 12),
@@ -615,7 +615,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     },
     gdp: 640,
     treasury: 12,
-    taxRate: 10,
     tariff: 5,
     spending: spending(4, 6, 2.5, 1.2, 1.5, 2),
     buildings: buildings(110, 90, 160, 25, 60, 18, 20, 14, 24),
@@ -672,7 +671,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     },
     gdp: 470,
     treasury: -2,
-    taxRate: 12,
     tariff: 12,
     spending: spending(5, 3, 2.5, 1, 1.2, 1.8),
     buildings: buildings(260, 55, 95, 8, 30, 12, 30, 10, 16),
@@ -729,7 +727,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     },
     gdp: 210,
     treasury: 4,
-    taxRate: 11,
     tariff: 8,
     spending: spending(4.5, 0.5, 1.8, 1.1, 0.8, 1.5),
     buildings: buildings(180, 70, 60, 6, 10, 11, 22, 8, 10),
@@ -786,7 +783,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     },
     gdp: 380,
     treasury: 6,
-    taxRate: 14,
     tariff: 15,
     spending: spending(6, 1.2, 3, 0.3, 0.4, 1),
     buildings: buildings(900, 70, 35, 2, 12, 6, 50, 6, 8),
@@ -843,7 +839,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     },
     gdp: 270,
     treasury: -5,
-    taxRate: 13,
     tariff: 10,
     spending: spending(4, 0.6, 2.2, 0.6, 0.7, 1),
     buildings: buildings(420, 60, 45, 4, 5, 8, 30, 7, 10),
@@ -900,7 +895,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     },
     gdp: 330,
     treasury: 14,
-    taxRate: 8,
     tariff: 20,
     spending: spending(1.5, 1.2, 1.2, 0.8, 0.5, 1.5),
     buildings: buildings(300, 55, 55, 6, 25, 10, 12, 8, 8),
@@ -957,7 +951,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     },
     gdp: 210,
     treasury: 3,
-    taxRate: 14,
     tariff: 5,
     spending: spending(2.5, 0.6, 1.5, 0.5, 0.3, 0.8),
     buildings: buildings(380, 22, 12, 0, 10, 4, 15, 4, 3),
@@ -1014,7 +1007,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     },
     gdp: 190,
     treasury: -7,
-    taxRate: 15,
     tariff: 12,
     spending: spending(3, 0.8, 2, 0.3, 0.3, 0.6),
     buildings: buildings(420, 25, 14, 0, 12, 3, 22, 4, 4),
@@ -1071,7 +1063,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     },
     gdp: 170,
     treasury: -11,
-    taxRate: 14,
     tariff: 12,
     spending: spending(2, 0.8, 1.5, 0.4, 0.4, 0.6),
     buildings: buildings(220, 30, 20, 2, 14, 6, 14, 4, 4),
@@ -1284,6 +1275,24 @@ export function emptyBuildingProfits(): Record<BuildingId, BuildingProfit> {
   return out
 }
 
+/**
+ * Default per-base tax rates for 1836, in percent (ADR 0023). Calibrated so
+ * the four-base take is comparable to the old GDP-proportional take (aggregate
+ * ≈ 1.0×, no fiscal shock); `tariff` is replaced per country by its seed
+ * tariff so the menu mirrors `econ.tariff`.
+ */
+export const DEFAULT_TAX_RATES: TaxRates = {
+  land: 2,
+  profit: 2,
+  consumption: 3,
+  tariff: 5,
+}
+
+/** A zeroed tax-base quantity snapshot, before the first monthly settlement. */
+export function emptyTaxBaseQty(): Record<TaxBaseId, number> {
+  return { land: 0, profit: 0, consumption: 0, tariff: 0 }
+}
+
 export function createWorld(seed: number, playerId = 'QING'): WorldState {
   const countries: Record<string, Country> = {}
   for (const seedRow of COUNTRY_SEEDS) {
@@ -1323,7 +1332,8 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         treasury: seedRow.treasury,
         income: 0,
         expense: 0,
-        taxRate: seedRow.taxRate,
+        taxes: { ...DEFAULT_TAX_RATES, tariff: seedRow.tariff },
+        taxBaseQty: emptyTaxBaseQty(),
         tariff: seedRow.tariff,
         spending: { ...seedRow.spending },
         buildings: { ...seedRow.buildings },
@@ -1423,7 +1433,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
   }
 
   return {
-    version: 9,
+    version: 10,
     seed,
     date: { year: START_YEAR, month: START_MONTH },
     tick: 0,

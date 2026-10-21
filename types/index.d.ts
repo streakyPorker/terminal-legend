@@ -1,9 +1,11 @@
 // Type contract for terminal-legend.
 // Self-contained by design: the engine loads it as the plugin's `types` entry
 // and type-checks every `$.state` key the hooks module names against it.
-// World model v9: every building type carries a declarative production recipe
-// (`BUILDING_RECIPES`, engine/data.ts) that is the single source of truth for
-// output AND intermediate input (ADR 0021), and each country stores a
+// World model v10: taxes come from four real bases (land / per-building profit /
+// final consumption / tariff, `Economy.taxes` + `Economy.taxBaseQty`), never
+// from GDP (ADR 0023). Every building type carries a declarative production
+// recipe (`BUILDING_RECIPES`, engine/data.ts) that is the single source of truth
+// for output AND intermediate input (ADR 0021), and each country stores a
 // per-building-type profit snapshot (`Economy.buildingProfits`). Persistent
 // bilateral trade routes still sit in front of the spot clearing (ADR 0020);
 // bilateral quantities, NX accounting, gold settlement and resource imports
@@ -132,6 +134,19 @@ export type TradeState = {
     tariffRevenue: number[]
   }
 }
+
+/**
+ * The four real tax bases (ADR 0023, plan 0008 B4). GDP is a derived output
+ * metric and is never a tax base: revenue is computed per base, then summed.
+ *  - `land`        farmland endowment × a land-value-per-unit constant.
+ *  - `profit`      per-building-type operating profit, summed (only positives).
+ *  - `consumption` final consumer-goods spending (Stone-Geary), not intermediate.
+ *  - `tariff`      import + export duty value (rates stay `tariff`/`exportTariff`).
+ */
+export type TaxBaseId = 'land' | 'profit' | 'consumption' | 'tariff'
+
+/** Per-base tax rates, in percent. `tariff` mirrors `econ.tariff` (ADR 0023). */
+export type TaxRates = Record<TaxBaseId, number>
 
 export type BuildingId =
   | 'farms'
@@ -365,7 +380,14 @@ export type Economy = {
   treasury: number
   income: number
   expense: number
-  taxRate: number
+  /** Four-base tax menu, percent (ADR 0023). Replaces the old GDP taxRate. */
+  taxes: TaxRates
+  /**
+   * This month's tax-base quantities (land/profit/consumption/tariff), stored so
+   * the ledger can explain each tax and so next month's disposable income can
+   * subtract the private burden (ADR 0023).
+   */
+  taxBaseQty: Record<TaxBaseId, number>
   /** Import duty charged on goods entering the country. */
   tariff: number
   /**
