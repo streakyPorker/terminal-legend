@@ -1,6 +1,6 @@
 # 建筑扩张与统一基础设施（Building Expansion + Infrastructure）
 
-- Status: **F1、F2、F3、F4、F5 已实现**（World v11：F1 `iron`→铁矿石、新增 `steel`，详见 §7.2；F2 `mines`→`coalMines`/`ironMines`/`lumberMills`，详见 §7.3；F3 `factories`→七个单产工业建筑，详见 §7.4；F4 加学校/运河/电报/要塞/船坞，详见 §7.5；F5 统一基础设施，详见 §7.6）；F6–F7 待做。其余章节仍为提案（本文件描述，F2+ 再改引擎/测试）
+- Status: **F1、F2、F3、F4、F5、F6 已实现**（World v11：F1 `iron`→铁矿石、新增 `steel`，详见 §7.2；F2 `mines`→`coalMines`/`ironMines`/`lumberMills`，详见 §7.3；F3 `factories`→七个单产工业建筑，详见 §7.4；F4 加学校/运河/电报/要塞/船坞，详见 §7.5；F5 统一基础设施，详见 §7.6；F6 `unlock` 前向字段 + `build` 校验，详见 §7.7）；F7 待做。其余章节仍为提案（本文件描述，F2+ 再改引擎/测试）
 - Depends on: ADR 0026（本计划对应的决策）、ADR 0021（建筑配方单一真源）、ADR 0022（利用率与利润投资）、ADR 0010/0012/0013（营造所与建造能力）、ADR 0005（不做存档兼容）
 - Scope: 把建筑名册从 9 类扩到 **22 类**（拆矿场、拆工厂、加 5 类）；引入 `steel` 商品与「铁矿石」语义；把「交通基础设施」升级为**统一基础设施**（供给/需求/线性 debuff/维护）；给建筑加前瞻 `unlock` 字段。世界版本升到 **v11**。
 - 来源：用户口述。核心诉求：「建筑盈利能力要读得清 → 单产/少产建筑」；「基础设施是一个统一的东西，铁路/港口/运河/电报都产它，所有建筑都要用它」；「商品按需加，先维护一个最小可用集」。
@@ -232,7 +232,7 @@ type BuildingDef = {
 | **F3 拆工厂** ✅ | `factories` → 7 个工业建筑；机械/军械/铁路/家具改吃 `steel` | 链条断裂（无 `steel` 来源）会让重工业停摆；`deriveUnemployment`/`boom` 事件读 `factories` 需改 | 每个工业建筑 output 键数 ≤2；`steelMills`/`machineryWorks`/`arsenals` 配方正确；`buildingProfits` 逐类可算；无 `factories` 残留 |
 | **F4 加 5 类建筑** ✅ | `schools`/`canals`/`telegraphs`/`forts`/`navalYards`（名册/配方/时间/建造点/投资/输出/种子） | 每个 `Record<BuildingId,…>` 都要补 5 键；运河/电报无产出需特判为成本中心 | 5 个 id 出现在全部 `Record<BuildingId,…>` 表；`canals`/`telegraphs` output 空且供给 >0；`completeBuilding` 对新增的可建筑无遗漏（或明确无副作用） |
 | **F5 统一基础设施 + debuff** ✅ | `INFRA_SUPPLY`/`infrastructureNeed`；`ratio`/乘数；`computeProduction` 施加；`computeDemand` 加维护需求；月末写 `基础设施水平`；旧 `gates.infrastructure` 与旧曲线退场 | 改变了全部建筑的产出口径（行为变更）；维护需求进市场会推高 wood/coal/services 需求 | `ratio=1` → 乘数 1（无 debuff）；`ratio=0.5` → 乘数 0.5；`ratio≥1` 不奖励；维护需求按供给/水平正确计入 demand；`C+I+G+NX===GDP` 不变；60 月确定性 |
-| **F6 `unlock` + build 校验** | `BuildingDef.unlock/infrastructureNeed`；`build` 动作加 techLevel 校验 | 校验写反会误挡建筑；字段位置写错会让 TS 契约不一致 | 开局所有建筑可建；合成一个 `unlock.techLevel > 当前` 的建筑被拒；当前缺省下 `build` 行为与接入前逐位相同 |
+| **F6 `unlock` + build 校验** ✅ | `BuildingDef.unlock`（`{ techLevel?: number }`）；`build` 动作加 techLevel 校验；`inspect buildings` 只读显示 | 校验写反会误挡建筑；字段位置写错会让 TS 契约不一致 | 开局所有建筑可建；合成一个 `unlock.techLevel > 当前` 的建筑被拒；当前缺省下 `build` 行为与接入前逐位相同 |
 | **F7 分批校准 + gate** | 扩展 `tests/economy-recipe-calibration.test.ts`：按 §6 的分组利润带、`steel` 两侧、无钉价；按批 A→B→C→D 校准种子与系数 | 一次全调会互相掩盖；参考点选择影响结论 | 每组产货建筑在参考点落带；`iron`/`steel`/`machinery` 两侧都有市场（每 12 月 ≥1 次）；无商品长期钉 0.25×/4×；`wages+profits ∈ [0.5,1.5]×realGdp` |
 
 ### 7.1 拆分的迁移顺序（降低红绿时间）
@@ -408,6 +408,24 @@ F5 把「交通基础设施」升级为**唯一的国家级基础设施池**，�
 - **F5 解决的 §10 待定**：① 字段命名 → **保留 `transportInfrastructure` 字段名**（避免形状断裂），显示名改「基础设施」；
   ② 种子标量 → **丢弃**，由供给建筑派生；③ 过剩奖励 → **不给**（只罚不奖）；④ 维护反噬供给 → **v1 不做**；
   ⑤ 基建供给的门控 → **常数**（不乘 tech/access）。
+
+### 7.7 F6 已落地的安排（World v11，名册不变）
+
+F6 给建筑加**前瞻 `unlock` 字段**并在 `build` 动作里执行，**行为保持**（当前全部解锁），World 仍为 v11。实际落地：
+
+- **字段契约**（`engine/data.ts`）：新增导出类型 `BuildingUnlock = { techLevel?: number }` 与
+  `BuildingDef`（`name`/`cost`/`note`/`unlock?`/`infrastructureNeed`）；`BUILDINGS: Record<BuildingId, BuildingDef>`。
+  `unlock` 缺省、或 `techLevel` 为 `undefined` = **永远可建**。**本次 22 类建筑的 `unlock` 全部缺省**。
+- **校验**（`engine/actions.ts` 的 `case 'build'`）：存在性检查之后、数量 clamp 之前，新增
+  `const unlock = BUILDINGS[building].unlock; if (unlock?.techLevel !== undefined && country.tech.level < unlock.techLevel) → 拒绝`，
+  拒绝文案为「`<国名> <建筑>尚未解锁（需要科技等级 N，当前 M）`」。既有检查（未知建筑、数量 1..5 clamp）不变。
+- **只读展示**（`engine/inspect.ts` 的 `buildingsSection`）：去掉旧的内联 cast，直接读 `BuildingDef`；
+  仅当 `unlock.techLevel` 有值时追加「需科技等级 N」。因当前无建筑设阈值，该分区输出**逐字不变**（末行说明改为陈述 F6 已接入）。
+- **不变量**：`claude plugin test .` **377 pass / 0 fail**（369 + 新增 `tests/building-unlock.test.ts` 8 项）；`claude plugin validate .` 通过（仅存量告警）；World 仍为 **v11**，无版本提升。
+- **新增测试**（`tests/building-unlock.test.ts`）：无 `unlock` 的建筑任意科技等级都可建；`unlock.techLevel > 当前` 被拒且不入队；
+  `techLevel == 当前` 与 `> 当前` 均通过；`unlock = {}`（无 techLevel）不受门控；存在性检查先于解锁检查；
+  现名册 22 类全部无阈值且每类可入队；`randomDecision` 的 build 候选仍产出可应用的决策；`newWorld().version === 11`。
+- **未做（刻意）**：科技树（plan 0005）、任何真实解锁阈值、F7 分批再校准。
 
 ## 8. 验收
 

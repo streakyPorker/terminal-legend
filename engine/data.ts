@@ -526,16 +526,34 @@ export const ARTISAN_OUTPUT: Partial<Record<GoodId, number>> = {
 /** Artisan service output per ten-thousand artisans (national term). */
 export const ARTISAN_SERVICE_OUTPUT = 0.01
 
-export const BUILDINGS: Record<
-  BuildingId,
-  { name: string; cost: number; note: string; infrastructureNeed: number }
-> = {
+/**
+ * Forward-compatible building unlock contract (plan 0011 F6, ADR 0026 §5).
+ * A building is gated behind `unlock.techLevel` when that field is set: the
+ * `build` action then requires `country.tech.level >= unlock.techLevel`.
+ * `unlock` absent, or `techLevel` absent, means always buildable. No building
+ * sets a threshold yet — the real tech tree is plan 0005, so today every
+ * building stays bit-for-bit buildable.
+ */
+export type BuildingUnlock = { techLevel?: number }
+
+export type BuildingDef = {
+  name: string
+  cost: number
+  note: string
+  /** Forward-compat tech gate (plan 0005); absent = always buildable (F6). */
+  unlock?: BuildingUnlock
+  infrastructureNeed: number
+}
+
+export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   // Plan 0011 F5: `infrastructureNeed` is the per-building monthly draw on the
   // unified national infrastructure pool (ADR 0026 §3). Heavy industry draws the
   // most, light industry less, and subsistence agriculture draws none (a single
   // QING seed carries ~3000 farms, so even a small per-farm need would swamp the
   // national pool — the plan's draft 0.4 produced a 0.016 ratio). All values are
   // the F5 calibration; F7 re-tunes.
+  // Plan 0011 F6: `unlock` is the forward-compat tech gate; all 22 buildings
+  // leave it absent (always buildable) so this slice stays behaviour-preserving.
   farms: { name: '农场', cost: 1.5, note: '粮食与原料，吸纳农业人口', infrastructureNeed: 0 },
   coalMines: { name: '煤矿', cost: 2.5, note: '煤炭，工业与钢铁的燃料', infrastructureNeed: 0.15 },
   ironMines: { name: '铁矿', cost: 2.5, note: '铁矿石，钢铁厂的原料', infrastructureNeed: 0.15 },

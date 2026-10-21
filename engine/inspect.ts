@@ -318,19 +318,15 @@ function marketSection(country: Country): string[] {
 function buildingsSection(country: Country): string[] {
   const lines = ['建筑类型（配方为每座每月；经营利润按本月价，开工率为下月）：']
   for (const id of BUILDING_IDS) {
-    const meta = BUILDINGS[id] as {
-      name: string
-      cost: number
-      note: string
-      unlock?: string
-      infrastructureNeed?: number
-    }
+    const meta = BUILDINGS[id]
     const recipe = BUILDING_RECIPES[id]
     const count = country.econ.buildings[id] ?? 0
     const capacity = CAPACITY_COST[id] ?? 1
     const workload = capacity * WORKLOAD_MULTIPLIER
     const extra: string[] = []
-    if (meta.unlock !== undefined) extra.push(`解锁 ${meta.unlock}`)
+    if (meta.unlock?.techLevel !== undefined) {
+      extra.push(`需科技等级 ${meta.unlock.techLevel}`)
+    }
     if (meta.infrastructureNeed !== undefined) {
       extra.push(`基础设施需求 ${n(meta.infrastructureNeed)}`)
     }
@@ -347,7 +343,7 @@ function buildingsSection(country: Country): string[] {
     }
   }
   lines.push(
-    '说明：本版 22 类建筑均开局解锁；`infrastructureNeed`（F5）已落地并计入统一基础设施需求；`unlock`（F6）待后续落地。',
+    '说明：本版 22 类建筑均开局解锁（`unlock.techLevel` 为 plan 0005 科技树的前瞻门槛，当前无建筑设阈值，F6 已接入 `build` 校验）；`infrastructureNeed`（F5）已落地并计入统一基础设施需求。',
   )
   return lines
 }
