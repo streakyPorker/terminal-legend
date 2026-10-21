@@ -175,11 +175,11 @@ export const INVESTMENT_DEMAND: Record<BuildingId, Partial<Record<GoodId, number
 }
 
 /**
- * Legacy gross-output weights, retained ONLY as the private-investment scoring
- * proxy (`investmentScore` in sim.ts) and kept byte-for-byte so B1+B2 stay
- * behaviour-preserving. It is NOT a production source: production reads
- * `BUILDING_RECIPES` below. B3 replaces the proxy with `buildingProfits` and
- * retires this table.
+ * Legacy gross-output weights, retained as the private-investment shortage
+ * signal (`investmentScore` in sim.ts). It is NOT a production source:
+ * production reads `BUILDING_RECIPES` below. From B3 the profitability gate
+ * (`buildingProfits.profitPerBuilding > 0`) is binding and this table only
+ * allocates investment among already-profitable types (ADR 0022).
  */
 export const BUILDING_OUTPUT: Record<BuildingId, Partial<Record<GoodId, number>>> = {
   farms: { grain: 1.05, wood: 0.16 },

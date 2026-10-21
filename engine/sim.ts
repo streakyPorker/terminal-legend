@@ -224,6 +224,39 @@ function ensureConstructionFields(country: Country): void {
   }
 }
 
+// ---------------------------------------------------- utilization feedback
+// ADR 0022 (plan 0008 B3): a building type's operating rate is driven by last
+// month's profitability. Production multiplies each type's output by the
+// *stored* rate, so the price → profit → capacity → price loop always carries a
+// one-month lag and cannot close in the same month.
+
+/**
+ * Floor an unprofitable type's operating rate decays to. A type that loses
+ * money still runs at half speed rather than stopping dead, so a price recovery
+ * can revive it and the idle state has a fixed point.
+ */
+export const UTIL_IDLE_FLOOR = 0.5
+
+/** First-order smoothing: the rate moves a quarter of the way to its target
+ *  each month (ADR 0022). */
+export const UTIL_SMOOTHING = 0.25
+
+/**
+ * Cap on the extra monthly decay applied to a deeply loss-making building count
+ * on top of `DEPRECIATION_PER_MONTH`. Deterministic, no RNG (ADR 0022).
+ */
+export const SHRINK_MAX = 0.02
+
+/**
+ * Last month's stored operating rate for a building type (ADR 0022).
+ * `computeProduction` reads this, so this month's output reflects last month's
+ * profitability. A missing or corrupt value falls back to full utilisation.
+ */
+function storedUtilization(country: Country, id: BuildingId): number {
+  const value = country.econ.buildingProfits?.[id]?.utilization
+  return Number.isFinite(value) ? clamp(value, 0, 1) : 1
+}
+
 function computeProduction(country: Country): Record<GoodId, number> {
   ensureConstructionFields(country)
   const tech = techMultiplier(country)
@@ -258,7 +291,9 @@ function computeProduction(country: Country): Record<GoodId, number> {
   const raw = zeroGoods()
   for (const id of BUILDING_IDS) {
     const recipe = BUILDING_RECIPES[id]
-    const count = cap(b[id])
+    // Output is gated by last month's stored operating rate (ADR 0022): the
+    // price → profit → capacity loop is one month behind, never same-month.
+    const count = cap(b[id]) * storedUtilization(country, id)
     if (count <= 0) continue
     const modifier = recipe.outputModifier
     for (const [good, coef] of Object.entries(recipe.output) as [GoodId, number][]) {
@@ -883,10 +918,12 @@ export function computeEconomy(
   const wages = realGdp * laborShare
   const profits = realGdp * (1 - laborShare)
 
-  // Per-building-type operating profit (ADR 0021 B2). Informational in B1+B2:
-  // it uses this month's recipe output/input valued at this month's prices and
-  // allocates the national wage bill by labor × count. No decision reads it
-  // until B3 wires it to idling and private investment.
+  // Per-building-type operating profit (ADR 0021 B2, driven from B3). It uses
+  // this month's recipe output/input valued at this month's prices and
+  // allocates the national wage bill by labor × count. `utilization` is written
+  // as *next* month's operating rate (ADR 0022): a profitable type recovers
+  // toward 1, a losing one decays toward UTIL_IDLE_FLOOR. `computeProduction`
+  // reads this stored value next month, so the feedback stays one month behind.
   const prices = country.econ.prices
   const buildings = country.econ.buildings
   let laborWeightTotal = 0
@@ -908,13 +945,16 @@ export function computeEconomy(
       laborWeightTotal > 0 ? (recipe.labor * count) / laborWeightTotal : 0
     const typeWages = wages * wageWeight
     const profit = revenue - inputCost - typeWages
+    const profitPerBuilding = profit / Math.max(1, count)
+    const target = profitPerBuilding > 0 ? 1 : UTIL_IDLE_FLOOR
+    const prevUtil = storedUtilization(country, id)
     buildingProfits[id] = {
       revenue,
       inputCost,
       wages: typeWages,
       profit,
-      utilization: 1,
-      profitPerBuilding: profit / Math.max(1, count),
+      utilization: clamp(prevUtil + (target - prevUtil) * UTIL_SMOOTHING, 0, 1),
+      profitPerBuilding,
     }
   }
 
@@ -1381,34 +1421,6 @@ function investPrivateCapital(
     0,
   )
   const threshold = capitalThreshold(country)
-  const scores = (Object.keys(BUILDINGS) as BuildingId[]).map(building => ({
-    building,
-    hasOutput: Object.keys(BUILDING_OUTPUT[building]).length > 0,
-    score:
-      Object.keys(BUILDING_OUTPUT[building]).length > 0
-        ? investmentScore(country, building, snap.demand, snap.production)
-        : infrastructureScore(country, building),
-    stock: country.econ.buildings[building],
-  }))
-  let best: { building: BuildingId; score: number } | undefined
-  for (const row of scores) {
-    if (!row.hasOutput) continue
-    if (best === undefined || row.score > best.score) {
-      best = { building: row.building, score: row.score }
-    }
-  }
-  // Renewal goes to the type losing the most stock to depreciation, so farms,
-  // universities and offices are not permanently ignored in favour of the
-  // single highest-scoring factory.
-  const renewalCandidates = scores.filter(row => row.stock > 0 && row.score > 0.55)
-  const renewal =
-    renewalCandidates.length > 0
-      ? renewalCandidates[world.tick % renewalCandidates.length]
-      : undefined
-
-  // Slots finish in a month now, so private builders can commit most of the
-  // idle pool: keep only what active projects already need.
-  const headroom = Math.max(0, country.econ.privateCapital - activePrivateCost)
   const draftProject = (
     building: BuildingId,
     count: number,
@@ -1423,6 +1435,60 @@ function investPrivateCapital(
     progress: 0,
     startedAt: { ...world.date },
   })
+  // Capital cost of one building: turns an absolute monthly profit into a
+  // return on capital, the deterministic tie-break between equally-attractive
+  // candidates (ADR 0022).
+  const capitalCost = (building: BuildingId): number =>
+    Math.max(0.01, constructionTotalCost(draftProject(building, 1)))
+  const scores = (Object.keys(BUILDINGS) as BuildingId[]).map(building => {
+    const hasOutput = Object.keys(BUILDING_OUTPUT[building]).length > 0
+    const profitable = snap.buildingProfits[building].profitPerBuilding > 0
+    return {
+      building,
+      hasOutput,
+      profitable,
+      returnOnCapital: profitable
+        ? snap.buildingProfits[building].profitPerBuilding / capitalCost(building)
+        : 0,
+      // Legacy shortage/dispatch signal: which output is short relative to its
+      // price basket. It allocates investment among *profitable* types.
+      score: hasOutput
+        ? investmentScore(country, building, snap.demand, snap.production)
+        : infrastructureScore(country, building),
+      stock: country.econ.buildings[building],
+    }
+  })
+  // The profitability gate is binding: an unprofitable type is never built
+  // (ADR 0022). Among profitable types the shortage signal picks the target,
+  // with return on capital and the building id as deterministic tie-breaks.
+  let best: (typeof scores)[number] | undefined
+  for (const row of scores) {
+    if (!row.hasOutput || !row.profitable) continue
+    if (
+      best === undefined ||
+      row.score > best.score ||
+      (row.score === best.score &&
+        (row.returnOnCapital > best.returnOnCapital ||
+          (row.returnOnCapital === best.returnOnCapital && row.building < best.building)))
+    ) {
+      best = row
+    }
+  }
+  // Renewal goes to the type losing the most stock to depreciation, so farms,
+  // universities and offices are not permanently ignored in favour of the
+  // single highest-scoring factory. Unprofitable capacity is not renewed; it
+  // idles and shrinks instead (ADR 0022).
+  const renewalCandidates = scores.filter(
+    row => row.stock > 0 && row.score > 0.55 && row.profitable,
+  )
+  const renewal =
+    renewalCandidates.length > 0
+      ? renewalCandidates[world.tick % renewalCandidates.length]
+      : undefined
+
+  // Slots finish in a month now, so private builders can commit most of the
+  // idle pool: keep only what active projects already need.
+  const headroom = Math.max(0, country.econ.privateCapital - activePrivateCost)
   const canStart = ((): { affordable: number } | undefined => {
     if (best === undefined) return undefined
     const perMonth = constructionMonthlyCost(draftProject(best.building, 1))
@@ -1643,11 +1709,17 @@ function simulateCountry(
   country.econ.expense = snap.expense + stateConstructionSpent
 
   // Capital wears out slowly. Without this the private investment loop stops
-  // permanently once the capital stock satisfies demand (round-2 P1-1).
+  // permanently once the capital stock satisfies demand (round-2 P1-1). A type
+  // that is deeply in the red (negative profit per building) is additionally
+  // scrapped faster, proportionally to the loss, capped by SHRINK_MAX
+  // (ADR 0022). Deterministic, no RNG; the count never goes below zero.
   for (const id of BUILDING_IDS) {
+    const row = snap.buildingProfits[id]
+    const deepLoss = Math.max(0, -row.profitPerBuilding) / (row.revenue + 1)
+    const extra = clamp(deepLoss, 0, SHRINK_MAX)
     country.econ.buildings[id] = Math.max(
       0,
-      country.econ.buildings[id] * (1 - DEPRECIATION_PER_MONTH),
+      country.econ.buildings[id] * (1 - DEPRECIATION_PER_MONTH - extra),
     )
   }
   // Rails, ports, offices and universities wear out too; their infrastructure

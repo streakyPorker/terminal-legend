@@ -80,12 +80,13 @@ function economySection(world: WorldState, country: Country): string[] {
     lines.push(`最大盈余：${surpluses.map(row => `${GOODS[row.id].name} ${n(-row.gap, 2)}`).join('，')}`)
   }
   lines.push(`工资 ${n(country.econ.wages)} / 利润 ${n(country.econ.profits)}，劳动份额 ${pct(country.econ.laborShare)}`)
-  lines.push(`逐建筑经营利润（产出 − 投入 − 工资 = 利润，毛利率；本月价）：`)
+  lines.push(`逐建筑经营利润（产出 − 投入 − 工资 = 利润，毛利率；本月价；开工率为下月）：`)
   for (const id of BUILDING_IDS) {
     const row = snap.buildingProfits[id]
     const margin = row.revenue > 0 ? row.profit / row.revenue : 0
+    const idle = row.utilization < 0.999
     lines.push(
-      `- ${BUILDINGS[id].name}：产出 ${n(row.revenue)} − 中间投入 ${n(row.inputCost)} − 工资 ${n(row.wages)} = 利润 ${signed(row.profit)}（毛利 ${pct(margin)}，${signed(row.profitPerBuilding, 2)} 金/座）`,
+      `- ${BUILDINGS[id].name}：产出 ${n(row.revenue)} − 中间投入 ${n(row.inputCost)} − 工资 ${n(row.wages)} = 利润 ${signed(row.profit)}（毛利 ${pct(margin)}，${signed(row.profitPerBuilding, 2)} 金/座，开工率 ${pct(row.utilization, 0)}${idle ? '，闲置' : ''}）`,
     )
   }
   return lines

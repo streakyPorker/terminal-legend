@@ -51,7 +51,7 @@
 | PT-028 | 税入显示随建造力租金缩放 | 0007-E2 | fixed（0fbc0d0） |
 | PT-029 | 私人队列扩张过快（十单在途） | ADR 0017 | fixed（ADR 0017） |
 | PT-030 | 贸易僵化：无法自建贸易路线 | 0004 / ADR 0020 | fixed（ADR 0020） |
-| PT-031 | 建筑无配方/无利润率（B1+B2 已修）；税制按 GDP 比例（待 B4） | 0008 B1–B4 | partial（B1+B2 已落地，ADR 0021，World v9；税制 open） |
+| PT-031 | 建筑无配方/无利润率（B1+B2 已修）；决策联动（B3 已落地）；税制按 GDP 比例（待 B4） | 0008 B1–B4 | partial（B1+B2+B3 已落地，ADR 0021/0022，World v9；税制 open） |
 
 ---
 
@@ -484,4 +484,18 @@
   - **行为保持**：A/B 校验 4 种子 × 6 月 × 10 国，产出逐位相同、中间需求数值相同；213 项既有测试全绿，
     仅世界版本断言 8→9 变化。决策联动（利用率/利润驱动投资）与四税基税制**仍未做**（B3/B4）。
   - 世界版本升到 v9（`createWorld`、`CURRENT_WORLD_VERSION`）；提交由编排者补。
-- 状态：**部分修复**（B1+B2 已落地；税制按 GDP 比例部分仍 open，待 B4）
+- 修复（决策联动，B3，2026-10-21 本会话）：
+  - `engine/sim.ts` 产出按**上月**存储的 `buildingProfits[b].utilization` 门控（一个月滞后，
+    破除价格→利润→产能→价格的同月环）；`computeEconomy` 末尾按本月利润写下月利用率
+    （`target = profit>0 ? 1 : UTIL_IDLE_FLOOR`，一阶平滑 `UTIL_SMOOTHING`）。
+    常数：`UTIL_IDLE_FLOOR=0.5`、`UTIL_SMOOTHING=0.25`、`SHRINK_MAX=0.02`。
+  - 月末折旧叠加**深度亏损额外萎缩**（比例于每座亏损额，上限 `SHRINK_MAX`/月，`max(0,…)` 保非负）。
+  - `investPrivateCapital` 设**利润门槛**：只建 `profitPerBuilding > 0` 的类型；短缺信号
+    `investmentScore` 在盈利类目间分配（`returnOnCapital` 作 tie-break），ADR 0017 节奏不变。
+  - `v3_inspect economy` 逐建筑行增列「开工率 %」与「闲置」标记。
+  - **行为变更**：亏损类目闲置、深度亏损萎缩、投资目标随利润；`tests/utilization.test.ts`（5 项）
+    锁定滞后、闲置下界、恢复、门槛、萎缩非负、60/120 月确定性。0007-E1 的机械两侧基线按计划 §5
+    过渡门槛放宽（工厂被闲置 → 机械供给下降），待 B5 再校准。
+  - 结构性不变量保持：`C+I+G+NX === GDP`、全部金币守恒、贸易路线金币恒等式、60 月确定性、
+    鸦片危机门（§4.1 ≥2 单位/月、≥20% 来自英国）。
+- 状态：**部分修复**（B1+B2+B3 已落地；税制按 GDP 比例部分仍 open，待 B4）

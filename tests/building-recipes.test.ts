@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { BUILDING_IDS, BUILDING_RECIPES, makeRngForWorld } from '../engine/data'
-import { advance, computeEconomy, inspectEconomy, newWorld } from '../engine/sim'
+import { UTIL_IDLE_FLOOR, advance, computeEconomy, inspectEconomy, newWorld } from '../engine/sim'
 import type { WorldState } from '../types'
 
 const countryOf = (world: WorldState, id: string) => {
@@ -70,7 +70,10 @@ describe('buildingProfits snapshot (ADR 0021 B2)', () => {
       expect(Number.isFinite(row.revenue)).toBe(true)
       expect(Number.isFinite(row.inputCost)).toBe(true)
       expect(Number.isFinite(row.wages)).toBe(true)
-      expect(row.utilization).toBe(1)
+      // B3 drives the operating rate from last month's profit (ADR 0022); it is
+      // a valid rate between the idle floor and full capacity.
+      expect(row.utilization).toBeGreaterThanOrEqual(UTIL_IDLE_FLOOR)
+      expect(row.utilization).toBeLessThanOrEqual(1)
       close(row.profit, row.revenue - row.inputCost - row.wages, 1e-6)
     }
   })

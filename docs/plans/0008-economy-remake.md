@@ -164,14 +164,17 @@ export type TaxRates = Record<TaxBaseId, number>   // 百分比
 | --- | --- | --- |
 | **B1（v9 结构）** ✅ | 加 `BUILDING_RECIPES`；`computeProduction` 只读表；删硬编码系数与中间投入块；并 `WORKSHOP_INPUTS`；升 v9 | trade.test 版本断言（8→9），行为保持（A/B 逐位相同） |
 | **B2（利润率）** ✅ | 加 `buildingProfits`（算+存+inspect），不改决策 | 无（行为保持）；新增 building-recipes.test |
-| **B3（决策联动）** | 私有投资改用利润率；加 utilization 门控与深度亏损折旧 | economic-loop 投资相关、60/84 基线 |
+| **B3（决策联动）** ✅ | 私有投资改用利润率；加 utilization 门控与深度亏损折旧 | economic-loop 投资相关、60/84 基线 |
 | **B4（税基）** | 移除 `taxRate`，加 `taxes`；重写 `incomeParts`；`v3_action tax`；fiscal/sim/thresholds/inspect | fiscal.test「税是 GDP 份额」、经济循环高税侵蚀 |
 | **B5（再校准）** | 调 `GOODS.basePrice` 与配方系数；加校准测试；收敛 PT-002/PT-001 | economy-calibration、trade 基线 |
 | **B6（文档）** | ADR 0021–0023、README/GLOSSARY、playtest 状态更新 | — |
 
-- **进度**：B1+B2 已实现（ADR 0021，World v9）。`BUILDING_RECIPES` 为产出与中间投入的单一真源，
-  逐建筑 `buildingProfits` 快照入 `Economy` 与 `v3_inspect economy`；**行为保持**（既有 213 测试
-  仅版本断言 8→9 变化，产出 A/B 逐位相同）。B3/B4 尚未开始。
+- **进度**：B1+B2+B3 已实现（ADR 0021、ADR 0022，World v9）。`BUILDING_RECIPES` 为产出与中间投入的单一真源，
+  逐建筑 `buildingProfits` 快照入 `Economy` 与 `v3_inspect economy`。B3 把快照接进决策：
+  产出按**上月** `utilization` 门控（`UTIL_IDLE_FLOOR=0.5`、`UTIL_SMOOTHING=0.25`），深度亏损按
+  `SHRINK_MAX=0.02`/月额外萎缩（下限 0），私人投资只建 `profitPerBuilding > 0` 的类型
+  （ADR 0017 节奏不变；短缺信号 `investmentScore` 在盈利类目间分配）。**行为变更**：
+  机械两侧基线（0007-E1）按计划 §5 过渡门槛放宽，待 B5 再校准。B4 尚未开始。
 
 - ①（贸易路线，ADR 0020）先于本计划落地；B5 再校准会顺带重定路线收益。
 - 每个包独立提交、测试全绿再进下一个。

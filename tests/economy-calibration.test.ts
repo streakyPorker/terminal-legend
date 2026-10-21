@@ -52,7 +52,11 @@ describe('E1 world-trade calibration (plan 0007)', () => {
     // machinery. Both sides must now exist for most of the run.
     expect(bothSides.grain).toBeGreaterThanOrEqual(months - 2)
     expect(bothSides.wood).toBeGreaterThanOrEqual(months - 2)
-    expect(bothSides.machinery).toBeGreaterThanOrEqual(months - 2)
+    // B3 idles unprofitable factories (ADR 0022), and factories are the only
+    // machinery source, so machinery is no longer two-sided almost every month.
+    // This matches the plan-0008 §5 interim gate (both sides at least once per
+    // 12 months) until B5 rebalances factory margins.
+    expect(bothSides.machinery).toBeGreaterThanOrEqual(Math.max(2, Math.floor(months / 12)))
 
     // QING must be able to sell something: farm exports are the point of the
     // plan's "export grain and wood" strategy.
