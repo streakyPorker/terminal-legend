@@ -185,8 +185,10 @@ node statusline/install.mjs
 3. `docs/plans/0005-tech-tree.md`：科技树 v8：工业/行政/军事三分支 + 通用时代线、跨分支
    溢出、国际扩散。**等 0007-E5 校准后再排期。**
 4. `docs/plans/0002-agent-event-trees.md`：主要大国专属国策/事件树，再到多国交互事件树。
-   **⏸ 暂停**，等经济系统打磨完成后再恢复。
+   **⏸ 暂停**，等经济系统打磨完成后再恢复。其「逐回合事件」部分已由
+   `docs/plans/0010-live-events.md`（ADR 0025）承接。
 5. `docs/plans/0009-config-refactor.md`（ADR 0024，取代 ADR 0004）：配置分层（`engine/config/` + `engine/data/`）与统一「配置块」乘数机制，增量 TDD、第一刀行为保持。
+6. `docs/plans/0010-live-events.md`（ADR 0025）：AI 生成的逐回合实时事件，引擎按经济/政治/外交/民生挑显著题材，LLM 现场生成 0 至 2 个可交互事件，效果编译回既有事件结构并持久化。**proposed，待批准实现。**
 
 已完成、作为参考：`0003-economic-loop.md`（World v5）、`0004-trade-diplomacy.md`（World v6）、
 ADR 0006（World v7 净资产财政）、ADR 0020（World v8 持久贸易航线）、
