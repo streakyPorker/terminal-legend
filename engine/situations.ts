@@ -1,4 +1,5 @@
 import type {
+  Country,
   LogEntry,
   SituationProposal,
   SituationRecord,
@@ -6,6 +7,15 @@ import type {
   WorldState,
 } from '../types'
 import { addModifier } from './modifiers'
+import { installBlock, validateBlockConfig } from './blocks'
+import {
+  compileSituationBlock,
+  instantiateSituationBlock,
+  situationBlockFor,
+  situationModifierId,
+  situationPacksFor,
+  situationSource,
+} from './config/blocks/situations'
 import { atWar, declareWar, strength } from './diplomacy'
 import { inspectEconomy } from './economy'
 import { clamp } from './internal'
@@ -274,6 +284,40 @@ export function parseResultId(text: string): SituationResultId | undefined {
   return found.length === 1 ? found[0] : undefined
 }
 
+/**
+ * Installs a result pack's modifiers on `country` through the block engine
+ * (ADR 0024). The runtime block is rebound to `source = situation:<situationId>`
+ * and its modifier id restored to the pre-C4 shape. A validation failure — which
+ * cannot happen for the derived static registry — falls back to the legacy
+ * direct install, so behaviour cannot change.
+ */
+function installSituationResultModifiers(
+  country: Country,
+  situationId: string,
+  resultId: SituationResultId,
+): void {
+  const source = situationSource(situationId)
+  for (const pack of situationPacksFor(resultId, country.id)) {
+    const template = situationBlockFor(pack) ?? compileSituationBlock(pack)
+    const installed = instantiateSituationBlock(template, situationId)
+    if (validateBlockConfig([installed]).length === 0) {
+      installBlock(country, installed, {
+        modifierId: () => situationModifierId(situationId, pack),
+      })
+      continue
+    }
+    addModifier(country, {
+      id: situationModifierId(situationId, pack),
+      label: pack.label,
+      stat: pack.stat,
+      stack: pack.stack,
+      value: pack.value,
+      monthsLeft: pack.months,
+      source,
+    })
+  }
+}
+
 /** Applies one result pack's exact effects (plan §4.3), then closes the record. */
 export function applySituationResult(
   world: WorldState,
@@ -315,28 +359,12 @@ export function applySituationResult(
         const exportRate = qing.econ.exportTariff ?? qing.econ.tariff
         qing.econ.tariff = clamp(qing.econ.tariff - 8, 0, 60)
         qing.econ.exportTariff = clamp(exportRate - 8, 0, 60)
-        addModifier(qing, {
-          id: `situation:${OPIUM_CRISIS_ID}:compromise:access`,
-          label: '通商口岸',
-          stat: 'marketAccess',
-          stack: 'flat',
-          value: 0.1,
-          monthsLeft: 24,
-          source: `situation:${OPIUM_CRISIS_ID}`,
-        })
+        installSituationResultModifiers(qing, OPIUM_CRISIS_ID, 'compromise')
         qing.government.legitimacy = clamp(qing.government.legitimacy - 4, 0, 100)
         qing.pops.radicals = clamp(qing.pops.radicals + 5, 0, 100)
       }
       if (gbr !== undefined) {
-        addModifier(gbr, {
-          id: `situation:${OPIUM_CRISIS_ID}:compromise:income`,
-          label: '通商红利',
-          stat: 'income',
-          stack: 'percent',
-          value: 5,
-          monthsLeft: 24,
-          source: `situation:${OPIUM_CRISIS_ID}`,
-        })
+        installSituationResultModifiers(gbr, OPIUM_CRISIS_ID, 'compromise')
       }
       relation(10)
       break

@@ -77,7 +77,7 @@
 | **C1** ✅ | 立块引擎（`ConfigBlock` 类型 + 求值器 + 域注册表 + 全局聚合）；把 `engine/thresholds.ts` 的规则迁成块，拆除旧 `while`/`once` 路径 | 是 | 迁移等价测试：对多个种子 × 月的**触发块集合**与**最终修正值**逐位等于旧 `evaluateThresholds`；配置不变量测试（id 唯一、stat 合法、曲线有序、`scales_with.stat` 真实） |
 | **C2** ✅ | `policies` 迁到块；`v3_policy` 的 `{stat, stack, value, months}` 入口编译成块 | 是 | 迁移等价：相同政策提议产生相同的 `country.modifiers` 集合与 `applyModifiers` 结果；权威计价/维护费/同 id 覆盖行为不变（ADR 0002） |
 | **C3** ✅ | `events` 的 `effects.modifiers` 迁到块 | 是 | 迁移等价：事件选项结算产生的修正与旧路径一致；重复触发不无限叠加 |
-| **C4** | `situations` 迁到块 | 是 | 迁移等价：局势结果包的效果落账一致 |
+| **C4** ✅ | `situations` 迁到块 | 是 | 迁移等价：局势结果包的效果落账一致 |
 | **C5** | `tech` 迁到块 | 是 | 迁移等价：科技解锁/加成路径产生的修正一致 |
 | **C6** | `war`（战争目标）与 `laws` 迁到块 | 是 | 迁移等价：宣战/停战/法案各自安装的修正集合一致 |
 | **C7** | **非修正入口的乘数迁移**（见下） | **混合**（见下） | 逐项：能等价则等价测试；若有行为变更则记录并加新基线 |
@@ -117,6 +117,14 @@
 - `engine/events.ts` 的 `applyEventOption`：把原来内联的 `addModifier` 循环换成 `installEventModifiers`——按 `event.kind` + 选项 id 从注册表取块（未命中则 `compileEventBlock` 现场编译，故合成/非模板事件仍可安装），`instantiateEventBlock` 重绑到运行时事件 id，经 `validateBlockConfig` 守卫后 `installBlock` 安装。**逐位保持**旧行为：`source = event:<event.id>`、`id = event:<event.id>:<index>`、`monthsLeft = one.months`、`stack = one.stack ?? 'flat'`、`label = one.label ?? event.title`；ADR-0004 叠算（`applyModifiers`/`addModifier`）未动。直达效果（treasury/radicals/legitimacy/prestige/army/popsPercent/techPoints/relation/succeed）**原样未改**。校验异常时回退到旧的直接安装，保证行为不变。
 - `engine/blocks.ts` **未改**（复用既有 `installBlock`/`validateBlockConfig`）；`WorldState.version` **未**提升（仍为 10）。
 - 新增 `tests/event-migration.test.ts`（10 例）：用**冻结的旧 `applyEventOption` 副本**作 oracle，对（harvest/celebrate、harvest/store、boom/invest、slump/bailout、以及无修正项的 revolution/border/diplomatic 直达效果）逐位比对 modifier 元组（id\|source\|stat\|stack\|value\|label\|monthsLeft）、直达效果字段与整国深等；另有旧 id/source 形状断言、合成事件编译兜底、重复结算不叠加、以及 **drift guard**（遍历 `EVENT_TEMPLATES` 断言每个 `effects.modifiers` 条目恰有一条块，且 `EVENT_BLOCKS` 无多余项、`validateBlockConfig` 为空）。`claude plugin test .` **276 pass / 0 fail**（C2 基线 266 + 新增 10）。
+
+**C4 完成记录（本切片）**
+
+- 新增静态注册表 `engine/config/blocks/situations.ts` 的 `SITUATION_MODIFIER_PACKS`（2 条：`compromise` 结果包给 QING 的 `marketAccess` flat 0.1/24mo「通商口岸」、给 GBR 的 `income` percent 5/24mo「通商红利」），由它**派生** `SITUATION_BLOCKS`（`kind: 'situation'`、`potential_trigger: []`、`scales_with: []`、`lifecycle: 'once'`、每条 effect 自带 `months`），效果与旧 `addModifier` 条目 **1:1**（stat/stack/value/label/months）。同模块导出 `situationBlockId`（`situation:<resultId>:<countryId>:<slot>`）、`situationSource`（`situation:<situationId>`）、`situationModifierId`（`situation:<situationId>:<resultId>:<slot>`，即旧的 modifier id）、`compileSituationBlock`、`instantiateSituationBlock`（rebind 到运行时 source）、`situationBlockFor` / `situationPacksFor`。
+- `engine/config/blocks.ts` 的 `BLOCK_REGISTRY` 并入 `SITUATION_BLOCKS`（9 + 4 + 2 = 15），供全局不变量校验。**注意**：config 模块只依赖 `types`（`SituationResultId` 为 type-only import），**不** import `engine/blocks.ts`，避免 `config/blocks → situations → engine/blocks → modifiers → scale → config/blocks` 的初始化环。
+- `engine/situations.ts` 的 `applySituationResult` `compromise` 分支：两处内联 `addModifier` 换成新增的本地 `installSituationResultModifiers(country, situationId, resultId)`——按 pack 从注册表取块、`instantiateSituationBlock` 重绑到 `source = situation:opium-crisis`、`installBlock(..., { modifierId })` 恢复旧 id。**逐位保持**旧行为：`source = situation:opium-crisis`、`id = situation:opium-crisis:compromise:access|income`、`monthsLeft = 24`、`stack`/`value`/`label` 不变；校验失败回退旧直接安装。直达效果（legitimacy/authority/prestige/embargo/`declareWar`，以及 compromise 的 tariff/legitimacy/radicals/relation）**原样未改**；触发窗口、仲裁、`fallbackResult` 未动。ADR-0004 叠算（`applyModifiers`/`addModifier`）未动。
+- `WorldState.version` **未**提升（仍为 10）。`engine/blocks.ts` **未改**（复用 `installBlock`/`validateBlockConfig`）。
+- 新增 `tests/situation-migration.test.ts`（10 例）：用**冻结的旧 `applySituationResult` 副本**作 oracle，对四个结果包（`qing-crackdown`/`compromise`/`war-open-market`/`war-reparations`）逐位比对两国 modifier 元组（id\|source\|stat\|stack\|value\|label\|monthsLeft）、日志与**整世界深等**（含 embargo/战争/关系/记录）；另有旧 id/source 形状断言、纯函数可复现断言、以及 **drift guard**（`SITUATION_MODIFIER_PACKS` 比对冻结 spec、每 pack 恰一条块且无多余项、`validateBlockConfig` 为空、compile/instantiate/modifierId 形状稳定）。`tests/config-blocks.test.ts` 的不变量测试纳入 situation 块（9 + 4 + 2）。`claude plugin test .` **286 pass / 0 fail**（C3 基线 276 + 新增 10）。
 
 ## 5. 验收
 

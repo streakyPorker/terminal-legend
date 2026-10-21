@@ -19,6 +19,7 @@ import {
 import { BLOCK_REGISTRY, findBlock } from '../engine/config/blocks'
 import { THRESHOLD_BLOCKS } from '../engine/config/blocks/thresholds'
 import { EVENT_BLOCKS } from '../engine/config/blocks/events'
+import { SITUATION_BLOCKS } from '../engine/config/blocks/situations'
 import { evaluateThresholds } from '../engine/thresholds'
 import { addModifier, applyModifiers, tickModifiers } from '../engine/modifiers'
 import { makeRngForWorld } from '../engine/data'
@@ -405,15 +406,17 @@ describe('scales_with curves and the consume seam (engine/scale.ts)', () => {
 })
 
 describe('config invariants (ADR 0024 §11)', () => {
-  test('the shipped registry is valid with the threshold + event blocks', () => {
+  test('the shipped registry is valid with the threshold + event + situation blocks', () => {
     expect(validateBlockConfig(BLOCK_REGISTRY)).toEqual([])
     expect(THRESHOLD_BLOCKS.length).toBe(9)
     expect(EVENT_BLOCKS.length).toBe(4)
+    expect(SITUATION_BLOCKS.length).toBe(2)
     expect(BLOCK_REGISTRY.length).toBe(
-      THRESHOLD_BLOCKS.length + EVENT_BLOCKS.length,
+      THRESHOLD_BLOCKS.length + EVENT_BLOCKS.length + SITUATION_BLOCKS.length,
     )
     expect(findBlock('threshold:stability')?.kind).toBe('threshold')
     expect(findBlock('event:harvest:celebrate')?.kind).toBe('event')
+    expect(findBlock('situation:compromise:QING:access')?.kind).toBe('situation')
   })
 
   test('validation rejects duplicates, bad stats, unordered steps and bare duration', () => {
