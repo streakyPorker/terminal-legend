@@ -8,7 +8,49 @@ import type {
 import { makeRngForWorld, spawnEvent, successorFor } from './data'
 import { addModifier } from './modifiers'
 import { clamp } from './internal'
+import { installBlock, validateBlockConfig } from './blocks'
+import { findBlock } from './config/blocks'
+import {
+  compileEventBlock,
+  eventBlockId,
+  instantiateEventBlock,
+} from './config/blocks/events'
 import type { Rng } from './rng'
+
+/**
+ * Installs an option's `effects.modifiers` through the block engine (ADR 0024).
+ * The static registry block (`event:<kind>:<optionId>`) is the source of truth;
+ * it is rebound to the runtime event id so `source` and modifier ids keep their
+ * pre-C3 shape. Options outside the registry (e.g. synthetic events) compile
+ * inline. A rare validation failure falls back to the legacy direct install, so
+ * behaviour cannot change.
+ */
+function installEventModifiers(
+  country: Country,
+  event: GameEvent,
+  option: EventOption,
+  modifiers: NonNullable<EventOption['effects']['modifiers']>,
+): void {
+  const template = findBlock(eventBlockId(event.kind, option.id))
+  const block =
+    template ?? compileEventBlock(event.kind, option.id, event.title, modifiers)
+  const installed = instantiateEventBlock(block, event.id)
+  if (validateBlockConfig([installed]).length === 0) {
+    installBlock(country, installed)
+    return
+  }
+  modifiers.forEach((one, index) => {
+    addModifier(country, {
+      id: `event:${event.id}:${index}`,
+      label: one.label ?? event.title,
+      stat: one.stat,
+      stack: one.stack ?? 'flat',
+      value: one.value,
+      monthsLeft: one.months,
+      source: `event:${event.id}`,
+    })
+  })
+}
 
 function aiEventChoice(country: Country, options: EventOption[], rng: Rng): EventOption {
   const aggressive = country.leader.traits.some(trait =>
@@ -73,17 +115,7 @@ export function applyEventOption(
     }
   }
   if (effects.modifiers !== undefined) {
-    effects.modifiers.forEach((one, index) => {
-      addModifier(country, {
-        id: `event:${event.id}:${index}`,
-        label: one.label ?? event.title,
-        stat: one.stat,
-        stack: one.stack ?? 'flat',
-        value: one.value,
-        monthsLeft: one.months,
-        source: `event:${event.id}`,
-      })
-    })
+    installEventModifiers(country, event, option, effects.modifiers)
   }
   if (effects.succeed === true) {
     const oldName = `${country.leader.title}${country.leader.name}`

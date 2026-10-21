@@ -18,6 +18,7 @@ import {
 } from '../engine/scale'
 import { BLOCK_REGISTRY, findBlock } from '../engine/config/blocks'
 import { THRESHOLD_BLOCKS } from '../engine/config/blocks/thresholds'
+import { EVENT_BLOCKS } from '../engine/config/blocks/events'
 import { evaluateThresholds } from '../engine/thresholds'
 import { addModifier, applyModifiers, tickModifiers } from '../engine/modifiers'
 import { makeRngForWorld } from '../engine/data'
@@ -404,10 +405,15 @@ describe('scales_with curves and the consume seam (engine/scale.ts)', () => {
 })
 
 describe('config invariants (ADR 0024 §11)', () => {
-  test('the shipped registry is valid with 9 threshold blocks', () => {
+  test('the shipped registry is valid with the threshold + event blocks', () => {
     expect(validateBlockConfig(BLOCK_REGISTRY)).toEqual([])
-    expect(BLOCK_REGISTRY.length).toBe(9)
+    expect(THRESHOLD_BLOCKS.length).toBe(9)
+    expect(EVENT_BLOCKS.length).toBe(4)
+    expect(BLOCK_REGISTRY.length).toBe(
+      THRESHOLD_BLOCKS.length + EVENT_BLOCKS.length,
+    )
     expect(findBlock('threshold:stability')?.kind).toBe('threshold')
+    expect(findBlock('event:harvest:celebrate')?.kind).toBe('event')
   })
 
   test('validation rejects duplicates, bad stats, unordered steps and bare duration', () => {

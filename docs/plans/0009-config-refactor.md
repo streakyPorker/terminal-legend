@@ -76,7 +76,7 @@
 | --- | --- | --- | --- |
 | **C1** ✅ | 立块引擎（`ConfigBlock` 类型 + 求值器 + 域注册表 + 全局聚合）；把 `engine/thresholds.ts` 的规则迁成块，拆除旧 `while`/`once` 路径 | 是 | 迁移等价测试：对多个种子 × 月的**触发块集合**与**最终修正值**逐位等于旧 `evaluateThresholds`；配置不变量测试（id 唯一、stat 合法、曲线有序、`scales_with.stat` 真实） |
 | **C2** ✅ | `policies` 迁到块；`v3_policy` 的 `{stat, stack, value, months}` 入口编译成块 | 是 | 迁移等价：相同政策提议产生相同的 `country.modifiers` 集合与 `applyModifiers` 结果；权威计价/维护费/同 id 覆盖行为不变（ADR 0002） |
-| **C3** | `events` 的 `effects.modifiers` 迁到块 | 是 | 迁移等价：事件选项结算产生的修正与旧路径一致；重复触发不无限叠加 |
+| **C3** ✅ | `events` 的 `effects.modifiers` 迁到块 | 是 | 迁移等价：事件选项结算产生的修正与旧路径一致；重复触发不无限叠加 |
 | **C4** | `situations` 迁到块 | 是 | 迁移等价：局势结果包的效果落账一致 |
 | **C5** | `tech` 迁到块 | 是 | 迁移等价：科技解锁/加成路径产生的修正一致 |
 | **C6** | `war`（战争目标）与 `laws` 迁到块 | 是 | 迁移等价：宣战/停战/法案各自安装的修正集合一致 |
@@ -109,6 +109,14 @@
 - `engine/actions.ts` 的 `applyPolicy`：校验/解析、权威计价（`POLICY_FLAT_SCALE`/`flatScale`、`round(weight·0.2)`、`max(required, requested)`、clamp 1..40）、`policy:<name>` source 与 `upkeep = cost/48/parsed.length` **全部未改**；仅把末尾的 `addModifier` 循环换成「编译块 → `validateBlockConfig([block])`（C1 不变量校验器，值域/单位已在前置校验挡住，此分支为守卫）→ `installBlock`」。`v3_policy` 工具契约（`{name, effects[], authorityCost?}`）未变。
 - ADR-0004 叠算**未改**（`applyModifiers` 原样）；`WorldState.version` **未**提升。
 - 新增 `tests/policy-migration.test.ts`：用**冻结的旧 `applyPolicy` 副本**作 oracle，对（边界内 / 超 200 / gdp 类 100% 上限 / 多效果混栈 / upkeep / 同 stat 永久覆盖 / 限时独立槽 / 权威不足 / 未知 stat 与坏单位 / flat 按 stat 计价）逐位比对 modifier 元组与权威扣费；另加 `compilePolicyBlock`/`installBlock` 单元断言。`claude plugin test .` **266 pass / 0 fail**。
+
+**C3 完成记录（本切片）**
+
+- 新增静态注册表 `engine/config/blocks/events.ts` 的 `EVENT_BLOCKS`（4 条：`event:harvest:celebrate` / `event:harvest:store` / `event:boom:invest` / `event:slump:bailout`），`kind: 'event'`、`potential_trigger: []`、`scales_with: []`、`lifecycle: 'once'`，效果与事件的 `effects.modifiers` 条目 **1:1**（stat/stack/value/label/months）。同一模块导出 `eventBlockId(kind, optionId)`、`compileEventBlock(...)`（含 `stack ?? 'flat'` 默认）与 `instantiateEventBlock(block, runtimeEventId)`（把块 id 重绑为 `event:<runtimeEventId>`）。`engine/config/blocks.ts` 的 `BLOCK_REGISTRY` 并入 `EVENT_BLOCKS`（9 + 4 = 13），供全局不变量校验。
+- `engine/data.ts` 仅新增 `export`：`EVENT_TEMPLATES` 与 `EventTemplate` 类型对外可见，供 drift-guard 测试比对；**未改结构、未改数据**。
+- `engine/events.ts` 的 `applyEventOption`：把原来内联的 `addModifier` 循环换成 `installEventModifiers`——按 `event.kind` + 选项 id 从注册表取块（未命中则 `compileEventBlock` 现场编译，故合成/非模板事件仍可安装），`instantiateEventBlock` 重绑到运行时事件 id，经 `validateBlockConfig` 守卫后 `installBlock` 安装。**逐位保持**旧行为：`source = event:<event.id>`、`id = event:<event.id>:<index>`、`monthsLeft = one.months`、`stack = one.stack ?? 'flat'`、`label = one.label ?? event.title`；ADR-0004 叠算（`applyModifiers`/`addModifier`）未动。直达效果（treasury/radicals/legitimacy/prestige/army/popsPercent/techPoints/relation/succeed）**原样未改**。校验异常时回退到旧的直接安装，保证行为不变。
+- `engine/blocks.ts` **未改**（复用既有 `installBlock`/`validateBlockConfig`）；`WorldState.version` **未**提升（仍为 10）。
+- 新增 `tests/event-migration.test.ts`（10 例）：用**冻结的旧 `applyEventOption` 副本**作 oracle，对（harvest/celebrate、harvest/store、boom/invest、slump/bailout、以及无修正项的 revolution/border/diplomatic 直达效果）逐位比对 modifier 元组（id\|source\|stat\|stack\|value\|label\|monthsLeft）、直达效果字段与整国深等；另有旧 id/source 形状断言、合成事件编译兜底、重复结算不叠加、以及 **drift guard**（遍历 `EVENT_TEMPLATES` 断言每个 `effects.modifiers` 条目恰有一条块，且 `EVENT_BLOCKS` 无多余项、`validateBlockConfig` 为空）。`claude plugin test .` **276 pass / 0 fail**（C2 基线 266 + 新增 10）。
 
 ## 5. 验收
 

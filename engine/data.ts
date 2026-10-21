@@ -1557,7 +1557,10 @@ type EventTemplate = {
   options: (country: Country) => EventOption[]
 }
 
-const EVENT_TEMPLATES: EventTemplate[] = [
+// Exported so the config-layer drift guard can assert 1:1 coverage by EVENT_BLOCKS.
+export type { EventTemplate }
+
+export const EVENT_TEMPLATES: EventTemplate[] = [
   {
     kind: 'harvest',
     title: '丰年',
