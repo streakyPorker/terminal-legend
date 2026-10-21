@@ -241,7 +241,7 @@ function Overview(props: { ui: UiKit; world: WorldState; width: number }): any {
             <Text wrap="truncate">{padEnd(countryTag(row.country), 12)}</Text>
             <Text color={relationColor(row.value)}>{padEnd(bar(row.value + 100, 200, 10), 11)}</Text>
             <Text color={relationColor(row.value)}>{padEnd(`${row.value >= 0 ? '+' : ''}${row.value}`, 5)}</Text>
-            <Text dimColor wrap="truncate">{shortLeader(row.country)} · {moodLabel(row.country.leader.mood)}</Text>
+            <Text dimColor wrap="wrap">{shortLeader(row.country)} · {moodLabel(row.country.leader.mood)}</Text>
           </Box>
         ))}
       </Box>
@@ -249,7 +249,7 @@ function Overview(props: { ui: UiKit; world: WorldState; width: number }): any {
       <Box flexDirection="column" marginTop={1}>
         <Heading ui={props.ui} text="最新动态" />
         {props.world.log.slice(-5).map((entry, index) => (
-          <Text key={`log:${index}`} dimColor wrap="truncate">
+          <Text key={`log:${index}`} dimColor wrap="wrap">
             {fmtDate(entry.date)} {logKindMark(entry.kind)} {entry.text}
           </Text>
         ))}
@@ -534,7 +534,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
           <Box flexDirection="row" columnGap={1}>
             <Text wrap="truncate">{padEnd(BUILDINGS[id].name, 7)}</Text>
             <Text>{padEnd(fmtNumber(econ.buildings[id]), 7)}</Text>
-            <Text dimColor wrap="truncate">{BUILDINGS[id].note}</Text>
+            <Text dimColor wrap="wrap">{BUILDINGS[id].note}</Text>
           </Box>
         ))}
         <Text dimColor>交通基础设施 {Math.round(econ.transportInfrastructure)} · 行政能力 {Math.round(econ.administrativeCapacity)} · 市场接入 {fmtPercent(econ.marketAccess)} · 失业 {econ.unemployment.toFixed(1)}%</Text>
@@ -624,7 +624,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
           ['其他（建造力出租）', ledger.income.other],
         ] as const).map(([name, value]) => (
           <Box flexDirection="row" columnGap={1}>
-            <Text wrap="truncate">{padEnd(name, 6)}</Text>
+            <Text wrap="truncate">{padEnd(name, 10)}</Text>
             <Text color="green">{padEnd(bar(value, Math.max(1, ledger.income.total), 10), 11)}</Text>
             <Text>{value.toFixed(1)}</Text>
           </Box>
@@ -649,7 +649,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
           ['建设补贴', ledger.expense.constructionSubsidy],
         ] as const).map(([name, value]) => (
           <Box flexDirection="row" columnGap={1}>
-            <Text wrap="truncate">{padEnd(name, 6)}</Text>
+            <Text wrap="truncate">{padEnd(name, 10)}</Text>
             <Text color="red">{padEnd(bar(value, Math.max(1, ledger.expense.total), 10), 11)}</Text>
             <Text>{value.toFixed(1)}</Text>
           </Box>
@@ -689,7 +689,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
         <Heading ui={props.ui} text="支出编制" hint="政策投入（每月上限，不等于本月实付）" />
         {Object.entries(econ.spending).map(([key, value]) => (
           <Box flexDirection="row" columnGap={1}>
-            <Text wrap="truncate">{padEnd(SPENDING[key as keyof typeof SPENDING].name, 6)}</Text>
+            <Text wrap="truncate">{padEnd(SPENDING[key as keyof typeof SPENDING].name, 8)}</Text>
             <Text color="cyan">{padEnd(bar(value, 10, 8), 9)}</Text>
             <Text>{value.toFixed(1)}</Text>
           </Box>
@@ -760,8 +760,8 @@ function SituationCard(props: { ui: UiKit; world: WorldState }): any {
             : `等待各方（${situation.months}/${SITUATION_TIMEOUT_MONTHS} 月）`
         return (
           <Box flexDirection="column" key={`situation:${situation.id}`}>
-            <Text wrap="truncate">{`${OPIUM_CRISIS_TITLE} · ${state}`}</Text>
-            <Text dimColor wrap="truncate">{stanceSummary(situation)}</Text>
+            <Text wrap="wrap">{`${OPIUM_CRISIS_TITLE} · ${state}`}</Text>
+            <Text dimColor wrap="wrap">{stanceSummary(situation)}</Text>
           </Box>
         )
       })}
@@ -799,7 +799,7 @@ function DiplomacyPanel(props: { ui: UiKit; world: WorldState }): any {
             <Text color={relationColor(row.value)}>{padEnd(bar(row.value + 100, 200, 10), 11)}</Text>
             <Text color={relationColor(row.value)}>{padEnd(`${row.value >= 0 ? '+' : ''}${row.value}`, 5)}</Text>
             <Text color={marks === '战' ? 'red' : 'yellow'}>{padEnd(marks, 3)}</Text>
-            <Text dimColor wrap="truncate">{shortLeader(row.country)} · {moodLabel(row.country.leader.mood)}</Text>
+            <Text dimColor wrap="wrap">{shortLeader(row.country)} · {moodLabel(row.country.leader.mood)}</Text>
           </Box>
         )
       })}
@@ -839,7 +839,7 @@ function DiplomacyPanel(props: { ui: UiKit; world: WorldState }): any {
             return (
               <Box flexDirection="row" columnGap={1}>
                 <Text wrap="truncate">{padEnd(target !== undefined ? countryTag(target) : embargo.target, 12)}</Text>
-                <Text wrap="truncate">{padEnd(scope, 18)}</Text>
+                <Text wrap="truncate">{padEnd(scope, 22)}</Text>
                 <Text dimColor>{duration}</Text>
               </Box>
             )
@@ -865,7 +865,7 @@ function DiplomacyPanel(props: { ui: UiKit; world: WorldState }): any {
                   <Text wrap="truncate">{padEnd(partner !== undefined ? countryTag(partner) : tension.partner, 10)}</Text>
                   <Text wrap="truncate">{padEnd(GOODS[tension.good].name, 6)}</Text>
                   <Text color={relationColor(tension.relationDelta)}>{padEnd(fmtSigned(tension.relationDelta), 6)}</Text>
-                  <Text dimColor wrap="truncate">{clampText(tension.reason, 12)}</Text>
+                  <Text dimColor wrap="wrap">{tension.reason}</Text>
                 </Box>
               )
             })
@@ -877,7 +877,7 @@ function DiplomacyPanel(props: { ui: UiKit; world: WorldState }): any {
       <Box flexDirection="column" marginTop={1}>
         <Heading ui={props.ui} text="领袖与议程" />
         {others.filter(row => row.country.isMajor).map(row => (
-          <Text wrap="truncate">{[countryTag(row.country), ` ${row.country.leader.persona}`].join(' · ')}</Text>
+          <Text wrap="wrap">{[countryTag(row.country), ` ${row.country.leader.persona}`].join(' · ')}</Text>
         ))}
       </Box>
 
@@ -888,8 +888,8 @@ function DiplomacyPanel(props: { ui: UiKit; world: WorldState }): any {
         ) : (
           props.world.wars.map(war => (
             <Box flexDirection="column">
-              <Text color="red" wrap="truncate">{war.name} · 第 {war.months} 月 · 目标{WAR_GOAL_NAMES[war.goal]}</Text>
-              <Text dimColor wrap="truncate">{war.attackers.join(',')} vs {war.defenders.join(',')} · {war.lastEvent}</Text>
+              <Text color="red" wrap="wrap">{war.name} · 第 {war.months} 月 · 目标{WAR_GOAL_NAMES[war.goal]}</Text>
+              <Text dimColor wrap="wrap">{war.attackers.join(',')} vs {war.defenders.join(',')} · {war.lastEvent}</Text>
               <Box flexDirection="row" columnGap={1}>
                 <Text dimColor>战争分数</Text>
                 <Text color={war.warScore >= 0 ? 'red' : 'cyan'}>{padEnd(bar(war.warScore + 100, 200, 16), 17)}</Text>
@@ -933,7 +933,7 @@ function MilitaryPanel(props: { ui: UiKit; world: WorldState }): any {
           wars.map(war => (
             <Box flexDirection="column">
               <Text color="red">{war.name} · 分数 {Math.round(war.warScore)} · {war.battles} 次交锋</Text>
-              <Text dimColor wrap="truncate">{war.reason}｜{war.lastEvent}</Text>
+              <Text dimColor wrap="wrap">{war.reason}｜{war.lastEvent}</Text>
             </Box>
           ))
         )}
@@ -948,7 +948,7 @@ function MilitaryPanel(props: { ui: UiKit; world: WorldState }): any {
             <Box flexDirection="row" columnGap={1}>
               <Text wrap="truncate">{padEnd(countryTag(country), 12)}</Text>
               <Text color={country.isPlayer ? 'cyan' : undefined}>{padEnd(bar(country.military.army * country.military.quality, 130, 12), 13)}</Text>
-              <Text dimColor wrap="truncate">陆 {fmtNumber(country.military.army)} 海 {fmtNumber(country.military.navy)} 质 {fmtPercent(country.military.quality)}</Text>
+              <Text dimColor wrap="wrap">陆 {fmtNumber(country.military.army)} 海 {fmtNumber(country.military.navy)} 质 {fmtPercent(country.military.quality)}</Text>
             </Box>
           ))}
       </Box>
@@ -988,7 +988,7 @@ function TechPanel(props: { ui: UiKit; world: WorldState }): any {
             <Box flexDirection="row" columnGap={1}>
               <Text color={color}>{padEnd(`${tech.level}`, 3)}</Text>
               <Text color={color}>{padEnd(tech.name, 10)}</Text>
-              <Text dimColor wrap="truncate">{state} · 需要 {tech.cost} 点</Text>
+              <Text dimColor wrap="wrap">{state} · 需要 {tech.cost} 点</Text>
             </Box>
           )
         })}
@@ -1018,7 +1018,7 @@ function EventsPanel(props: {
       {pending.map(event => (
         <Box flexDirection="column" marginTop={1}>
           <Text color="yellow" weight="bold">{event.title}</Text>
-          <Text wrap="truncate">{event.text}</Text>
+          <Text wrap="wrap">{event.text}</Text>
           <Box flexDirection="row" columnGap={1} flexWrap="wrap">
             {event.options.map(option => (
               <Button
@@ -1035,7 +1035,7 @@ function EventsPanel(props: {
         <Box flexDirection="column" marginTop={1}>
           <Heading ui={props.ui} text="最近处理" />
           {resolved.map(event => (
-            <Text dimColor wrap="truncate">{fmtDate(event.date)} {event.title} · {event.options.find(option => option.id === event.resolvedOption)?.label ?? ''}</Text>
+            <Text dimColor wrap="wrap">{fmtDate(event.date)} {event.title} · {event.options.find(option => option.id === event.resolvedOption)?.label ?? ''}</Text>
           ))}
         </Box>
       ) : null}
@@ -1052,7 +1052,7 @@ function LogPanel(props: { ui: UiKit; world: WorldState }): any {
     <Box flexDirection="column">
       <Heading ui={props.ui} text="编年史" hint={`${props.world.log.length} 条记录`} />
       {props.world.log.slice(-22).map((entry, index) => (
-        <Text key={`entry:${index}`} wrap="truncate">
+        <Text key={`entry:${index}`} wrap="wrap">
           <Text dimColor>{fmtDate(entry.date)} </Text>
           <Text color={entry.kind === 'war' ? 'red' : entry.kind === 'tech' ? 'cyan' : undefined}>
             {logKindMark(entry.kind)}
@@ -1162,7 +1162,7 @@ function CouncilPanel(props: {
           <Text dimColor>没有生效中的增益或减益。</Text>
         ) : (
           player.modifiers.slice(-12).map(modifier => (
-            <Text key={`modifier:${modifier.id}`} wrap="truncate">
+            <Text key={`modifier:${modifier.id}`} wrap="wrap">
               {describeModifier(modifier)} <Text dimColor>· {MODIFIER_STAT_NAMES[modifier.stat]} · {modifier.source}</Text>
             </Text>
           ))
@@ -1328,7 +1328,7 @@ export function Panel(props: PanelProps): any {
           {fmtDateLong(props.world.date)} · 第 {props.world.tick} 回合 · {props.council.isOpen ? '御前·待议' : '御前·已批'}
         </Text>
       </Box>
-      <Text dimColor wrap="truncate">{shortLeader(player)} · {player.leader.persona}</Text>
+      <Text dimColor wrap="wrap">{shortLeader(player)} · {player.leader.persona}</Text>
 
       <Box flexDirection="row" columnGap={1} marginTop={1} flexWrap="wrap">
         {TABS.map(([id, label]) => (
@@ -1350,8 +1350,8 @@ export function Panel(props: PanelProps): any {
         <Button key="ctl:save" label="保存" onPress={() => props.onControl('save')} />
       </Box>
 
-      {props.notice !== '' ? <Text color="yellow" wrap="truncate">{props.notice}</Text> : null}
-      <Text dimColor wrap="truncate">快捷键：/v3 next 批准推进｜/v3 run N 托管｜/v3 events 事件｜/v3 help</Text>
+      {props.notice !== '' ? <Text color="yellow" wrap="wrap">{props.notice}</Text> : null}
+      <Text dimColor wrap="wrap">快捷键：/v3 next 批准推进｜/v3 run N 托管｜/v3 events 事件｜/v3 help</Text>
     </Box>
   )
 }
