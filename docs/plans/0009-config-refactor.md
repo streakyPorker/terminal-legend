@@ -78,17 +78,17 @@
 | **C2** ✅ | `policies` 迁到块；`v3_policy` 的 `{stat, stack, value, months}` 入口编译成块 | 是 | 迁移等价：相同政策提议产生相同的 `country.modifiers` 集合与 `applyModifiers` 结果；权威计价/维护费/同 id 覆盖行为不变（ADR 0002） |
 | **C3** ✅ | `events` 的 `effects.modifiers` 迁到块 | 是 | 迁移等价：事件选项结算产生的修正与旧路径一致；重复触发不无限叠加 |
 | **C4** ✅ | `situations` 迁到块 | 是 | 迁移等价：局势结果包的效果落账一致 |
-| **C5** | `tech` 迁到块 | 是 | 迁移等价：科技解锁/加成路径产生的修正一致 |
+| **C5** ✅ | `tech` 乘数（`techMultiplier`）迁到块 | 是 | 迁移等价：per-building/per-good 产出在 tech 1..10 × 多种子/月逐位一致 |
 | **C6** ✅ | `war`（战争目标）与 `laws` 迁到块 | 是 | 迁移等价：宣战/停战/法案各自安装的修正集合一致 |
-| **C7** | **非修正入口的乘数迁移**（见下） | **混合**（见下） | 逐项：能等价则等价测试；若有行为变更则记录并加新基线 |
+| **C7** ✅ | **非修正入口的乘数迁移**（见下） | **是** | 逐项等价测试：债务压力 / 配方门控 / 科技乘数均逐位一致 |
 
 **C7 明细（必须是谨慎的、单独测试的迁移）**
 
 | 对象 | 位置 | 迁移性质 | 处理 |
 | --- | --- | --- | --- |
-| 债务压力 `debtPressure` | `engine/fiscal.ts` | **行为迁移**（不是修正入口） | 用等价测试锁死 `severity`/`penalty` 数值；若纳入块，须先证明平台值不变 |
-| 配方门控 `gates` | `engine/data.ts` 的 `RecipeGates` | **行为迁移** | 先立等价测试复现旧门控乘数，再决定是否块化 |
-| 科技乘数 `techMultiplier` | `engine/internal.ts` | **行为迁移** | 同上，逐位等价优先 |
+| 债务压力 `debtPressure` ✅ | `engine/fiscal.ts` | **行为迁移**（不是修正入口） | 已块化（`fiscal:debt-pressure`）；等价测试锁死 `severity`/四惩罚/label 数值 |
+| 配方门控 `gates` ✅ | `engine/data.ts` 的 `RecipeGates` | **行为迁移** | 已块化（`gate:infrastructure/access/industrial` + `tech:multiplier`）；等价测试复现旧门控乘数 |
+| 科技乘数 `techMultiplier` ✅ | `engine/internal.ts` | **行为迁移** | 已块化（`tech:multiplier`）；逐位等价 |
 | 威望 / 合法性公式 | `engine/*.ts` | **行为迁移** | 若必须改口径，显式记录行为变更并加新基线 |
 | 战争目标直接效果 | `engine/diplomacy.ts` | **行为迁移** | 区分「已是修正」与「直接改数」两种，前者机械迁移、后者记行为变更 |
 
@@ -138,6 +138,24 @@
 - 新增 `tests/war-migration.test.ts`（12 例）：用**冻结的旧 `applyWarGoal` 副本**作 oracle，对（openMarket 胜 / sphere 胜 / reparations 胜 ± 显式 terms / humiliation 胜 / 四目标败方列）逐位比对**整世界深等**（含 modifier 元组、赔款日程、关系、势力范围与威望）；另有 openMarket/sphere 的旧 id/source 形状断言、重复应用同 id 覆盖，以及 **drift guard**（`WAR_MODIFIER_SPECS` 比对冻结 spec、每规格恰一条块且无多余项、`validateBlockConfig` 为空、compile/instantiate/modifierId 形状稳定）。`tests/config-blocks.test.ts` 的不变量测试纳入 law + war 块（9 + 4 + 2 + 6 + 3 = 24）。
 - `claude plugin test .` **311 pass / 0 fail**（C4 基线 286 + 新增 25）；`claude plugin validate .` 通过（仅既有警告）。
 
+**C5 完成记录（本切片）**
+
+- 新增 `engine/config/blocks/tech.ts`：`TECH_MULTIPLIER_BLOCK`（`id: 'tech:multiplier'`、`kind: 'tech'`、`potential_trigger: []`、`lifecycle: 'once'`、`effects: []`），`scales_with: [{ stat: 'techLevel', curve: { kind: 'linear', slope: 0.07, offset: 1 } }]` 即 `1 + 科技等级 × 0.07`。同一模块导出 `TECH_MULTIPLIER_CURVE`（供 C7 门控复用）与 `TECH_MULTIPLIER_ID`。
+- `engine/internal.ts` 的 `techMultiplier(country)` 由字面量改为 `scaleProduct(country, TECH_MULTIPLIER_BLOCK.scales_with)`——**消费接缝不变**：`engine/economy.ts` 的 `computeProduction` 与 `engine/construction.ts` 的 `constructionCapacity` 仍调用 `techMultiplier`，只是因子来自配置。`1 + level × 0.07` 与 `level × 0.07 + 1` 在 IEEE-754 下加法可交换，**逐位一致**。
+- `types/index.d.ts`：`ScaleSpec.stat` 由 `ModifierStat` 放宽为 `ConditionStat`（`techLevel`/`debtRatio` 等原始读数本就在 `ConditionStat` 中，见 §7），效果入口 `effects[].stat` 仍严格为 `ModifierStat`。
+- 行为保持：`computeProduction` 与 `constructionCapacity` 未改其它算式；`WorldState.version` 未提升。
+- 新增 `tests/tech-multiplier-migration.test.ts`（3 例）：`techMultiplier` 对 0..10 级逐位等于冻结字面量；用**冻结的旧 `computeProduction` 门控副本**（硬编码旧科技字面量）作 oracle，对 2 种子 × 6 月 × 3 国 × tech 1..10 的**全商品产出逐位比对**；另有 drift guard（块曲线、kind、`productionGateCurve('tech')` 形状）。
+
+**C7 完成记录（本切片）**
+
+- **债务压力（`engine/fiscal.ts` 的 `debtPressure`）**：新增 `engine/config/blocks/fiscal.ts` 的 `DEBT_PRESSURE_BLOCK`（`id: 'fiscal:debt-pressure'`、`kind: 'fiscal'`），`scales_with: [{ stat: 'debtRatio', curve: { kind: 'linear', slope: 1, preOffset: 0.25, divisor: 1.75, min: 0, max: 2 } }]` 即 `clamp((debtRatio − 0.25) / 1.75, 0, 2)`；另导出 `DEBT_PRESSURE_COEFFICIENTS`（`income 0.1 / construction 0.2 / legitimacy 5 / interest 0.004`，即每单位 severity 的惩罚）、`DEBT_PRESSURE_BANDS` 与 `debtPressureLabel`。`DEBT_PRESSURE_START`/`DEBT_PRESSURE_FULL` 改由配置定义、`engine/fiscal.ts` 再导出（对外 API 不变）。`debtPressure()` 现读 `scaleProduct(country, DEBT_PRESSURE_BLOCK.scales_with)` 得 severity，再乘以配置系数；四个接缝（收入 `debtCut`、建造 `constructionPenalty`、合法性目标 `legitimacyPenalty`、借债月息 `interestSpread`）**未改**。
+- **配方门控（`engine/data.ts` 的 `RecipeGates`）**：新增 `engine/config/blocks/gates.ts` 的 `PRODUCTION_GATE_SPECS`（4 条）与 `PRODUCTION_GATE_CURVES`：`tech`（复用 `TECH_MULTIPLIER_CURVE`）、`infrastructure` `{ slope: 1, divisor: 160, offset: 0.6 }`、`access` `{ slope: 0.9, offset: 0.55 }`、`industrial` `{ slope: 1, min: 0.7, max: 1.3 }`。三个非 tech 门控另编译为 `GATE_BLOCKS`（`kind: 'economy'`，`id: gate:infrastructure|access|industrial`）入注册表；tech 门控不再复制块，直接用 `tech:multiplier`。`engine/economy.ts` 的 `computeProduction` 把四个字面量换成 `curveOutput(PRODUCTION_GATE_CURVES[id], 输入)`，**逐建筑/逐商品的门控应用不变**：`access`/`infrastructure` 仍先过 `applyModifiers` 再入曲线，`industrial` 仍取 `(coal + iron)/2`，`tech` 仍走 `techMultiplier`。
+- **配置块的曲线扩展（为逐位等价）**：`Curve` 的 `linear` 变体新增可选 `preOffset`/`divisor`，求值 `(x − preOffset) × slope ÷ divisor + offset`。缺失时退化为原 `x × slope + offset`（既有曲线与 C1 测试不变）。这是必需的：`x × slope` 无法逐位复现 `x / 160` 或 `(x − 0.25) / 1.75`（浮点舍入不同，实测约 0.3%–35% 的样本差 1 ULP）。另外把 `RESOURCE_IMPORT_GOOD`/`resourceImportBonus`/`effectiveResources` 抽到叶子模块 `engine/endowment.ts`（`engine/trade.ts` 再导出，导入路径不变），使 `engine/scale.ts` 能读工业禀赋而不引入 `scale → trade → data → modifiers → scale` 的初始化环（曾触发 `GOOD_IDS` TDZ）。
+- 新增 `tests/debt-pressure-migration.test.ts`（3 例）：冻结的旧 `debtPressure` 作 oracle，对 debtRatio 0..3×（含 0.25/2/3.75 边界与 500 个伪随机比值、gdp=0 回退）**逐位**比对 ratio/severity/四个惩罚/label；drift guard 锁定曲线、系数与分档标签。
+- 新增 `tests/recipe-gates-migration.test.ts`（4 例）：四条门控曲线对旧字面量逐位一致；用冻结的旧门控副本作 oracle，对 2 种子 × 4 月 × 3 国 ×（transport 6 档 × access 5 档 × 资源 5 档 × tech 1..10）的**全商品产出逐位比对**；另验证接入/交通修正仍先于曲线生效，以及门控规格/块/曲线表一致。
+- `engine/config/blocks.ts` 的 `BLOCK_REGISTRY` 并入 `TECH_MULTIPLIER_BLOCK` + `DEBT_PRESSURE_BLOCK` + `GATE_BLOCKS`（9 + 4 + 2 + 6 + 3 + 1 + 1 + 3 = **29**）。**未**动 ADR-0004 叠算（`applyModifiers`/`addModifier` 原样）；`WorldState.version` **未**提升（仍为 10）。
+- `claude plugin test .` **321 pass / 0 fail**（C6 基线 311 + 新增 10）；`claude plugin validate .` 通过（仅既有警告）。
+
 ## 5. 验收
 
 - `engine/config/` 与 `engine/data/` 按 §2 就位；`engine/data/index.ts` 为桶文件，`./data` 导入路径不变。
@@ -166,7 +184,7 @@
 - 块在 `v3_inspect` 中的只读展示形态。
 - `duration` 到期移除的编年史日志口径（是否沿用 `tickModifiers` 写法）。
 - `Curve` 的 `steps` 在 `at` 缺失时的默认取值。
-- C7 各项「是否真的块化」，还是仅收敛到 `config/` 模块但不进 `ConfigBlock`。
+- C7 各项「是否真的块化」，还是仅收敛到 `config/` 模块但不进 `ConfigBlock`。（**已定**：`techMultiplier` / `debtPressure` / `RecipeGates` 三项均块化并入 `BLOCK_REGISTRY`，在其既有接缝读曲线；见 C5/C7 完成记录。）
 
 ## 8. 暂缓
 

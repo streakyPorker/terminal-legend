@@ -1,5 +1,7 @@
 import type { Country, GameDate, GoodId, WarGoal } from '../types'
 import { GOOD_IDS, WAR_GOAL_NAMES } from './data'
+import { TECH_MULTIPLIER_BLOCK } from './config/blocks/tech'
+import { scaleProduct } from './scale'
 
 /**
  * Shared internal helpers for the simulation modules. These are the small,
@@ -61,7 +63,8 @@ export function dateDistance(a: GameDate, b: GameDate): number {
   return (a.year - b.year) * 12 + (a.month - b.month)
 }
 
-const techMultiplier = (country: Country): number => 1 + country.tech.level * 0.07
+const techMultiplier = (country: Country): number =>
+  scaleProduct(country, TECH_MULTIPLIER_BLOCK.scales_with)
 
 export { techMultiplier }
 

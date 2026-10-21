@@ -354,6 +354,11 @@ export type ConditionStat =
   | 'navy'
   | 'techLevel'
   | 'factories'
+  /**
+   * C7: the industrial production gate reads the average of the effective
+   * coal/iron endowment multipliers, which is not a single ModifierStat seam.
+   */
+  | 'industrialEndowment'
 
 export type ConditionOp = '>' | '>=' | '<' | '<=' | '==' | '!='
 
@@ -366,7 +371,21 @@ export type Condition = {
 
 /** A scale factor read off a stat, then optionally clamped (ADR 0024 §3). */
 export type Curve =
-  | { kind: 'linear'; slope: number; offset?: number; min?: number; max?: number }
+  | {
+      kind: 'linear'
+      slope: number
+      offset?: number
+      /**
+       * C7: subtract before scaling — `(x − preOffset) × slope ÷ divisor + offset`.
+       * Present so a curve can reproduce a `(x − a) / b` ratio bit-for-bit; a
+       * plain `x × slope` cannot (float rounding differs). Absent = no shift.
+       */
+      preOffset?: number
+      /** C7: divide after scaling — the exact counterpart to `preOffset`. */
+      divisor?: number
+      min?: number
+      max?: number
+    }
   | {
       kind: 'steps'
       points: { at: number; value: number }[]
@@ -375,7 +394,7 @@ export type Curve =
     }
 
 /** One `scales_with` entry; curve outputs multiply together (ADR 0024 §3). */
-export type ScaleSpec = { stat: ModifierStat; curve: Curve }
+export type ScaleSpec = { stat: ConditionStat; curve: Curve }
 
 export type BlockKind =
   | 'threshold'
@@ -385,6 +404,8 @@ export type BlockKind =
   | 'tech'
   | 'war'
   | 'law'
+  | 'economy'
+  | 'fiscal'
 
 /** One effect of a block; its own trigger is ANDed with the block's (ADR 0024 §3). */
 export type EffectSpec = {

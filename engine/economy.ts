@@ -37,6 +37,8 @@ import {
 import { applyModifiers } from './modifiers'
 import { effectiveResources } from './trade'
 import { clamp, ensureConstructionFields, techMultiplier } from './internal'
+import { curveOutput } from './scale'
+import { PRODUCTION_GATE_CURVES } from './config/blocks/gates'
 
 export type EconomySnapshot = {
   production: Record<GoodId, number>
@@ -147,19 +149,22 @@ function computeProduction(country: Country): Record<GoodId, number> {
   ensureConstructionFields(country)
   const tech = techMultiplier(country)
   const marketAccess = applyModifiers(country, 'marketAccess', country.econ.marketAccess)
-  const access = 0.55 + marketAccess * 0.9
+  const access = curveOutput(PRODUCTION_GATE_CURVES.access, marketAccess)
   const transport = applyModifiers(
     country,
     'transportInfrastructure',
     country.econ.transportInfrastructure,
   )
-  const infra = 0.6 + transport / 160
+  const infra = curveOutput(PRODUCTION_GATE_CURVES.infrastructure, transport)
   const b = country.econ.buildings
   const resources = resourceFactors(country)
   // Coal and iron are industrial inputs: a country poor in both runs its
   // factories less efficiently. This is what lets endowments reach GDP, not
   // just raw material output (round-1 playtest finding P1-4).
-  const industrial = clamp((resources.coal + resources.iron) / 2, 0.7, 1.3)
+  const industrial = curveOutput(
+    PRODUCTION_GATE_CURVES.industrial,
+    (resources.coal + resources.iron) / 2,
+  )
   const out = zeroGoods()
   // Scale diminishing returns: capacity grows as count^0.98 (plan 0003 §0.1).
   const cap = (count: number): number => effectiveCount(count)

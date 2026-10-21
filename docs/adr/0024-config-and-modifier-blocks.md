@@ -52,7 +52,7 @@ type ConfigBlock = {
 type Condition = { stat: ModifierStat; op: '>' | '>=' | '<' | '<=' | '==' | '!=' ; value: number }
 type ScaleSpec = { stat: ModifierStat; curve: Curve }
 type Curve =
-  | { kind: 'linear'; slope: number; offset?: number; min?: number; max?: number }
+  | { kind: 'linear'; slope: number; offset?: number; preOffset?: number; divisor?: number; min?: number; max?: number }
   | { kind: 'steps'; points: { at: number; value: number }[]; min?: number; max?: number }
 type EffectSpec = { stat: ModifierStat; stack: ModifierStack; value: number; label?: string; months?: number; potential_trigger?: Condition[] }
 ```
@@ -134,6 +134,8 @@ ADR 0004 的叠算顺序**原样保留**，只是折入本文：
 - 科技乘数 `techMultiplier`（`engine/internal.ts`）。
 - 威望 / 合法性公式。
 - 战争目标的直接效果。
+
+> 落地记录（C5/C7，计划 0009）：前三项**已块化并逐位等价**——`techMultiplier` → `tech:multiplier`（`kind: 'tech'`）；`debtPressure` → `fiscal:debt-pressure`（`kind: 'fiscal'`，曲线读 `debtRatio`，惩罚系数与分档同配置）；`RecipeGates` → `gate:infrastructure/access/industrial`（`kind: 'economy'`）+ 复用 `tech:multiplier`。三项仍是**声明块**（`effects: []`），由引擎在各自既有接缝读其 `scales_with` 曲线，不安装修正。为逐位等价，`Curve` 的 `linear` 变体新增可选 `preOffset`/`divisor`（求值 `(x − preOffset) × slope ÷ divisor + offset`；缺失即原式），并且 `ScaleSpec.stat` 由 `ModifierStat` 放宽为 `ConditionStat`（`techLevel`/`debtRatio` 等是原始读数）。威望/合法性公式与战争目标直接效果仍留待后续。
 
 尚未在本 ADR 定死、需在后续切片中定夺的事项（计划 0009 标为「待定」）：
 

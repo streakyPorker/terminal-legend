@@ -3,13 +3,14 @@ import type {
   Embargo,
   GoodId,
   ResourceId,
-  Resources,
   TradeFlow,
   TradeRoute,
 } from '../types'
 import { GOODS, GOOD_IDS, REGION_COST } from './data'
+import { RESOURCE_IMPORT_GOOD } from './endowment'
 
 export { REGION_COST }
+export { RESOURCE_IMPORT_GOOD, resourceImportBonus, effectiveResources } from './endowment'
 
 /** How many candidate exporters one importer may draw on per good (plan §2.2). */
 export const TOP_PARTNERS = 6
@@ -618,14 +619,6 @@ export function settleTrade(
   }
 }
 
-/** Which resource each imported good feeds; farmland has no imported good. */
-export const RESOURCE_IMPORT_GOOD: Record<ResourceId, GoodId | undefined> = {
-  farmland: undefined,
-  timber: 'wood',
-  coal: 'coal',
-  iron: 'iron',
-}
-
 /** Imported amount per resource this month, from the final flow list (plan §2.6). */
 export function deriveResourceImports(
   flows: TradeFlow[],
@@ -644,29 +637,3 @@ export function deriveResourceImports(
   return out
 }
 
-/**
- * Effective endowment bonus from imports (plan §2.6): the import share of
- * available supply, scaled and capped at +15 points. Derived only — it never
- * writes back into `econ.resources`.
- */
-export function resourceImportBonus(imports: number, domesticProduction: number): number {
-  const share = imports / Math.max(1, domesticProduction + imports)
-  return Math.min(15, Math.max(0, share * 20))
-}
-
-/** Effective endowments after last month's imports; the base array is untouched. */
-export function effectiveResources(country: Country): Resources {
-  const out: Resources = { ...country.econ.resources }
-  for (const [resource, good] of Object.entries(RESOURCE_IMPORT_GOOD) as [
-    ResourceId,
-    GoodId | undefined,
-  ][]) {
-    if (good === undefined) continue
-    const bonus = resourceImportBonus(
-      country.econ.resourceImports[resource] ?? 0,
-      country.econ.goods[good] ?? 0,
-    )
-    out[resource] = Math.min(100, Math.max(0, out[resource] + bonus))
-  }
-  return out
-}

@@ -1,5 +1,15 @@
 import type { Country, TaxBaseId } from '../types'
 import { applyModifiers } from './modifiers'
+import {
+  DEBT_PRESSURE_BLOCK,
+  DEBT_PRESSURE_COEFFICIENTS,
+  DEBT_PRESSURE_FULL,
+  DEBT_PRESSURE_START,
+  debtPressureLabel,
+} from './config/blocks/fiscal'
+import { scaleProduct } from './scale'
+
+export { DEBT_PRESSURE_FULL, DEBT_PRESSURE_START }
 
 /**
  * The treasury's monthly cash account, split by source and by category.
@@ -26,10 +36,11 @@ export const nationalDebt = (country: Country): number =>
  * state borrows at the base rate with no extra penalty; above it, income,
  * construction speed, legitimacy and the borrowing rate deteriorate
  * continuously until the 3× GDP restructuring floor (plan 0007 / ADR 0007).
+ *
+ * The severity factor is block data (C7): `scales_with` reads `debtRatio`
+ * through the `fiscal:debt-pressure` curve, and the four penalty coefficients
+ * and display bands are declared alongside it.
  */
-export const DEBT_PRESSURE_START = 0.25
-export const DEBT_PRESSURE_FULL = 2
-
 export type DebtPressure = {
   /** National debt ÷ GDP. */
   ratio: number
@@ -47,32 +58,16 @@ export type DebtPressure = {
 }
 
 export function debtPressure(country: Country): DebtPressure {
-  const debt = nationalDebt(country)
-  const gdp = Math.max(1, country.econ.gdp)
-  const ratio = debt / gdp
-  const severity = clamp(
-    (ratio - DEBT_PRESSURE_START) / (DEBT_PRESSURE_FULL - DEBT_PRESSURE_START),
-    0,
-    2,
-  )
-  const label =
-    ratio < DEBT_PRESSURE_START
-      ? '无'
-      : ratio < 0.5
-        ? '轻度'
-        : ratio < 1
-          ? '中度'
-          : ratio < DEBT_PRESSURE_FULL
-            ? '重度'
-            : '危重'
+  const ratio = nationalDebt(country) / Math.max(1, country.econ.gdp)
+  const severity = scaleProduct(country, DEBT_PRESSURE_BLOCK.scales_with)
   return {
     ratio,
     severity,
-    incomePenalty: 0.1 * severity,
-    constructionPenalty: 0.2 * severity,
-    legitimacyPenalty: 5 * severity,
-    interestSpread: 0.004 * severity,
-    label,
+    incomePenalty: DEBT_PRESSURE_COEFFICIENTS.income * severity,
+    constructionPenalty: DEBT_PRESSURE_COEFFICIENTS.construction * severity,
+    legitimacyPenalty: DEBT_PRESSURE_COEFFICIENTS.legitimacy * severity,
+    interestSpread: DEBT_PRESSURE_COEFFICIENTS.interest * severity,
+    label: debtPressureLabel(ratio),
   }
 }
 

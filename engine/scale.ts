@@ -7,6 +7,8 @@ import type {
   ScaleSpec,
 } from '../types'
 import { findBlock } from './config/blocks'
+import { resourceMultiplier } from './data'
+import { effectiveResources } from './endowment'
 
 /**
  * Leaf module for the block engine's read path: curve evaluation, the shared
@@ -56,6 +58,18 @@ export function readStatValue(country: Country, stat: ConditionStat): number {
       return country.econ.income
     case 'expense':
       return country.econ.expense
+    case 'marketAccess':
+      return country.econ.marketAccess
+    case 'transportInfrastructure':
+      return country.econ.transportInfrastructure
+    case 'industrialEndowment': {
+      const endowment = effectiveResources(country)
+      return (
+        (resourceMultiplier(endowment, 'coal') +
+          resourceMultiplier(endowment, 'iron')) /
+        2
+      )
+    }
     default:
       return 0
   }
@@ -82,6 +96,9 @@ export const READABLE_STATS: ReadonlySet<ConditionStat> = new Set<ConditionStat>
   'prestige',
   'income',
   'expense',
+  'marketAccess',
+  'transportInfrastructure',
+  'industrialEndowment',
 ])
 
 function clampCurve(value: number, curve: { min?: number; max?: number }): number {
@@ -92,13 +109,17 @@ function clampCurve(value: number, curve: { min?: number; max?: number }): numbe
 }
 
 /**
- * Evaluates one curve at `x`. `linear` = x·slope + offset; `steps` = the value
- * of the last point whose `at` ≤ x (0 before the first point, a 0009 §7 待定).
- * The optional `min`/`max` clamp the output.
+ * Evaluates one curve at `x`. `linear` = `(x − preOffset) × slope ÷ divisor + offset`
+ * (`preOffset`/`divisor` optional; absent means `x × slope + offset`); `steps` =
+ * the value of the last point whose `at` ≤ x (0 before the first point, a 0009 §7
+ * 待定). The optional `min`/`max` clamp the output.
  */
 export function curveOutput(curve: Curve, x: number): number {
   if (curve.kind === 'linear') {
-    return clampCurve(x * curve.slope + (curve.offset ?? 0), curve)
+    const shifted = curve.preOffset === undefined ? x : x - curve.preOffset
+    let value = shifted * curve.slope
+    if (curve.divisor !== undefined) value /= curve.divisor
+    return clampCurve(value + (curve.offset ?? 0), curve)
   }
   let value = 0
   for (const point of curve.points) {

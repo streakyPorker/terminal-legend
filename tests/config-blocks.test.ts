@@ -22,6 +22,9 @@ import { EVENT_BLOCKS } from '../engine/config/blocks/events'
 import { SITUATION_BLOCKS } from '../engine/config/blocks/situations'
 import { LAW_BLOCKS } from '../engine/config/blocks/laws'
 import { WAR_BLOCKS } from '../engine/config/blocks/war'
+import { TECH_MULTIPLIER_BLOCK } from '../engine/config/blocks/tech'
+import { DEBT_PRESSURE_BLOCK } from '../engine/config/blocks/fiscal'
+import { GATE_BLOCKS } from '../engine/config/blocks/gates'
 import { evaluateThresholds } from '../engine/thresholds'
 import { addModifier, applyModifiers, tickModifiers } from '../engine/modifiers'
 import { makeRngForWorld } from '../engine/data'
@@ -408,25 +411,33 @@ describe('scales_with curves and the consume seam (engine/scale.ts)', () => {
 })
 
 describe('config invariants (ADR 0024 §11)', () => {
-  test('the shipped registry is valid with the threshold + event + situation + law + war blocks', () => {
+  test('the shipped registry is valid with all domain blocks (incl. C5/C7)', () => {
     expect(validateBlockConfig(BLOCK_REGISTRY)).toEqual([])
     expect(THRESHOLD_BLOCKS.length).toBe(9)
     expect(EVENT_BLOCKS.length).toBe(4)
     expect(SITUATION_BLOCKS.length).toBe(2)
     expect(LAW_BLOCKS.length).toBe(6)
     expect(WAR_BLOCKS.length).toBe(3)
+    expect(GATE_BLOCKS.length).toBe(3)
     expect(BLOCK_REGISTRY.length).toBe(
       THRESHOLD_BLOCKS.length +
         EVENT_BLOCKS.length +
         SITUATION_BLOCKS.length +
         LAW_BLOCKS.length +
-        WAR_BLOCKS.length,
+        WAR_BLOCKS.length +
+        2 +
+        GATE_BLOCKS.length,
     )
     expect(findBlock('threshold:stability')?.kind).toBe('threshold')
     expect(findBlock('event:harvest:celebrate')?.kind).toBe('event')
     expect(findBlock('situation:compromise:QING:access')?.kind).toBe('situation')
     expect(findBlock('law:教育改革')?.kind).toBe('law')
     expect(findBlock('war:openMarket:loser:access')?.kind).toBe('war')
+    expect(findBlock(TECH_MULTIPLIER_BLOCK.id)?.kind).toBe('tech')
+    expect(findBlock(DEBT_PRESSURE_BLOCK.id)?.kind).toBe('fiscal')
+    expect(findBlock('gate:infrastructure')?.kind).toBe('economy')
+    expect(findBlock('gate:access')?.kind).toBe('economy')
+    expect(findBlock('gate:industrial')?.kind).toBe('economy')
   })
 
   test('validation rejects duplicates, bad stats, unordered steps and bare duration', () => {
