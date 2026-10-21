@@ -1,6 +1,6 @@
 # config + 修正块 重构（配置分层与统一乘数机制）
 
-- Status: proposed
+- Status: C1–C7 修正块迁移、D1 字面量抽取、D2 `engine/data.ts` 拆桶**均已完成**；仅可选 D3 域内常量归位未做（行为零改动，World 仍 v11）
 - Depends on: ADR 0024（配置分层与修正块，取代 ADR 0004）、ADR 0002/0003（政策数值与边界）、ADR 0021（配方单一真源）、ADR 0022（利用率）、ADR 0023（四税基）、`0008-economy-remake.md`
 - Scope: 把散落在各 `engine/*.ts` 的可调数值收进 `engine/config/`，把按域业务数据收进 `engine/data/`，并给所有乘数机制一个统一的 `ConfigBlock` 声明格式。**只做结构与契约迁移**；第一刀行为保持，不升 `WorldState.version`。
 - 来源：本轮 grilling 会话已定的 12 条决定（见 ADR 0024）。

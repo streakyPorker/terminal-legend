@@ -1,6 +1,6 @@
 # 代码拆分计划（code splits）
 
-- Status: proposed（大 feature 后维护性重构，按 `CLAUDE.md` 的「文件膨胀与拆分」约定）
+- Status: done（S1–S6 全落地：`hooks/register.tsx`、`engine/data.ts`、`view/panels.tsx`、`engine/actions.ts`、`engine/inspect.ts` 拆桶，测试按关注点分文件；行为零改动、桶重导出，388 测试 / 41 文件）
 - Depends on: ADR 0005（不做存档兼容）、`docs/plans/0009-config-refactor.md`（配置分层）、ADR 0024
 - 原则: **行为零改动**；拆分**保留桶文件重导出**，既有 import 路径不变；**单独提交**，跑全量测试 + 校验。阈值：**~600 行软警、~900 行硬拆**。
 
@@ -13,8 +13,8 @@
 | `view/panels.tsx` | 1594 | 十余个面板 + Band + Report 同文件 |
 | `engine/actions.ts` | 945 | `applyDecision` 全家桶 + policy + randomDecision |
 | `engine/inspect.ts` | 729 | 16 个 inspect 分区同文件 |
-| `tests/first-slice.test.ts` | 916 | 承担多个关注点 |
-| `tests/economic-loop.test.ts` | 844 | 同上 |
+| `tests/first-slice-*.test.ts` | 916（拆分前为单文件） | 承担多个关注点 |
+| `tests/economic-loop-*.test.ts` | 844（拆分前为单文件） | 同上 |
 | `engine/trade.ts` 639 / `construction.ts` 644 / `economy.ts` 620 / `liveEvents.ts` 593 | ~600 | 软警，观察 |
 
 ## 1. 拆分目标（每项 = 一个独立提交）
@@ -57,12 +57,12 @@
 - 完成后：`claude plugin test .` 388 pass / 0 fail，`validate` 通过（警告与拆分前一致）；16 个 section 函数 + `forecastWorld` + `inspectWorld` + 8 个 `shared` 助手经规范化 diff 与旧文件逐字节一致，World 仍 v11，行为零改动。最大文件 `index.ts` 121 行（远低于 600 软警）。
 
 ### S6 ✅ 测试拆分
-- `tests/first-slice.test.ts`（930）→ 4 个按关注点分文件，原文件删除：
+- `tests/first-slice-*.test.ts`（拆分前为单文件 930 行）→ 4 个按关注点分文件，原文件删除：
   - `first-slice-data.test.ts` — M1 类型 / 数据 / 存档迁移（5 用例）。
   - `first-slice-engine.test.ts` — M2 建造队列与经济、M3 简报、M4/M5 中断判定、M6 天命动作等纯引擎用例（16 用例）。
   - `first-slice-modifiers.test.ts` — buff/debuff 叠算、政策 / 阈值 / 事件修正来源、存量/流量语义（10 用例）。
   - `first-slice-commands.test.ts` — M3 秘书、M4/M5 托管、M6 铁人与 `v3_manual` 的命令/hook 面用例（9 用例），并携带 `setupSurface` / `startCampaign` 脚手架。
-- `tests/economic-loop.test.ts`（856）→ 4 个按关注点分文件，原文件删除：
+- `tests/economic-loop-*.test.ts`（拆分前为单文件 856 行）→ 4 个按关注点分文件，原文件删除：
   - `economic-loop-gdp.test.ts` — 支出法 GDP / Stone-Geary / 要素份额 + 需求冲击回路（5 用例）。
   - `economic-loop-investment.test.ts` — 私人资本、私人项目节奏与投资评分（4 用例）。
   - `economic-loop-resources.test.ts` — 资源禀赋与 0.7–1.3 乘数带（2 用例）。

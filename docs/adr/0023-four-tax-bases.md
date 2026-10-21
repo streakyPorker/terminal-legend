@@ -83,4 +83,4 @@
 
 - 新增 `tests/tax-bases.test.ts`：土地税基 = farmland × 常数；企业税基 = 逐建筑正利润之和（保留逐类贡献）；消费税基只用最终消费（抬高中间品需求不改变它）；内部税基税额 = 税基量 × 税率 × 征收效率 × 合规；改动单一税率只改该基税额；关税税额 = 既有 duty。
 - `tests/fiscal.test.ts` 的「税是 GDP 份额」断言按设计失效，迁移为「税来自四真实税基、与 GDP 无关」。
-- `tests/economic-loop.test.ts` 的「高税侵蚀税基」改为逐基（profit 40% vs 60%）。
+- `tests/economic-loop-*.test.ts` 的「高税侵蚀税基」改为逐基（profit 40% vs 60%）。

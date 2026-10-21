@@ -65,7 +65,7 @@ type TradeRoute = {
 | `ROUTE_SEED_PER_PAIR` | 3 | 开局每个（进口国, 商品）种子航线数 |
 
 `ROUTE_UNIT_VOLUME` 从 6 下调到 2：更大的容量会显著扰动 120 个月私人投资节奏基线
-（`tests/economic-loop.test.ts` 的零投资窗口上限）。容量小、随等级自增，反而让航线在
+（`tests/economic-loop-*.test.ts` 的零投资窗口上限）。容量小、随等级自增，反而让航线在
 “能填满容量”处自平衡。
 
 ### 成长 / 衰退（每月结算后一次，确定性，无 RNG）
@@ -104,6 +104,6 @@ type TradeRoute = {
 
 - 航线会“锁定”初始配对，比纯现货市场略欠效率；这是设计意图（贸易关系有粘性）。
 - 小额商品（奢侈品、机械等）常因填不满容量而衰退、退回现货；只有能自平衡的航线留存。
-- `tests/economic-loop.test.ts` 的私人投资节奏对贸易结构极敏感，`ROUTE_UNIT_VOLUME` 与
+- `tests/economic-loop-*.test.ts` 的私人投资节奏对贸易结构极敏感，`ROUTE_UNIT_VOLUME` 与
   种子数因此被刻意压低；若未来放宽，必须同时重跑 120 个月基线。
 - 航线流与现货流并存，Monthly clearing 的流量条数增加，但仍在可控范围内（10 国规模）。

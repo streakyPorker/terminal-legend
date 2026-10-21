@@ -70,7 +70,7 @@ SHRINK_MAX = 0.02        // 每月额外折旧上限（叠加后最坏每月 −
   计划 §4.1 的 ≥2 单位/月门槛，并连带打掉 PT-003 的机械贸易链路。因此本 ADR 采用
   「利润门槛绑定 + 短缺信号分配」：**只建盈利产能**（B3 的核心），同时保住比较优势与
   贸易结构。纯利润率的再平衡属于 B5。
-- `investmentScore` 因此**保留导出、语义不变**（`tests/economic-loop.test.ts` 的
+- `investmentScore` 因此**保留导出、语义不变**（`tests/economic-loop-*.test.ts` 的
   短缺/过剩断言不动），并被重新定位为「盈利类目之间的分配器」。
 - `BUILDING_OUTPUT` 仍是 `investmentScore` 的输入，**不退役**（与 ADR 0021 的预告不同），
   原因同上。

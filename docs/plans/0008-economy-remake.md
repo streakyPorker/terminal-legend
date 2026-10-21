@@ -199,7 +199,7 @@ export const WAGE_ALLOCATION: {
 | **B4（税基）** ✅ | 移除 `taxRate`，加 `taxes`；重写 `incomeParts`；`v3_action tax`；fiscal/sim/thresholds/inspect | fiscal.test「税是 GDP 份额」、经济循环高税侵蚀 |
 | **B5（再校准）** ✅ | 调配方系数与 `WAGE_ALLOCATION`；加校准测试；收敛 PT-002/PT-001 | economy-calibration、trade 基线 |
 | **B5-r2（消费品双向）** ✅ | 纺织厂转做布料、家具厂/酿酒厂配方 ×0.45、消费品需求侧重定；成衣/酒/家具并入双向 gate | 无（数值，行为重校准；鸦片门保持） |
-| **B6（文档）** | 🔧 ADR 0021–0023、README/GLOSSARY、`gm-handbook.md`、playtest 状态更新（**本次进行中**） | — |
+| **B6（文档）** ✅ | ADR 0021–0023、README/GLOSSARY、`gm-handbook.md`、playtest 状态更新（随 B5-r2 一并完成） | — |
 
 - **进度**：B1+B2+B3 已实现（ADR 0021、ADR 0022，World v9）。`BUILDING_RECIPES` 为产出与中间投入的单一真源，
   逐建筑 `buildingProfits` 快照入 `Economy` 与 `v3_inspect economy`。B3 把快照接进决策：

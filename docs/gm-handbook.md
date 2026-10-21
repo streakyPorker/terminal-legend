@@ -4,7 +4,9 @@
 与操作都通过 MCP 工具完成。这一份文档就是你的唯一机制参考，遇到「为什么变了」先翻它，
 再按指向调用 `v3_inspect`。
 
-> 世界版本：**v11**（建筑配方、利用率/利润驱动投资、**四税基**与**铁矿石/钢铁**拆分均已落地，ADR 0021/0022/0023/0026）。
+> 世界版本：**v11**（**22 类建筑**、建筑配方与利用率/利润驱动投资、**四税基**、**铁矿石/钢铁**拆分、
+> **统一基础设施**、建筑 `unlock` 前向字段均已落地，ADR 0021/0022/0023/0026；另有 **16 个 `v3_inspect`
+> 分区 + `v3_forecast` + `v3_manual`**、**逐回合实时事件 E1**（ADR 0025）。
 > 数值口径以工具返回为准，本手册只解释**为什么**，不复述**是多少**。
 
 ---
@@ -33,7 +35,7 @@
 - **天命（`v3_cheat`）**：金钱/科技点/建筑/关系/战争分数/日期/事件/领袖/修正，
   铁人模式拒绝。使用它会记入编年史。
 
-来源：ADR 0001、README「月度御前会议」、`hooks/register.tsx`（advance / interrupt）。
+来源：ADR 0001、README「月度御前会议」、`hooks/`（`register.tsx` 入口、`council.ts` 的 advance / interrupt）。
 
 ## 3. 工具速查表
 
@@ -78,7 +80,7 @@
 | `log` | 最近编年史；可用 `kind`（日志类型）与 `country`（国家 id）过滤，`limit` 控制条数 |
 | `history` | 最近 12 个月 GDP/C/I/G/失业/收入/支出/关税/国债 序列 |
 
-来源：`engine/inspect.ts`、ADR 0016、`hooks/register.tsx` 的 `v3_inspect` 工具规格。
+来源：`engine/inspect/`（`index.ts` 调度 + 16 个分区模块）、ADR 0016、`hooks/tools.ts` 的 `v3_inspect` 工具规格。
 
 ### `v3_action` 的动作与参数
 
@@ -94,7 +96,7 @@
 | `law` | `name` | 无 | 教育改革 / 福利改革 / 自由贸易 / 保护关税 / 征兵制 / 宗教宽容 |
 | `route` | `op`、`good`、`partner` | `op`∈ open/raise/lower/close | 贸易航线：开通/提升/降低/关闭 |
 
-来源：`hooks/register.tsx` 的 `v3_action` 工具规格、`engine/sim.ts` 的 `applyDecision`。
+来源：`hooks/tools.ts` 的 `v3_action` 工具规格、`engine/actions/decision.ts` 的 `applyDecision`。
 
 ## 4. 经济
 
@@ -107,7 +109,7 @@
   GDP 是产出。对比两者时说明这一点。
 - 每个最终用途块按「需求对有效供给」的满足比例填充，未满足的订单**压低** GDP 而不是吹高。
 
-来源：README「支出法经济循环」、`engine/sim.ts` `computeEconomy`、GLOSSARY「支出法 GDP」。
+来源：README「支出法经济循环」、`engine/economy.ts` `computeEconomy`、GLOSSARY「支出法 GDP」。
 
 ### 4.2 商品与物价
 
@@ -130,25 +132,25 @@
 - **硬上下限**：`0.25 × basePrice` 与 `4 × basePrice`。
 - `v3_inspect economy/market` 用 `↑`（价高于基价 5%）、`↓`（低于 5%）、`·` 标记盈亏。
 
-来源：`engine/data.ts` `GOODS`、`engine/sim.ts` 价格步进。
+来源：`engine/data/goods.ts` `GOODS`、`engine/economy.ts` 价格步进。
 
 ### 4.3 建筑配方（单一真源，ADR 0021）
 
-`engine/data.ts` 的 `BUILDING_RECIPES` 是**产出与中间投入的唯一来源**；`computeProduction`
+`engine/data/buildings.ts` 的 `BUILDING_RECIPES` 是**产出与中间投入的唯一来源**；`computeProduction`
 只读该表。22 类建筑每座每月：
 
 | 建筑 | output（每座/月） | input（每座/月） | labor | 门控 |
 | --- | --- | --- | ---: | --- |
-| 农场 `farms` | grain 0.30、wood 0.04、opium 0.004 | 无 | 0.3 | tech + infra + access（wood 除外） |
+| 农场 `farms` | grain 0.30、wood 0.04、opium 0.004 | 无 | 0.3 | tech + access（wood 除外） |
 | 煤矿 `coalMines` | coal 0.96 | 无 | 0.6 | tech |
 | 铁矿 `ironMines` | iron 0.96 | 无 | 0.6 | tech |
 | 伐木场 `lumberMills` | wood 0.96 | 无 | 0.4 | tech |
-| 纺织厂 `textileMills` | fabric 1.45、clothes 0.68 | grain 1.0、coal 0.18、wood 0.1、machinery 0.18 | 0.9 | tech + industrial |
-| 家具厂 `furnitureWorks` | furniture 1.54 | wood 0.06、coal 0.1、fabric 0.7、**steel 0.18**、machinery 0.1 | 0.7 | tech + industrial |
-| 酿酒厂 `distilleries` | liquor 1.9 | grain 1.35、coal 0.2、wood 0.11、machinery 0.19 | 0.6 | tech + industrial（liquor 仅 industrial） |
+| 纺织厂 `textileMills` | fabric 2.0、clothes 0.2 | grain 1.0、coal 0.18、wood 0.1、machinery 0.18 | 0.9 | tech + industrial |
+| 家具厂 `furnitureWorks` | furniture 0.693 | wood 0.027、coal 0.045、fabric 0.315、**steel 0.081**、machinery 0.045 | 0.7 | tech + industrial |
+| 酿酒厂 `distilleries` | liquor 0.855 | grain 0.6075、coal 0.09、wood 0.0495、machinery 0.0855 | 0.6 | tech + industrial（liquor 仅 industrial） |
 | 机械厂 `machineryWorks` | machinery 0.8 | **steel 0.55**、coal 0.2、wood 0.1、machinery 0.18 | 1.0 | tech + industrial |
 | 钢铁厂 `steelMills` | **steel 4.0** | **iron(铁矿石) 3.2**、coal 1.0、machinery 0.1 | 1.0 | tech + industrial |
-| 兵工厂 `arsenals` | arms 0.9 | **steel 0.36**、machinery 0.18、coal 0.12、iron 0.18 | 0.9 | tech + industrial |
+| 兵工厂 `arsenals` | arms 1.0 | **steel 0.36**、machinery 0.18、coal 0.12、iron 0.18 | 0.9 | tech + industrial |
 | 奢侈品厂 `luxuryWorks` | luxury 0.48 | fabric 1.5、coal 0.26、wood 0.14、machinery 0.24 | 0.8 | tech + industrial |
 | 学校 `schools` | services 0.1 | 无 | 0.15 | access |
 | 运河 `canals` | 无 | wood 0.05 | 0.3 | 无 |
@@ -160,7 +162,7 @@
 | 大学 `universities` | services 0.2 | 无 | 0.2 | 无 |
 | 兵营 `barracks` | arms 0.05 | 无 | 0.3 | 无 |
 | 官署 `offices` | services 0.8 | 无 | 0.1 | 无 |
-| 营造所 `workshops` | 无（产出建造点，`sim.ts` 特判） | wood 1、grain 0.6、iron 0.3 | 0 | 无 |
+| 营造所 `workshops` | 无（产出建造点，`engine/economy.ts` 特判） | wood 1、grain 0.6、iron 0.3 | 0 | 无 |
 
 - **门控乘数**：tech `1 + 等级 × 0.07`；access `0.55 + 市场接入 × 0.9`；industrial 为煤铁禀赋因子
   （0.7~1.3）。旧的逐配方 infrastructure 门控（`0.6 + 交通 / 160`）**已退役**，由 F5 的统一基础设施
@@ -169,9 +171,9 @@
 - 除逐建筑配方外，还有**国家级**项留在引擎里（手工业者产出、总人口服务项、鸦片国家
   `outputFactor`、工业城镇的煤(1.2)/铁矿石(0.6)/钢铁(0.2)/布(0.5)/木(0.3)消费，按 `popFactor`）。
   它们是历史口径，不随配方变动。
-- **F1 铁矿石/钢铁拆分（World v11）**：`iron` 转为**铁矿石**（只作工厂炼钢的投入），新增
-  **`steel`**；铁路、建设投资（`INVESTMENT_DEMAND`）、政府建设改吃钢铁，营造所**运行**投入仍为
-  铁矿石（plan 0011 §9 待定，F2 再定）。工厂在参考点的加权**聚合毛利仍在 5–20% 带内**。
+- **F1 铁矿石/钢铁拆分（World v11）**：`iron` 转为**铁矿石**（只作 **钢铁厂 `steelMills`** 炼钢的投入），
+  新增 **`steel`**；铁路、建设投资（`INVESTMENT_DEMAND`）、政府建设改吃钢铁，营造所**运行**投入仍为
+  铁矿石（plan 0011 §9/§7.8 已定：保持铁矿石）。工厂在参考点的加权**聚合毛利仍在 5–20% 带内**。
 - **F2 矿场三拆（World v11）**：打包的 `mines` 拆成 **`coalMines`（煤）/`ironMines`（铁矿石）/
   `lumberMills`（木材）**三个单产建筑，各产 0.96、用工 0.6/0.6/0.4、仅 tech 门控。种子按旧
   产出比例（煤 0.5 : 铁 0.42 : 木 0.04）拆座数，**总采掘座数守恒**（512→512），故世界煤/铁/木
@@ -209,6 +211,9 @@
   - **数值（F7 已校准）**：1836 基线（种子 9100）十国 ratio 全部 ≥1（1.10–2.30），**不预触发**；
     工业化推进而基建不扩建时 debuff 显现——84 月 QING 0.87、PRU 0.54、RUS 0.66、AUS 0.51 触发，
     其余供过于求无罚；最低不低于 0.5（未触地板）。
+- **F6 建筑解锁字段（World v11，plan 0011 §7.7）**：`BuildingDef` 新增可选 `unlock?: { techLevel?: number }`，
+  `build` 动作在该国科技等级低于阈值时**拒绝**建造。**当前 22 类建筑全部缺省**（无阈值、永远可建），
+  该字段是 **plan 0005（科技树）** 的前向占位；`v3_inspect buildings` 仅在建筑设阈值时才显示「需科技等级 N」。
 - **F7 数值校准（World v11，plan 0011 §7.8）**：一次 numbers-only 的分批校准，不改公式/结构。
   - **配方**：把 F3「投入守恒」留下的、产出价值几乎等于投入的家具厂/兵工厂改成可盈利（家具厂砍
     材料单、兵工厂提产出/砍投入），钢铁厂改为**低机械、高煤**的投入组合以耐受机械涨价，奢侈品厂
@@ -234,17 +239,18 @@
   无 bid）——这是唯一按设计非双向的商品，`tests/economy-recipe-calibration.test.ts` 有生产下限断言。
   GM 可以在世界市场上买卖成衣/酒/家具，也可以买卖粮食/木材/煤/铁/布/机械等原料与中间品；军械需自建兵工厂。
 
-来源：ADR 0021、`engine/data.ts` `BUILDING_RECIPES`、`engine/sim.ts` `computeDemand`。
+来源：ADR 0021、`engine/data/buildings.ts` `BUILDING_RECIPES`、`engine/economy.ts` `computeDemand`。
 
 ### 4.4 逐建筑经营利润 `buildingProfits`
 
 - 每月按类计算快照：**利润 = 产出价值 − 中间投入价值 − 分摊工资**。
-- **工资分摊可配置（plan 0008 B5）**：全国工资如何摊到各建筑类型由 `engine/data.ts` 的
+- **工资分摊可配置（plan 0008 B5）**：全国工资如何摊到各建筑类型由 `engine/data/buildings.ts` 的
   `WAGE_ALLOCATION = { basis, weights? }` 决定。`basis` 取：
   `'labor'`（按 `用工 × 座数`，旧口径）| `'valueAdded'`（按 `max(0, 产出价值 − 中间投入)`，
   **当前值**）| `'capitalPlusLabor'`（按 `用工 + 建造成本 × 0.25`）。`weights?` 可再按类型乘系数
   （当前未用）。三种 basis 都**精确**满足 `Σ buildingProfits.wages === 全国 wages`。
-  （plan 0009 将把该常量迁到 `engine/config/economy.ts`；默认 `'valueAdded'`。）
+  （plan 0009 D1 只抽了 `engine/*.ts` 的散落字面量，**未**搬 data 侧业务系数，故此常量仍在
+  `engine/data/buildings.ts`；默认 `'valueAdded'`。）
 - 单位：`profitPerBuilding`（金/座）、毛利率 `profit / revenue`。
 - **自 B3（ADR 0022）起它已驱动决策**：
   - 产出按**上月**存储的 `utilization` 门控（亏损类目闲置，下界 0.5，一阶平滑 0.25）；
@@ -254,7 +260,7 @@
   不是同一个量；通常更大，仅供判断「这类建筑按现价赚不赚钱」。
 - 查看：`v3_inspect buildings` 的逐建筑行（含「开工率 %」「闲置」标记）。
 
-来源：ADR 0021、ADR 0022、`engine/data.ts`（`WAGE_ALLOCATION`）、`engine/inspect.ts` `economySection`。
+来源：ADR 0021、ADR 0022、`engine/data/buildings.ts`（`WAGE_ALLOCATION`）、`engine/economy.ts`（利润快照）、`engine/inspect/economy.ts`（展示）。
 
 ### 4.5 消费、工资与利润、私人资本
 
@@ -269,8 +275,8 @@
 - **投资信心**：影响储蓄率与私人投资意愿的百分比偏移；AI 每月可在**基准上下 10 点**内调整，
   单月变动**±3**；政策与天命也可修正。
 
-来源：`docs/plans/0003-economic-loop.md`、`engine/data.ts`（`SUBSISTENCE`/`INCOME_ELASTICITY`/
-`CONSUMPTION_PROPENSITY`）、`engine/sim.ts`、GLOSSARY（私人资本/私人外债/投资信心）。
+来源：`docs/plans/0003-economic-loop.md`、`engine/data/goods.ts`（`SUBSISTENCE`/`INCOME_ELASTICITY`/
+`CONSUMPTION_PROPENSITY`）、`engine/economy.ts`、GLOSSARY（私人资本/私人外债/投资信心）。
 
 ### 4.6 建造能力
 
@@ -288,8 +294,8 @@
 每座每月的建造点需求（`CAPACITY_COST`）：营造所/港口 1.5、农场 0.5、煤矿/铁矿/兵营/官署 1、
 伐木场 0.8、纺织/军械/奢侈 2、家具/酿酒 1.5、机械/钢铁 2.5、大学 2、铁路 4。
 
-来源：ADR 0010/0012/0013/0015、README「建造能力」、`engine/sim.ts`（`CAPACITY_COST`/
-`WORKLOAD_MULTIPLIER=30`/`CONSTRUCTION_COST_PER_POINT=0.2`/`CONSTRUCTION_RENT_PER_POINT=0.3`）。
+来源：ADR 0010/0012/0013/0015、README「建造能力」、`engine/config/construction.ts`（`CAPACITY_COST`/
+`WORKLOAD_MULTIPLIER=30`/`CONSTRUCTION_COST_PER_POINT=0.2`/`CONSTRUCTION_RENT_PER_POINT=0.3`；经 `engine/construction.ts` 重导出）。
 
 ### 4.7 税制（四税基，ADR 0023）
 
@@ -385,8 +391,8 @@ GLOSSARY（航线/到岸成本/软容量/禁运）。
   受**官署**抬高上限；决定每月行动预算、资金效率、工期延迟与信息失真。
 - **行政能力**：由官署、识字与税制构成，进入官僚效能的原始分。
 
-来源：`engine/data.ts`（`deriveUnemployment`/`deriveLabor`/`deriveBureaucracy`/`administrativeCapacityFor`）、
-`engine/inspect.ts` `laborSection`、GLOSSARY（官僚效能/行政能力/官署）。
+来源：`engine/data/derivations.ts`（`deriveUnemployment`/`deriveLabor`/`deriveBureaucracy`/`administrativeCapacityFor`）、
+`engine/inspect/labor.ts` `laborSection`、GLOSSARY（官僚效能/行政能力/官署）。
 
 ## 8. 科技 / 军事 / 外交 / 事件
 
@@ -436,8 +442,24 @@ GLOSSARY（航线/到岸成本/软容量/禁运）。
   人口、科技点与双边关系。
 - **饥荒触发条件**（ADR 0019）：生活水平 < 45 **且** 粮价 ≥ 基准 × 1.05；粮食过剩时不再触发。
 
-来源：ADR 0018/0019、`engine/data.ts`（`TECHS`/`EVENT_TEMPLATES`）、`engine/sim.ts`（研究率/war goal）、
-`docs/plans/0004-trade-diplomacy.md` §4/§5、`hooks/register.tsx`。
+### 实时事件（逐回合，E1，ADR 0025 / plan 0010）
+
+- **缝合点**：每次 `v3_advance` 之后、御前会议呈现之前，世界先被扫描出**显著题材**，再由 LLM 现场生成
+  **0 至 2 个**可交互事件，写进 `world.events`（与随机事件同一数组、同一结算路径）；读档**不重新生成**。
+- **显著题材**：引擎按**经济 / 政治 / 外交 / 民生**四维扫描，各取一个最强信号，按显著性排序取
+  1 至 2 个作为种子交给 LLM；旧的 10 个随机事件模板**降级为「题材方向」目录**（只提示往哪个方向写）。
+- **三视角旁白**：史官（朝廷编年）/ 市井（街头百姓）/ 列国舆论（他国观感）**只作为提示词引导**，不设硬结构。
+- **效果信封**：LLM 只写 `EventOption` 形状（国库 / 激进 / 合法性 / 威望 / 军队 / 人口 / 科技点 /
+  关系 + `modifiers[]`）；引擎校验并钳位（每回合 ≤2 事件、≤4 选项、数值上限见
+  `engine/config/events.ts`），再走既有 `applyEventOption` 落账。**坏事件整体丢弃**（宁愿 0 个，不落坏事件）。
+- **兜底**：生成同步执行、带有限超时（`LIVE_EVENT_TIMEOUT_MS`），超时或失败降级为模板/空事件；
+  **托管**（`months > 1`）走轻量模式、跳过生成，绝不阻塞推进。
+- **进度**：**E1 闭环已实现**（`engine/liveEvents.ts` + `hooks/`，`tests/live-events.test.ts`）；
+  E2–E7（题材显著性调参、效果边界、多主体、三视角强化、例行场景）待做，见 plan 0010。
+
+来源：ADR 0018/0019/0025、`engine/data/tech.ts`（`TECHS`）、`engine/data/events.ts`（`EVENT_TEMPLATES`）、
+`engine/liveEvents.ts`、`engine/economy.ts`（研究率）、`engine/diplomacy.ts`（war goal）、
+`docs/plans/0004-trade-diplomacy.md` §4/§5、`docs/plans/0010-live-events.md`、`hooks/`。
 
 ## 9. 口径速查 / FAQ（「为什么变了」）
 
@@ -469,10 +491,14 @@ GLOSSARY（航线/到岸成本/软容量/禁运）。
   - **B5-r2 已落地**：**消费品真双向**（成衣/酒/家具进世界市场；军械记为唯一非双向商品），
     以工厂侧配方缩放 + 消费品需求侧重定实现，鸦片门保持；收敛 PT-002。
   - **B6（随 B5-r2 完成）**：文档同步（本手册、README、GLOSSARY、playtest 状态）。
-- **未完成的后续工作 = config-block 重构（ADR 0024 / plan 0009，取代 ADR 0004）**：
-  配置分层（`engine/config/` + `engine/data/`）与统一 `ConfigBlock` 乘数机制，
-  增量 TDD、每步一个提交、第一刀行为保持，里程碑 **C1–C7**；不升世界版本。
-- 经济口径已全部落地，§4.4（利润口径）、§4.7（税制）与 §9 均已按 shipped 状态更新；
+- **config-block 重构（ADR 0024 / plan 0009，取代 ADR 0004）**：
+  配置分层（`engine/config/` + `engine/data/`）与统一 `ConfigBlock` 乘数机制。**C1–C7 修正块迁移、D1
+  字面量抽取、D2 `engine/data.ts` 拆桶均已完成**（`engine/config/*.ts`、`engine/data/*.ts`，World 仍 v11、
+  行为零改动）；仅 **D3（可选）** 的其它模块域内常量归位未做。`C7` 的**债务压力 / 配方门控 / 科技乘数**
+  三项作为「声明块」由引擎在既有接缝读其 `scales_with` 曲线。
+- **建筑扩张与统一基础设施（ADR 0026 / plan 0011，F1–F7 全落地，World v11）**、**实时事件 E1
+  （ADR 0025 / plan 0010）** 与 **代码拆分（plan 0012，S1–S6 全落地）** 亦已完成，见 §4.3、§8。
+- 经济口径已全部落地，§4.3（配方）、§4.4（利润口径）、§4.7（税制）与 §9 均已按 shipped 状态更新；
   实际数值以 `v3_inspect` 的分区输出为准。
 
 来源：`docs/plans/0008-economy-remake.md` §6、`docs/plans/0009-config-refactor.md`、
@@ -482,11 +508,12 @@ GLOSSARY（航线/到岸成本/软容量/禁运）。
 
 ### 主要来源索引
 
-- 边界与工具：`docs/plans/0006-gm-engine-interface.md`、ADR 0003/0016、`hooks/register.tsx`、`engine/inspect.ts`
-- 回合：ADR 0001、README、`hooks/register.tsx`
-- 经济：`docs/plans/0003-economic-loop.md`、ADR 0021/0022、`engine/data.ts`、`engine/sim.ts`
+- 边界与工具：`docs/plans/0006-gm-engine-interface.md`、ADR 0003/0016、`hooks/tools.ts`、`engine/inspect/`
+- 回合：ADR 0001、README、`hooks/`（`register.tsx`、`council.ts`）
+- 经济：`docs/plans/0003-economic-loop.md`、ADR 0021/0022/0026、`engine/data/buildings.ts`、`engine/data/goods.ts`、`engine/economy.ts`
+- 配置分层：ADR 0024、`docs/plans/0009-config-refactor.md`、`engine/config/`
 - 税制：`engine/fiscal.ts`、`docs/plans/0008-economy-remake.md`
 - 贸易：ADR 0008/0009/0014/0020、`engine/trade.ts`、`docs/plans/0004-trade-diplomacy.md`
 - 财政：ADR 0006/0007、`engine/fiscal.ts`
-- 人口/科技/军事/外交/事件：ADR 0018/0019、`engine/data.ts`、`engine/sim.ts`、plan 0004
+- 人口/科技/军事/外交/事件：ADR 0018/0019/0025、`engine/data/derivations.ts`、`engine/liveEvents.ts`、`docs/plans/0004-trade-diplomacy.md`、`docs/plans/0010-live-events.md`
 - 口径：`docs/playtest-issues.md`、GLOSSARY.md、README.md

@@ -1,6 +1,6 @@
 # 经济系统打磨（Economy Polish）
 
-- Status: proposed（当前最高优先级；0002 事件树与多国交互暂停）
+- Status: E1–E5 已完成（E1 首轮 32e624b；E2–E5 见 ADR 0016/0017/0018/0019）；待下一轮试玩校准
 - Depends on: `0003-economic-loop.md`、`0004-trade-diplomacy.md`、ADR 0006（净资产财政）、`0006-gm-engine-interface.md`
 - Scope: 不推翻现有结构，先让 1836 起局的贸易、财政、建造、科技与劳动力在 24 个月内**可解释、可操作**。事件/多国交互暂缓。
 

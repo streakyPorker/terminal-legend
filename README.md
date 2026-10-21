@@ -35,7 +35,8 @@
   `econ.buildingProfits`（产出价 − 投入价 − 分摊工资），`v3_inspect economy` 可读。
   全国工资按 `WAGE_ALLOCATION`（`basis: 'labor' | 'valueAdded' | 'capitalPlusLabor'`，当前
   `valueAdded`）分摊到各建筑类型，`weights?` 可按类型再加权；三种 basis 都精确满足
-  `Σ buildingProfits.wages === 全国工资`（plan 0008 B5；plan 0009 D1 已迁到 `engine/config/economy.ts`）。
+  `Σ buildingProfits.wages === 全国工资`（plan 0008 B5；该常量仍在 `engine/data/buildings.ts`——
+  plan 0009 D1 只抽 `engine/*.ts` 的散落字面量，未搬 data 侧业务系数）。
   利用率门控产能、亏损类目闲置萎缩、私人投资只看盈利类目（ADR 0021/0022，World v9）；
   企业税按逐类利润累加（ADR 0023，World v10）。B5 重定工厂配方（调轻材料单、下调成衣/酒/家具
   产出）使其可盈利；**B5-r2（plan 0008 §5）反悔 B5 的消费品「本地自给」判定**：纺织厂转做布料、
@@ -200,8 +201,9 @@ node statusline/install.mjs
 
 ## 下一步
 
-1. **`docs/plans/0007-economy-polish.md`（当前优先）**：世界贸易校准（农产品没有全球
-   bid）、支付能力可见化、建造队列公平、GDP/科技/劳动力口径。先让经济可解释、可操作。
+1. **`docs/plans/0007-economy-polish.md`**：世界贸易校准、支付能力可见化、建造队列公平、
+   GDP/科技/劳动力口径。**E1–E5 已完成**（E1 首轮 32e624b；E2–E5 见 ADR 0016/0017/0018/0019），
+   下一步是**试玩验证**（22 建筑平衡、基础设施减益手感、消费品全球贸易、实时事件文本、四税基可解释性）。
 2. `docs/plans/0006-gm-engine-interface.md`：GM 与引擎的交互**全部走 MCP 工具**，禁止读
    `.terminal-legend/save.json`。`v3_inspect` 的 16 个分区（economy/market/fiscal/labor/
    trade/routes/buildings/construction/military/pops/diplomacy/tech/modifiers/rankings/
@@ -213,14 +215,16 @@ node statusline/install.mjs
 4. `docs/plans/0002-agent-event-trees.md`：主要大国专属国策/事件树，再到多国交互事件树。
    **⏸ 暂停**，等经济系统打磨完成后再恢复。其「逐回合事件」部分已由
    `docs/plans/0010-live-events.md`（ADR 0025）承接。
-5. `docs/plans/0009-config-refactor.md`（ADR 0024，取代 ADR 0004）：配置分层（`engine/config/` + `engine/data/`）与统一「配置块」乘数机制，增量 TDD、第一刀行为保持。**块引擎 C1–C7 与字面量抽取 D1 已完成**（`engine/config/{balance,economy,society,military,tech,diplomacy,trade,tax,fiscal,construction,events,situations}.ts`；D2 拆 `engine/data.ts` 待做）。
-6. `docs/plans/0010-live-events.md`（ADR 0025）：AI 生成的逐回合实时事件，引擎按经济/政治/外交/民生挑显著题材，LLM 现场生成 0 至 2 个可交互事件，效果编译回既有事件结构并持久化。**proposed，待批准实现。**
+5. `docs/plans/0009-config-refactor.md`（ADR 0024，取代 ADR 0004）：配置分层（`engine/config/` + `engine/data/`）与统一「配置块」乘数机制，增量 TDD、第一刀行为保持。**块引擎 C1–C7、字面量抽取 D1、`engine/data.ts` 拆桶 D2 均已完成**（`engine/config/{balance,economy,society,military,tech,diplomacy,trade,tax,fiscal,construction,events,situations}.ts`、`engine/config/blocks/*`、`engine/data/*.ts`；仅可选 D3 域内常量归位未做）。
+6. `docs/plans/0010-live-events.md`（ADR 0025）：AI 生成的逐回合实时事件，引擎按经济/政治/外交/民生挑显著题材，LLM 现场生成 0 至 2 个可交互事件，效果编译回既有事件结构并持久化。**E1 闭环已实现（`engine/liveEvents.ts` + `hooks/`），E2–E7 待做。**
 7. `docs/plans/0011-building-expansion.md`（ADR 0026）：建筑扩张与统一基础设施——矿场拆成煤矿/铁矿/伐木场、工厂拆成七个单产工业建筑、加学校/运河/电报/要塞/船坞，新增 `steel` 商品（`iron` 转为「铁矿石」），把「交通基础设施」升级为统一的「基础设施」（供给/需求/线性短缺 debuff/维护），建筑加 `unlock` 前向字段。**已完成（F1–F7 全部实现，World v11）。**
+8. `docs/plans/0012-code-splits.md`：大 feature 后的维护性重构（`CLAUDE.md`「文件膨胀与拆分」约定），行为零改动、保留桶文件重导出。**已完成（S1–S6：`hooks/register.tsx`、`engine/data.ts`、`view/panels.tsx`、`engine/actions.ts`、`engine/inspect.ts` 拆桶，测试按关注点分文件）。**
 
 已完成、作为参考：`0003-economic-loop.md`（World v5）、`0004-trade-diplomacy.md`（World v6）、
 ADR 0006（World v7 净资产财政）、ADR 0020（World v8 持久贸易航线）、
 ADR 0021/0022（World v9 建筑配方、逐建筑利润与利用率/投资联动）、
-ADR 0023（World v10 四税基）。
+ADR 0023（World v10 四税基）、ADR 0024（配置分层与修正块）、
+ADR 0025（实时事件 E1）、ADR 0026 / plan 0011（World v11 建筑扩张与统一基础设施）、plan 0009（config C1–C7 + D1/D2）、plan 0012（代码拆分 S1–S6）。
 
 ## 开发
 
@@ -267,6 +271,20 @@ engine/data/countries.ts     十国种子、支出分类与政府类型
 engine/data/events.ts        事件模板、随机抽取与对手选择
 engine/data/derivations.ts   官僚/失业/劳动力/资源乘数/基础设施等派生函数
 engine/data/world.ts         createWorld 与各类空状态构造函数
+engine/config/balance.ts     全局平衡常数（上下限、历史长度、运行/账本上限）
+engine/config/economy.ts     价格形成、Stone-Geary 需求、利用率反馈、私人投资门槛等经济常数
+engine/config/society.ts     人口/城市化/sol/识字/失业/激进/合法性/政府类型等社会常数
+engine/config/military.ts    人力、士气、领袖年龄、战争结算常数
+engine/config/tech.ts        研究速率公式常数
+engine/config/diplomacy.ts   关系漂移、恶名、外交动作幅度、战争目标结算常数
+engine/config/trade.ts       贸易候选数、航线系数、到岸价系数、支付能力常数
+engine/config/tax.ts         土地系数、建设补贴、自由贸易下限、征收效率/合规
+engine/config/fiscal.ts      债/基金利率、支出系数、重组规则、支出上限
+engine/config/construction.ts 营造所产能、每槽/工程量/造价、完工副作用
+engine/config/events.ts      随机事件概率、AI 选项概率、实时事件解析上限与显著性阈值
+engine/config/situations.ts  鸦片危机窗口/触发线/时限/禁运月数
+engine/config/blocks.ts      域注册表（BLOCK_REGISTRY）聚合与块校验入口
+engine/config/blocks/*.ts    各域声明块：thresholds/policies/events/situations/laws/war/tech/gates/fiscal
 engine/sim.ts                门面（barrel）：原样再导出下列模块，保持公共导入面不变
 engine/internal.ts           跨模块共享的小工具：clamp、日期、GOOD 校验、v7 建造字段补齐
 engine/economy.ts            产出/需求/价格形成、支出法 GDP、逐建筑利润、税基量与利用率反馈
@@ -376,10 +394,13 @@ tests/economic-loop-regressions.test.ts   经济循环：E4/E5 AI 与确定性 +
 | ADR 0021 | 建筑配方单一真源：`BUILDING_RECIPES`（产出+中间投入+用工）、逐建筑经营利润快照 | ✅ 已实现（World v9） |
 | ADR 0022 | 利用率与利润驱动的私人投资：上月利用率门控、深度亏损萎缩、投资利润门槛 | ✅ 已实现（World v9） |
 | ADR 0023 | 四税基：土地 / 逐建筑企业利润 / 最终消费 / 关税，GDP 退为派生指标 | ✅ 已实现（World v10，0008 B4） |
+| 0009 / ADR 0024 | 配置分层与修正块：`engine/config/*` + `engine/data/*` + 统一 `ConfigBlock`，取代 ADR 0004 | ✅ 已实现（C1–C7 + D1/D2，行为零改动；仅可选 D3 未做） |
+| 0010 / ADR 0025 | 逐回合实时事件：题材扫描 → LLM 生成 0–2 个 → 效果信封 → 持久化 | ✅ E1 闭环已实现（`engine/liveEvents.ts`；E2–E7 待做） |
 | 0005 | 科技树 K1–K4：三分支 + 通用时代线、跨分支溢出、国际扩散 | 📝 已规划（等经济打磨后） |
 | 0002 | 事件树 S1–S4：局势/提案/多国交互 | ⏸ 暂缓（先打磨经济） |
 | 0006 | GM ⇄ 引擎接口：查询/预测全部走 MCP，禁止读存档 | ✅ 已实现（v3_inspect 16 分区 + v3_forecast + v3_manual；ADR 0016） |
-| 0007 | 经济打磨：世界贸易校准、支付能力可见化、建造队列、GDP/科技/劳动力 | 🔧 当前优先（E1 第一轮已校准，32e624b） |
+| 0007 | 经济打磨：世界贸易校准、支付能力可见化、建造队列、GDP/科技/劳动力 | ✅ E1–E5 已完成（E1 首轮 32e624b；E2–E5 见 ADR 0016/0017/0018/0019）；待下一轮试玩校准 |
 | ADR 0026 / 0011 | 建筑扩张与统一基础设施：拆矿场/工厂为单产建筑、加学校/运河/电报/要塞/船坞、`steel` 商品、统一基础设施（供给/需求/线性 debuff/维护）、`unlock` 前向字段 | ✅ 已实现（F1–F7：`iron`→铁矿石 + 新增 `steel`；`mines`→`coalMines`/`ironMines`/`lumberMills`；`factories`→七个工业建筑；统一基础设施（`transportInfrastructure` 派生）；`unlock` 前向契约 + `build` 校验（当前全解锁）；F7 分批校准（配方/基价/基础设施/种子）；World v11） |
+| 0012 | 代码拆分：`hooks/`、`engine/data.ts`、`view/panels.tsx`、`engine/actions.ts`、`engine/inspect.ts` 拆桶 + 测试按关注点分文件（行为零改动、桶重导出） | ✅ 已实现（S1–S6；388 测试 / 41 文件） |
 
 规划文档在 `docs/plans/`；架构决策在 `docs/adr/`；术语以 `GLOSSARY.md` 为准；GM 机制参考见 `docs/gm-handbook.md`。

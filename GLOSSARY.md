@@ -46,9 +46,10 @@ _Avoid_: 衙门, 办公楼
 _Avoid_: 建筑部门, 工程队
 
 **建筑配方**:
-`engine/data.ts` 的 `BUILDING_RECIPES` 中每类建筑每座每月的产出、中间投入与用工，
+`engine/data/buildings.ts` 的 `BUILDING_RECIPES` 中每类建筑每座每月的产出、中间投入与用工，
 是建筑生产与中间消费的**单一真源**；产出/投入系数只在此声明，`computeProduction`
-与 `computeDemand` 只读该表（ADR 0021，World v9）。
+与 `computeDemand` 只读该表（ADR 0021，World v9；plan 0009 D2 把它从 `engine/data.ts` 移入
+`engine/data/*.ts`，`./data` 导入路径不变）。
 _Avoid_: 产出表, 系数表, BUILDING_OUTPUT
 
 **逐建筑经营利润**:
@@ -84,12 +85,12 @@ _Avoid_: 铁, 铁矿（那是对应的资源禀赋）
 _Avoid_: 铁, 钢（口语）
 
 **工资分摊**:
-把全国工资 `realGdp × laborShare` 摊到各建筑类型经营利润的规则，由 `engine/data.ts` 的
+把全国工资 `realGdp × laborShare` 摊到各建筑类型经营利润的规则，由 `engine/data/buildings.ts` 的
 `WAGE_ALLOCATION = { basis, weights? }` 决定：`'labor'` 按 `用工 × 座数`（旧口径）、
 `'valueAdded'` 按 `max(0, 产出价值 − 中间投入)`（**当前值**）、`'capitalPlusLabor'` 按
 `用工 + 建造成本 × 0.25`；`weights?` 可按类型再乘系数。三种 basis 都精确满足
-`Σ buildingProfits.wages === 全国工资`（ADR 0021、plan 0008 B5；plan 0009 将迁到
-`engine/config/economy.ts`）。
+`Σ buildingProfits.wages === 全国工资`（ADR 0021、plan 0008 B5；plan 0009 D1 只抽 `engine/*.ts`
+的字面量，**未**搬 data 侧业务系数，故该常量仍在 `engine/data/buildings.ts`）。
 _Avoid_: 工资表, 劳动成本
 
 **建造能力**:
