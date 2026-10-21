@@ -763,7 +763,7 @@ const TOOL_SPECS: {
   {
     name: 'v3_inspect',
     description:
-      '终末传奇：只读明细查询。section 取 economy（GDP 分解/物价/缺口）、fiscal（收支/债务/税率）、labor（失业分解/工资）、trade（分商品进出口/伙伴）、construction（建造力/队列/租金）、military（军力/战争）、history（近 12 个月序列）。遇到“为什么变了”先用它，不要读存档或源码。',
+      '终末传奇：只读明细查询。section 取 economy（GDP 分解/物价/缺口）、market（商品市场供需与对外贸易/伙伴）、fiscal（收支/债务/税率）、labor（失业分解/工资）、trade（分商品进出口/伙伴）、construction（建造力/队列/租金）、military（军力/战争）、history（近 12 个月序列）。遇到“为什么变了”先用它，不要读存档或源码。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -771,6 +771,7 @@ const TOOL_SPECS: {
           type: 'string',
           enum: [
             'economy',
+            'market',
             'fiscal',
             'labor',
             'trade',
@@ -1501,6 +1502,7 @@ export const register: Register = (on, options) => {
           return { text: '已切换到列强排名。' }
         }
 
+        case 'market':
         case 'economy':
         case 'pops':
         case 'diplomacy':

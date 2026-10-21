@@ -672,6 +672,7 @@ export type TabId =
   | 'council'
   | 'overview'
   | 'rankings'
+  | 'market'
   | 'economy'
   | 'pops'
   | 'diplomacy'

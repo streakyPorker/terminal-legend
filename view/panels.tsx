@@ -107,6 +107,7 @@ const TABS: [TabId, string][] = [
   ['council', '御前'],
   ['overview', '概览'],
   ['rankings', '排名'],
+  ['market', '市场'],
   ['economy', '经济'],
   ['pops', '人口'],
   ['diplomacy', '外交'],
@@ -385,25 +386,12 @@ function partnerTotals(player: Country): PartnerTotal[] {
     .sort((a, b) => b.total - a.total || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }
 
-function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): any {
+function MarketPanel(props: { ui: UiKit; world: WorldState; width: number }): any {
   const { Box, Text } = props.ui
   const player = playerOf(props.world)
   if (player === undefined) return <Text dimColor>无进行中的游戏。</Text>
   const snapshot = inspectEconomy(player)
   const econ = player.econ
-  const load = constructionLoad(player)
-  const schedule = constructionSchedule(player)
-  const stateQueue = econ.constructionQueue.filter(
-    project => (project.owner ?? 'state') !== 'private',
-  )
-  const privateQueue = econ.constructionQueue.filter(
-    project => (project.owner ?? 'state') === 'private',
-  )
-  const atWar = props.world.wars.some(
-    war => war.attackers.includes(player.id) || war.defenders.includes(player.id),
-  )
-  const ledger = fiscalLedger(player, { atWar, tick: props.world.tick })
-  const components = econ.gdpComponents
   const widths = [7, 7, 8, 8, 7, 11]
   const tradeWidths = [12, 10, 10, 10]
   const partners = partnerTotals(player).slice(0, 6)
@@ -422,24 +410,7 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
 
   return (
     <Box flexDirection="column">
-      <Heading ui={props.ui} text="支出法 GDP" hint={`${fmtNumber(econ.gdp)} 金/月（基期价）`} />
-      <Text dimColor>
-        消费 {fmtNumber(components.c)} · 投资 {fmtNumber(components.i)} · 政府 {fmtNumber(components.g)} · 净出口 {fmtNumber(components.nx)}
-      </Text>
-      <Text dimColor>
-        工资总额 {fmtNumber(econ.wages)}（劳动份额 {fmtPercent(econ.laborShare)}） · 利润 {fmtNumber(econ.profits)} · 私人资本 {fmtNumber(econ.privateCapital)} · 投资信心 {econ.investmentConfidence >= 0 ? '+' : ''}{Math.round(econ.investmentConfidence)} 点
-      </Text>
-      <Text dimColor>
-        私人闲置利润 {fmtNumber(econ.idleProfits)} · 下月转为奢侈品消费 {fmtNumber(econ.idlePurchases)} · 上月建设实付 国有 {fmtNumber(econ.lastStateConstructionSpend)} / 私人 {fmtNumber(econ.lastPrivateConstructionSpend)}
-      </Text>
-      <Text dimColor>
-        劳动需求 {fmtPop(econ.laborDemand)} · 劳动力 {fmtPop(econ.laborForce)} · 原始利用率 {fmtPercent(econ.laborRawUtilization, 1)}（有效下限 {fmtPercent(econ.laborUtilization)}） · 失业 {econ.unemployment.toFixed(1)}%
-      </Text>
-      <Text dimColor>
-        资源禀赋：{RESOURCE_IDS.map(id => `${RESOURCE_NAMES[id]} ${econ.resources[id]}`).join(' · ')}
-      </Text>
-
-      <Box marginTop={1}>
+      <Box>
         <Heading ui={props.ui} text="商品市场" hint="价格 · 产出 · 需求 · 资源乘数 · 供需" />
       </Box>
       <TableRow ui={props.ui} cells={['商品', '价格', '产出', '需求', '乘数', '状态']} widths={widths} />
@@ -501,6 +472,47 @@ function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): a
         </Text>
         <Text dimColor>{resourceImportLine}</Text>
       </Box>
+    </Box>
+  )
+}
+
+function EconomyPanel(props: { ui: UiKit; world: WorldState; width: number }): any {
+  const { Box, Text } = props.ui
+  const player = playerOf(props.world)
+  if (player === undefined) return <Text dimColor>无进行中的游戏。</Text>
+  const econ = player.econ
+  const load = constructionLoad(player)
+  const schedule = constructionSchedule(player)
+  const stateQueue = econ.constructionQueue.filter(
+    project => (project.owner ?? 'state') !== 'private',
+  )
+  const privateQueue = econ.constructionQueue.filter(
+    project => (project.owner ?? 'state') === 'private',
+  )
+  const atWar = props.world.wars.some(
+    war => war.attackers.includes(player.id) || war.defenders.includes(player.id),
+  )
+  const ledger = fiscalLedger(player, { atWar, tick: props.world.tick })
+  const components = econ.gdpComponents
+
+  return (
+    <Box flexDirection="column">
+      <Heading ui={props.ui} text="支出法 GDP" hint={`${fmtNumber(econ.gdp)} 金/月（基期价）`} />
+      <Text dimColor>
+        消费 {fmtNumber(components.c)} · 投资 {fmtNumber(components.i)} · 政府 {fmtNumber(components.g)} · 净出口 {fmtNumber(components.nx)}
+      </Text>
+      <Text dimColor>
+        工资总额 {fmtNumber(econ.wages)}（劳动份额 {fmtPercent(econ.laborShare)}） · 利润 {fmtNumber(econ.profits)} · 私人资本 {fmtNumber(econ.privateCapital)} · 投资信心 {econ.investmentConfidence >= 0 ? '+' : ''}{Math.round(econ.investmentConfidence)} 点
+      </Text>
+      <Text dimColor>
+        私人闲置利润 {fmtNumber(econ.idleProfits)} · 下月转为奢侈品消费 {fmtNumber(econ.idlePurchases)} · 上月建设实付 国有 {fmtNumber(econ.lastStateConstructionSpend)} / 私人 {fmtNumber(econ.lastPrivateConstructionSpend)}
+      </Text>
+      <Text dimColor>
+        劳动需求 {fmtPop(econ.laborDemand)} · 劳动力 {fmtPop(econ.laborForce)} · 原始利用率 {fmtPercent(econ.laborRawUtilization, 1)}（有效下限 {fmtPercent(econ.laborUtilization)}） · 失业 {econ.unemployment.toFixed(1)}%
+      </Text>
+      <Text dimColor>
+        资源禀赋：{RESOURCE_IDS.map(id => `${RESOURCE_NAMES[id]} ${econ.resources[id]}`).join(' · ')}
+      </Text>
 
       <Box flexDirection="column" marginTop={1}>
         <Heading ui={props.ui} text="建筑与基础设施" />
@@ -1264,6 +1276,9 @@ export function Panel(props: PanelProps): any {
     case 'rankings':
       body = <RankingsPanel ui={props.ui} world={props.world} />
       break
+    case 'market':
+      body = <MarketPanel ui={props.ui} world={props.world} width={props.width} />
+      break
     case 'economy':
       body = <EconomyPanel ui={props.ui} world={props.world} width={props.width} />
       break
@@ -1503,6 +1518,8 @@ export function Report(props: ReportProps): any {
     case 'rankings':
     case 'rank':
       return <RankingsPanel ui={props.ui} world={props.world} />
+    case 'market':
+      return <MarketPanel ui={props.ui} world={props.world} width={props.width} />
     case 'economy':
       return <EconomyPanel ui={props.ui} world={props.world} width={props.width} />
     case 'pops':

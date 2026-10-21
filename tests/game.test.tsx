@@ -201,6 +201,7 @@ describe('terminal-legend drawing', () => {
       'council',
       'overview',
       'rankings',
+      'market',
       'economy',
       'pops',
       'diplomacy',

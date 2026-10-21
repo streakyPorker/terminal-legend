@@ -9,6 +9,7 @@ describe('v3_inspect (plan 0006)', () => {
     advance(world, 3, [], makeRngForWorld(world))
     for (const section of [
       'economy',
+      'market',
       'fiscal',
       'labor',
       'trade',
