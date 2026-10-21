@@ -75,7 +75,7 @@
 | 里程碑 | 内容 | 行为保持？ | 护栏测试 |
 | --- | --- | --- | --- |
 | **C1** ✅ | 立块引擎（`ConfigBlock` 类型 + 求值器 + 域注册表 + 全局聚合）；把 `engine/thresholds.ts` 的规则迁成块，拆除旧 `while`/`once` 路径 | 是 | 迁移等价测试：对多个种子 × 月的**触发块集合**与**最终修正值**逐位等于旧 `evaluateThresholds`；配置不变量测试（id 唯一、stat 合法、曲线有序、`scales_with.stat` 真实） |
-| **C2** | `policies` 迁到块；`v3_policy` 的 `{stat, stack, value, months}` 入口编译成块 | 是 | 迁移等价：相同政策提议产生相同的 `country.modifiers` 集合与 `applyModifiers` 结果；权威计价/维护费/同 id 覆盖行为不变（ADR 0002） |
+| **C2** ✅ | `policies` 迁到块；`v3_policy` 的 `{stat, stack, value, months}` 入口编译成块 | 是 | 迁移等价：相同政策提议产生相同的 `country.modifiers` 集合与 `applyModifiers` 结果；权威计价/维护费/同 id 覆盖行为不变（ADR 0002） |
 | **C3** | `events` 的 `effects.modifiers` 迁到块 | 是 | 迁移等价：事件选项结算产生的修正与旧路径一致；重复触发不无限叠加 |
 | **C4** | `situations` 迁到块 | 是 | 迁移等价：局势结果包的效果落账一致 |
 | **C5** | `tech` 迁到块 | 是 | 迁移等价：科技解锁/加成路径产生的修正一致 |
@@ -101,6 +101,14 @@
 - `scales_with` 消费接缝在 `engine/scale.ts`（`curveOutput` / `scaleProduct` / `effectiveModifierValue`），由 `engine/modifiers.ts` 的 `totalsFor` 调用；ADR-0004 叠算公式未改。`engine/thresholds.ts` 退化为瘦适配器（`evaluateThresholds` / `logThresholds` 保持）。
 - `WorldState.version` **未**提升。测试 `tests/config-blocks.test.ts`（13 例）全绿，`claude plugin test .` 254 pass / 0 fail。
 - 行为保持要点：触发块集合与最终修正值用**冻结的旧算法副本**逐位比对（合成状态 + 3 种子 × 18 月 × 全国家）。
+
+**C2 完成记录（本切片）**
+
+- `policies` 是**动态**来源（运行时由玩家/AI 提交），不建静态注册表：新增 `engine/config/blocks/policies.ts` 的 `compilePolicyBlock(name, effects)`，把 `PolicyEffect[]` 编译成 `id: policy:<name>`、`kind: 'policy'`、`potential_trigger: []`、`lifecycle: 'once'`（政策一经提交即长期持有；限时效果由每条 effect 自己的 `months` 表达，对应旧的 `monthsLeft`）的 `ConfigBlock`，`effects` 与提交条目 **1:1**（stat/stack/value/label/months）。
+- `engine/blocks.ts` 新增 `installBlock(country, block, options)`：**立即**把块的各条 effect 落成 `Modifier`（`source = block.id`），走 `addModifier` 的同 id 覆盖语义；不做 `evaluateBlocks` 的月度 `present` 幂等守卫与跨 source 清理（那会删掉同国其他政策）。`options.upkeep` 原样写入维护费；`options.modifierId` 保留历史 id 方案——永久 effect 覆盖同 stat/stack 的旧永久 effect（`policy:<stat>:<stack>`），限时 effect 各占槽位（`policy:<name>:<index>`）。`scales_with` 仍在消费接缝（`engine/scale.ts`）应用，不逐月缓存。
+- `engine/actions.ts` 的 `applyPolicy`：校验/解析、权威计价（`POLICY_FLAT_SCALE`/`flatScale`、`round(weight·0.2)`、`max(required, requested)`、clamp 1..40）、`policy:<name>` source 与 `upkeep = cost/48/parsed.length` **全部未改**；仅把末尾的 `addModifier` 循环换成「编译块 → `validateBlockConfig([block])`（C1 不变量校验器，值域/单位已在前置校验挡住，此分支为守卫）→ `installBlock`」。`v3_policy` 工具契约（`{name, effects[], authorityCost?}`）未变。
+- ADR-0004 叠算**未改**（`applyModifiers` 原样）；`WorldState.version` **未**提升。
+- 新增 `tests/policy-migration.test.ts`：用**冻结的旧 `applyPolicy` 副本**作 oracle，对（边界内 / 超 200 / gdp 类 100% 上限 / 多效果混栈 / upkeep / 同 stat 永久覆盖 / 限时独立槽 / 权威不足 / 未知 stat 与坏单位 / flat 按 stat 计价）逐位比对 modifier 元组与权威扣费；另加 `compilePolicyBlock`/`installBlock` 单元断言。`claude plugin test .` **266 pass / 0 fail**。
 
 ## 5. 验收
 

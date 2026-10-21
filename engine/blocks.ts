@@ -3,6 +3,7 @@ import type {
   ConditionOp,
   ConfigBlock,
   Country,
+  EffectSpec,
   Modifier,
   ModifierStack,
 } from '../types'
@@ -144,7 +145,56 @@ export function evaluateBlocks(
   return { added, removed }
 }
 
-/** Returns human-readable invariant violations for a block config (ADR 0024 §11). */
+export type InstallBlockOptions = {
+  /** Authority drained each month to maintain every installed modifier (policies). */
+  upkeep?: number
+  /**
+   * Overrides the default `<block.id>:<index>` modifier id. Runtime-submitted
+   * blocks with a historical id scheme (policies) use this to keep it.
+   */
+  modifierId?: (effect: EffectSpec, index: number) => string
+}
+
+/**
+ * Materializes one block's effects into modifiers **immediately**, at the
+ * caller's evaluation point. This is the install path for blocks that are not
+ * re-evaluated monthly by `evaluateBlocks` — today the runtime-submitted policy
+ * block. Unlike the monthly path it does no idempotency `present` guard, no
+ * cross-source cleanup and no lifecycle bookkeeping: it simply overwrites by id
+ * (`addModifier`), which is exactly the submit semantics a policy needs. An
+ * effect installs iff both the block trigger and the effect's own trigger hold;
+ * `scales_with` is applied later at the consume seam, so values stay raw.
+ */
+export function installBlock(
+  country: Country,
+  block: ConfigBlock,
+  options: InstallBlockOptions = {},
+): void {
+  if (!conditionsHold(country, block.potential_trigger)) return
+  block.effects.forEach((effect, index) => {
+    if (
+      effect.potential_trigger !== undefined &&
+      !conditionsHold(country, effect.potential_trigger)
+    ) {
+      return
+    }
+    addModifier(
+      country,
+      withMonths(
+        {
+          id: options.modifierId?.(effect, index) ?? `${block.id}:${index}`,
+          label: effect.label ?? block.label,
+          stat: effect.stat,
+          stack: effect.stack,
+          value: effect.value,
+          source: block.id,
+          ...(options.upkeep === undefined ? {} : { upkeep: options.upkeep }),
+        },
+        effectMonths(block, effect),
+      ),
+    )
+  })
+}
 export function validateBlockConfig(blocks: ConfigBlock[]): string[] {
   const errors: string[] = []
   const seen = new Set<string>()

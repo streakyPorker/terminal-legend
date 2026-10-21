@@ -15,6 +15,8 @@ import {
   taxBaseRevenues,
 } from './fiscal'
 import { MODIFIER_STATS, MODIFIER_STAT_NAMES, addModifier } from './modifiers'
+import { installBlock, validateBlockConfig } from './blocks'
+import { compilePolicyBlock } from './config/blocks/policies'
 import {
   EMBARGO_MONTHS_MAX,
   SENSITIVE_GOODS,
@@ -709,6 +711,15 @@ export function applyPolicy(
     })
   }
 
+  // Compile the proposal into a `policy:<name>` block and re-run the C1
+  // invariant validator on it. The shape checks above already produce today's
+  // error surface, so this branch is a guard, not a user-facing path.
+  const block = compilePolicyBlock(name, parsed)
+  const violations = validateBlockConfig([block])
+  if (violations.length > 0) {
+    return { ok: false, text: violations.join('；') }
+  }
+
   // Authority cost scales with the effect's magnitude and duration. This keeps
   // a permanent +50% GDP policy from costing the same 5 points as a +2% one
   // (round-2 playtest P0-3).
@@ -733,24 +744,17 @@ export function applyPolicy(
   }
   country.government.authority = clamp(country.government.authority - cost, 0, 100)
 
-  parsed.forEach((effect, index) => {
-    // A permanent policy replaces an earlier permanent policy on the same
-    // stat/stack instead of stacking with it; timed policies keep their own
-    // slots and expire normally.
-    const id =
+  // Install through the block engine: the modifiers get `source = policy:<name>`
+  // and flow through the same stack path as thresholds. The id scheme stays the
+  // historical one — a permanent effect replaces any earlier permanent effect on
+  // the same stat/stack (`policy:<stat>:<stack>`), a timed effect keeps its own
+  // slot (`policy:<name>:<index>`) and expires normally.
+  installBlock(country, block, {
+    upkeep: cost / 48 / parsed.length,
+    modifierId: (effect, index) =>
       effect.months === undefined
-        ? `policy:${effect.stat}:${effect.stack ?? 'flat'}`
-        : `policy:${name}:${index}`
-    addModifier(country, {
-      id,
-      label: effect.label ?? name,
-      stat: effect.stat,
-      stack: effect.stack ?? 'flat',
-      value: effect.value,
-      monthsLeft: effect.months,
-      upkeep: cost / 48 / parsed.length,
-      source: `policy:${name}`,
-    })
+        ? `policy:${effect.stat}:${effect.stack}`
+        : `${block.id}:${index}`,
   })
 
   const summary = parsed
