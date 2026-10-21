@@ -9,7 +9,7 @@
 // 0011 F3). v10: taxes come from four real bases (land / per-building profit /
 // final consumption / tariff, `Economy.taxes` + `Economy.taxBaseQty`), never
 // from GDP (ADR 0023). Every building type carries a declarative production
-// recipe (`BUILDING_RECIPES`, engine/data.ts) that is the single source of truth
+// recipe (`BUILDING_RECIPES`, engine/data/buildings.ts) that is the single source of truth
 // for output AND intermediate input (ADR 0021), and each country stores a
 // per-building-type profit snapshot (`Economy.buildingProfits`). Persistent
 // bilateral trade routes still sit in front of the spot clearing (ADR 0020);

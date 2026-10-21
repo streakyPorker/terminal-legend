@@ -29,7 +29,7 @@
   消费需求、劳动份额与利润分配（全国工资再按 `WAGE_ALLOCATION` 摊到各建筑类型的经营利润）、
   私人储蓄与自动投资、建造队列（国有/私人，按建造点推进）、国家级资源禀赋
   （农田/林地/煤矿/铁矿）与 0.7–1.3 的软乘数共同构成增长螺旋。私人项目可见但不可取消。
-- **建筑配方（单一真源）**：`engine/data.ts` 的 `BUILDING_RECIPES` 逐类声明每座每月的
+- **建筑配方（单一真源）**：`engine/data/buildings.ts` 的 `BUILDING_RECIPES` 逐类声明每座每月的
   产出与中间投入（含副产品）与用工，是产出与投入的**唯一来源**；`computeProduction` 只读该表，
   中间投入按 `Σ 建筑数 × 配方投入` 汇总。同时每月算出**逐建筑经营利润**快照
   `econ.buildingProfits`（产出价 − 投入价 − 分摊工资），`v3_inspect economy` 可读。
@@ -249,7 +249,15 @@ claude plugin test .
 hooks/hooks.json             单个 hooks 模块
 hooks/register.tsx           命令、工具、御前会议、秘书、系统提示、三层渲染
 types/index.d.ts             PluginState 契约与世界模型类型（world v11：建筑配方、逐建筑利润与四税基、铁矿石/钢铁；科技树规划中）
-engine/data.ts               国家/商品/建筑/科技/领袖/事件模板、官僚与失业派生
+engine/data/index.ts         桶：原样再导出全部公共符号，`./data` 导入路径不变
+engine/data/goods.ts         商品/资源禀赋/区域运输成本/消费需求参数
+engine/data/buildings.ts     建筑定义/配方/建造时长/基础设施系数/工业建筑清单
+engine/data/tech.ts          科技表与 techCost/techName
+engine/data/leaders.ts       领袖构造函数与继承序列（successorFor）
+engine/data/countries.ts     十国种子、支出分类与政府类型
+engine/data/events.ts        事件模板、随机抽取与对手选择
+engine/data/derivations.ts   官僚/失业/劳动力/资源乘数/基础设施等派生函数
+engine/data/world.ts         createWorld 与各类空状态构造函数
 engine/sim.ts                门面（barrel）：原样再导出下列模块，保持公共导入面不变
 engine/internal.ts           跨模块共享的小工具：clamp、日期、GOOD 校验、v7 建造字段补齐
 engine/economy.ts            产出/需求/价格形成、支出法 GDP、逐建筑利润、税基量与利用率反馈

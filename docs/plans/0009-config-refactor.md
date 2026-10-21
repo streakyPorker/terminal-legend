@@ -210,8 +210,18 @@
 - 有意保留：`engine/data.ts` 的全局业务系数（`ARTISAN_OUTPUT`/`CONSUMPTION_PROPENSITY`/`SUBSISTENCE`/`GOVERNMENT_DEMAND`/`INCOME_ELASTICITY`/`CAPITAL_LABOR_SCALE`/`INFRA_MULT_FLOOR` 等）按本任务「排除 data.ts」留给 D2/D3；法案 `addModifier` 之外的**直达效果**字面量（`actions.ts` 的 `law` 分支）与纯结构常量（`1e-9`/`/1000` 单位换算/数组槽位）未抽。
 
 
-### D2 拆 `engine/data.ts` → `engine/data/*.ts`（桶）
+### D2 ✅ 拆 `engine/data.ts` → `engine/data/*.ts`（桶）
 - 与 `0012-code-splits.md` 的 S2 合并执行，一次只搬一个域、逐提交验证，桶文件保证 `./data` 导入路径不变。
+
+**D2 完成记录**
+
+- `engine/data.ts`（2333 行）删除，改为 `engine/data/` 目录 + 桶 `engine/data/index.ts`（98 行）。`./data` 现解析到 `data/index.ts`。
+- 新模块（值 + 类型，均只 import `types` 或叶子模块）：`goods.ts`(145) / `buildings.ts`(482) / `tech.ts`(21) / `leaders.ts`(198) / `countries.ts`(669) / `events.ts`(317) / `derivations.ts`(240) / `world.ts`(287)。
+- **无 `pops.ts`**：原文件没有可分离的人口/阶级目录——人口数值内嵌在 `COUNTRY_SEEDS`（归 `countries.ts`），人口派生函数（`deriveUnemployment`/`deriveLabor`）归 `derivations.ts`。
+- **公共导出集 1:1**：桶用**显式具名再导出**（非 `export *`），机器核对为 **72 进 / 72 出**、无 missing/无 extra（60 值 + 12 类型）。内部专用助手（`leader`、`clampValue`、种子构造器、`CountrySeed`）留在各自模块，不进公共面。
+- **依赖环**：层内无环（goods/buildings/tech/leaders/countries/events 只依赖叶子；derivations→buildings/goods；events→derivations；world→countries/tech/derivations）。既有的 `data ↔ modifiers ↔ scale` 环经桶保留，因所有跨模块使用都在函数体内、非模块初始化期，行为不变。
+- **行为零改动**：所有值/注释逐字保留；`WorldState.version` 仍为 **v11**。
+- `claude plugin test .` **388 pass / 0 fail**（与 D1 基线一致）；`claude plugin validate .` 通过（仅既有 register.tsx 警告）。
 
 ### D3（可选）其它模块的域内常量归位
 - `engine/trade.ts` / `fiscal.ts` / `construction.ts` / `situations.ts` 的域内常量收进对应 `config/` 文件，模块按域 import。

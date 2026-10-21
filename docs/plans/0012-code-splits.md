@@ -26,9 +26,10 @@
 - `hooks/prompt.ts` — `prompt.compose` 与系统提示拼装。
 - `register.tsx` → 入口 + 桶重导出（保持 `register` 导出）。
 
-### S2 `engine/data.ts` → `engine/data/`（与计划 0009 §1 一致）
-- `engine/data/{goods,buildings,tech,events,leaders,countries,pops,derivations}.ts`
-- `engine/data/index.ts` — 桶，`import ... from './data'` 路径不变。
+### S2 ✅ `engine/data.ts` → `engine/data/`（与计划 0009 §1 一致）
+- 实际布局：`engine/data/{goods,buildings,tech,leaders,countries,events,derivations,world}.ts`；**无 `pops.ts`**（原文件无独立人口目录，人口数值在 `COUNTRY_SEEDS`、人口派生在 `derivations.ts`），`createWorld` 归 `world.ts`。
+- `engine/data/index.ts` — 桶，**显式具名再导出**旧 `data.ts` 的全部 72 个公共符号（60 值 + 12 类型），`import ... from './data'` 路径不变；原 `engine/data.ts` 已删除。
+- 完成后：`claude plugin test .` 388 pass / 0 fail，`validate` 通过，World 仍 v11，行为零改动。最大文件 `countries.ts` 669 行（纯种子数据，未超 900 硬拆线）。
 
 ### S3 `view/panels.tsx` → `view/panels/`
 - 按面板拆分（overview / council / market / economy / pops / diplomacy / military / tech / events / log / rankings / band / report），`view/panels/index.tsx` 桶。

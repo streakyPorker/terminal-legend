@@ -1,0 +1,145 @@
+import type { GoodId, Region, ResourceId, SpendingCategory, WarGoal } from '../../types'
+
+/** Chinese display labels for the four war goals (plan 0004 §5). */
+export const WAR_GOAL_NAMES: Record<WarGoal, string> = {
+  reparations: '赔款',
+  openMarket: '开放市场',
+  sphere: '势力范围',
+  humiliation: '威望羞辱',
+}
+
+export const GOODS: Record<GoodId, { name: string; basePrice: number }> = {
+  grain: { name: '粮食', basePrice: 1 },
+  wood: { name: '木材', basePrice: 1.2 },
+  coal: { name: '煤炭', basePrice: 1.6 },
+  // `iron` is now raw ORE (铁矿石): a cheap raw material whose ONLY industrial
+  // use is feeding the steel chain. `steel` (钢铁, below) is the worked metal
+  // the heavy consumers (construction, railroads, machinery/arms) actually buy.
+  // The id `iron` is kept to minimise cross-table churn (plan 0011 F1).
+  iron: { name: '铁矿石', basePrice: 1 },
+  // Priced at the OLD `iron` base price so every downstream consumer that switched
+  // from `iron` to `steel` sees its real input cost unchanged. Tunable — F7 tunes.
+  steel: { name: '钢铁', basePrice: 2.6 },
+  fabric: { name: '布料', basePrice: 2 },
+  clothes: { name: '成衣', basePrice: 3 },
+  liquor: { name: '酒类', basePrice: 2.6 },
+  furniture: { name: '家具', basePrice: 3.2 },
+  machinery: { name: '机械', basePrice: 5.2 },
+  arms: { name: '军械', basePrice: 5.5 },
+  luxury: { name: '奢侈品', basePrice: 10 },
+  opium: { name: '鸦片', basePrice: 2.5 },
+  services: { name: '服务', basePrice: 4 },
+}
+
+export const GOOD_IDS = Object.keys(GOODS) as GoodId[]
+
+/**
+ * Region-pair transport cost multipliers (plan 0004 §1.2). Symmetric; the
+ * diagonal is 1.0 so domestic-equivalent pairs pay no transport friction.
+ */
+export const REGION_COST: Record<Region, Record<Region, number>> = {
+  europe: { europe: 1.0, eastAsia: 1.25, americas: 1.15, middleEast: 1.08 },
+  eastAsia: { europe: 1.25, eastAsia: 1.0, americas: 1.3, middleEast: 1.2 },
+  americas: { europe: 1.15, eastAsia: 1.3, americas: 1.0, middleEast: 1.25 },
+  middleEast: { europe: 1.08, eastAsia: 1.2, americas: 1.25, middleEast: 1.0 },
+}
+
+// ---------------------------------------------------------------- resources
+
+/**
+ * Resource endowments are national and static in this slice. Only this table
+ * changes when a new resource is added (plan 0003 §5).
+ */
+export const RESOURCE_IDS = ['farmland', 'timber', 'coal', 'iron'] as const
+
+export const RESOURCE_MAP: Record<
+  ResourceId,
+  { name: string; goods: Partial<Record<GoodId, number>> }
+> = {
+  farmland: { name: '农田', goods: { grain: 1 } },
+  timber: { name: '林地', goods: { wood: 1, furniture: 0.2 } },
+  coal: { name: '煤矿', goods: { coal: 1 } },
+  iron: { name: '铁矿', goods: { iron: 1 } },
+}
+
+export const RESOURCE_NAMES: Record<ResourceId, string> = {
+  farmland: '农田',
+  timber: '林地',
+  coal: '煤矿',
+  iron: '铁矿',
+}
+
+// ---------------------------------------------------------------- demand parameters
+
+/**
+ * Stone-Geary consumer demand (plan 0003 §2.1). Values are per popFactor
+ * (population in 万 / 1000) per month. Elasticity shares sum to 1, so all
+ * supernumerary income is spent.
+ */
+export const CONSUMER_GOODS: GoodId[] = [
+  'grain',
+  'clothes',
+  'furniture',
+  'liquor',
+  'services',
+  'luxury',
+]
+
+/**
+ * Calibrated: the plan's per-popFactor table was scaled by 0.6 after the
+ * 60-month baseline showed the seed economies sitting below a 693-gold
+ * subsistence line, which pinned them in a poverty trap. See
+ * docs/plans/0003-economic-loop.md §0.2 for the recorded calibration.
+ */
+export const SUBSISTENCE_SCALE = 0.6
+
+export const SUBSISTENCE: Record<GoodId, number> = {
+  grain: 7.0 * SUBSISTENCE_SCALE,
+  clothes: 1.2 * SUBSISTENCE_SCALE,
+  furniture: 0.3 * SUBSISTENCE_SCALE,
+  liquor: 0.6 * SUBSISTENCE_SCALE,
+  services: 1.0 * SUBSISTENCE_SCALE,
+  luxury: 0.02 * SUBSISTENCE_SCALE,
+  wood: 0,
+  coal: 0,
+  iron: 0,
+  steel: 0,
+  fabric: 0,
+  machinery: 0,
+  arms: 0,
+  opium: 0,
+}
+
+/**
+ * Share of supernumerary income actually spent on consumer goods this month.
+ * The rest is household saving/leakage, which keeps the expenditure
+ * multiplier from amplifying small investment shocks into runaway growth.
+ */
+export const CONSUMPTION_PROPENSITY = 0.75
+
+export const INCOME_ELASTICITY: Record<GoodId, number> = {
+  grain: 0.15,
+  clothes: 0.18,
+  furniture: 0.1,
+  liquor: 0.1,
+  services: 0.27,
+  luxury: 0.2,
+  wood: 0,
+  coal: 0,
+  iron: 0,
+  steel: 0,
+  fabric: 0,
+  machinery: 0,
+  arms: 0,
+  opium: 0,
+}
+
+/** Government purchases by spending category (plan 0003 §2.3). */
+export const GOVERNMENT_DEMAND: Record<SpendingCategory, Partial<Record<GoodId, number>>> = {
+  army: { arms: 0.7, machinery: 0.3 },
+  navy: { arms: 0.5, machinery: 0.5 },
+  bureaucracy: { services: 0.8, furniture: 0.2 },
+  education: { services: 0.7, furniture: 0.3 },
+  welfare: { grain: 0.6, clothes: 0.4 },
+  construction: { wood: 0.4, steel: 0.35, machinery: 0.25 },
+}
