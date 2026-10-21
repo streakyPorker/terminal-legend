@@ -1,6 +1,6 @@
 # 修正（buff/debuff）通过统一入口叠算
 
-- Status: accepted
+- Status: superseded by `0024-config-and-modifier-blocks.md`（叠算顺序原样保留并折入 0024；本文的存量/流量口径与来源审计继续有效）
 
 所有可被政策、法案、事件或天命改变的数值，都必须经过 `engine/modifiers.ts` 的
 `applyModifiers(country, stat, base)` 读取，而不是在公式里直接写死加成。修正带有

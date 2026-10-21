@@ -180,6 +180,7 @@ node statusline/install.mjs
    溢出、国际扩散。**等 0007-E5 校准后再排期。**
 4. `docs/plans/0002-agent-event-trees.md`：主要大国专属国策/事件树，再到多国交互事件树。
    **⏸ 暂停**，等经济系统打磨完成后再恢复。
+5. `docs/plans/0009-config-refactor.md`（ADR 0024，取代 ADR 0004）：配置分层（`engine/config/` + `engine/data/`）与统一「配置块」乘数机制，增量 TDD、第一刀行为保持。
 
 已完成、作为参考：`0003-economic-loop.md`（World v5）、`0004-trade-diplomacy.md`（World v6）、
 ADR 0006（World v7 净资产财政）、ADR 0020（World v8 持久贸易航线）、
