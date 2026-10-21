@@ -1,6 +1,6 @@
 # 建筑扩张与统一基础设施（Building Expansion + Infrastructure）
 
-- Status: **F1、F2、F3、F4、F5、F6 已实现**（World v11：F1 `iron`→铁矿石、新增 `steel`，详见 §7.2；F2 `mines`→`coalMines`/`ironMines`/`lumberMills`，详见 §7.3；F3 `factories`→七个单产工业建筑，详见 §7.4；F4 加学校/运河/电报/要塞/船坞，详见 §7.5；F5 统一基础设施，详见 §7.6；F6 `unlock` 前向字段 + `build` 校验，详见 §7.7）；F7 待做。其余章节仍为提案（本文件描述，F2+ 再改引擎/测试）
+- Status: **F1–F7 已实现**（World v11：F1 `iron`→铁矿石、新增 `steel`，详见 §7.2；F2 `mines`→`coalMines`/`ironMines`/`lumberMills`，详见 §7.3；F3 `factories`→七个单产工业建筑，详见 §7.4；F4 加学校/运河/电报/要塞/船坞，详见 §7.5；F5 统一基础设施，详见 §7.6；F6 `unlock` 前向字段 + `build` 校验，详见 §7.7）；**F7 分批校准已完成**。其余章节仍为提案（本文件描述，F2+ 再改引擎/测试）
 - Depends on: ADR 0026（本计划对应的决策）、ADR 0021（建筑配方单一真源）、ADR 0022（利用率与利润投资）、ADR 0010/0012/0013（营造所与建造能力）、ADR 0005（不做存档兼容）
 - Scope: 把建筑名册从 9 类扩到 **22 类**（拆矿场、拆工厂、加 5 类）；引入 `steel` 商品与「铁矿石」语义；把「交通基础设施」升级为**统一基础设施**（供给/需求/线性 debuff/维护）；给建筑加前瞻 `unlock` 字段。世界版本升到 **v11**。
 - 来源：用户口述。核心诉求：「建筑盈利能力要读得清 → 单产/少产建筑」；「基础设施是一个统一的东西，铁路/港口/运河/电报都产它，所有建筑都要用它」；「商品按需加，先维护一个最小可用集」。
@@ -84,8 +84,8 @@
 | `schools` 学校 | services 0.1 | — | 0.15 | access |
 | `universities` 大学 | services 0.2 | — | 0.2 | — |
 | `barracks` 兵营 | arms 0.05 | — | 0.3 | — |
-| `forts` 要塞 | arms 0.03（**待定**） | steel 0.1、wood 0.1 | 0.3 | tech+industrial |
-| `navalYards` 船坞 | machinery 0.1（**待定**） | steel 0.2、wood 0.2 | 0.8 | tech+industrial |
+| `forts` 要塞 | arms **0.08**（F7 定案，§7.8） | steel 0.02、wood 0.03 | 0.3 | tech+industrial |
+| `navalYards` 船坞 | machinery **0.14**（F7 定案，§7.8） | steel 0.08、wood 0.08 | 0.8 | tech+industrial |
 | `offices` 官署 | services 0.8 | — | 0.1 | — |
 | `railroads` 铁路 | — | **steel 0.5**、wood 0.4 | 0.2 | — |
 | `ports` 港口 | — | — | 0.4 | — |
@@ -154,9 +154,9 @@ ratio = 供给 / max(0.1, 需求)
 基础设施乘数 = ratio ≥ 1 ? 1 : clamp(ratio, 0.35, 1)     // 线性短缺 debuff
 ```
 
-供给系数（**F5 已落地值**）：铁路 3.0、港口 1.5、运河 2.0、电报 0.8。
+供给系数（**F7 已校准值**）：铁路 2.5、港口 1.1、运河 1.6、电报 0.7（F5 的 3.0/1.5/2.0/0.8 已下调，见 §7.8）。
 需求（`infrastructureNeed`，**F5 已落地值**）：农场 **0**（自给农业不依赖国家运输网；§3.2 的 0.4 在 3000 座农场的 QING 上会把 ratio 压到 0.016）；采掘 0.12–0.15；轻工业 0.09–0.18；重工业 0.18–0.22（钢铁厂最高）；服务/公共 0.03–0.08；军事 0.05–0.15；基建自身 0.05–0.12。完整逐建筑值见 `engine/data.ts` 的 `BUILDINGS[*].infrastructureNeed`。
-按此值，1836 基线（种子 9100）的 ratio 为 QING 1.33／GBR 2.96／FRA 2.02／PRU 1.25／RUS 1.00／AUS 0.88／USA 2.32／JAP 1.73／OTT 1.72／SPA 2.24——**仅 AUS 触发 debuff**，其余供过于求无罚。随工业化推进而基建维护不足时（如 84 月 AUS 0.42、PRU 0.63、RUS 0.72）debuff 自然显现。**数值仍可在 F7 再校准。**
+**F7 校准后**：1836 基线（种子 9100）的 ratio 为 QING 1.10／GBR 2.30／FRA 1.55／PRU 1.15／RUS 1.14／AUS 1.20／USA 1.78／JAP 1.27／OTT 1.26／SPA 1.69——**十国全部 ≥1，不预触发**。随工业化推进而基建不扩建时 debuff 自然显现（84 月 QING 0.87、PRU 0.54、RUS 0.66、AUS 0.51，其余供过于求无罚；最低 0.51 未触 0.35 地板）。
 
 ### 4.2 应用与存储
 
@@ -201,17 +201,23 @@ type BuildingDef = {
 
 ## 6. 利润带与校准（分批）
 
-**目标利润带（`buildingProfits` 口径；全部为提案，可调）**：
+**目标利润带（`buildingProfits` 口径，7 大国产量加权，24/48/84 月；F7 已校准）**：
 
 | 组 | 建筑 | 目标毛利带 |
 | --- | --- | --- |
-| 农业 | `farms` | 5–20% |
-| 采掘 | `coalMines`/`ironMines`/`lumberMills` | 8–25%（资源租，带宽大） |
-| 轻工业 | `textileMills`/`furnitureWorks`/`distilleries`/`luxuryWorks` | 5–20% |
-| 重工业 | `steelMills`/`machineryWorks`/`arsenals` | 5–18% |
-| 服务/知识 | `schools`/`universities`/`offices` | 0–15%（公共，可低） |
-| 军事 | `barracks`/`forts`/`navalYards` | 0–12% |
+| 农业 | `farms` | 48–62% |
+| 采掘 | `coalMines`/`ironMines`/`lumberMills` | 42–62%（资源租，带宽大） |
+| 轻工业 | `textileMills`/`furnitureWorks`/`distilleries`/`luxuryWorks` | 4–25% |
+| 重工业 | `steelMills`/`machineryWorks`/`arsenals` | 0–36% |
+| 服务/知识 | `schools`/`universities`/`offices` | 38–58% |
+| 军事 | `barracks`/`forts`/`navalYards` | 45–65% |
 | 成本中心 | `railroads`/`ports`/`canals`/`telegraphs`/`workshops` | **不设带**（基建/建造体系） |
+
+> **为何不是 §6 原稿的 5–20%**：`buildingProfits` 是**毛经营剩余**，工资按 `WAGE_ALLOCATION='valueAdded'`
+> 分摊，于是**无材料投入的部门**（农场/矿场/服务/兵营）的毛利率恒为 `1 − 全国工资/Σ增值 ≈ 45–60%`；
+> 只有**材料加工型工业**能落进 5–25% 带。原稿对所有组都写 ≤25% 与宏观工资份额不自洽——F7 按
+> 这一结构**重定带**（把工业带收在 4–25%），并把改前「近乎不赚」的家具厂（0.3%）、兵工厂（1.0%）
+> 提到正毛利。详见 §7.8。
 
 **分批调参（`分批`，不是一次全调）**：把 gate 扩展成**按组回归**，一次调一组：
 
@@ -233,7 +239,7 @@ type BuildingDef = {
 | **F4 加 5 类建筑** ✅ | `schools`/`canals`/`telegraphs`/`forts`/`navalYards`（名册/配方/时间/建造点/投资/输出/种子） | 每个 `Record<BuildingId,…>` 都要补 5 键；运河/电报无产出需特判为成本中心 | 5 个 id 出现在全部 `Record<BuildingId,…>` 表；`canals`/`telegraphs` output 空且供给 >0；`completeBuilding` 对新增的可建筑无遗漏（或明确无副作用） |
 | **F5 统一基础设施 + debuff** ✅ | `INFRA_SUPPLY`/`infrastructureNeed`；`ratio`/乘数；`computeProduction` 施加；`computeDemand` 加维护需求；月末写 `基础设施水平`；旧 `gates.infrastructure` 与旧曲线退场 | 改变了全部建筑的产出口径（行为变更）；维护需求进市场会推高 wood/coal/services 需求 | `ratio=1` → 乘数 1（无 debuff）；`ratio=0.5` → 乘数 0.5；`ratio≥1` 不奖励；维护需求按供给/水平正确计入 demand；`C+I+G+NX===GDP` 不变；60 月确定性 |
 | **F6 `unlock` + build 校验** ✅ | `BuildingDef.unlock`（`{ techLevel?: number }`）；`build` 动作加 techLevel 校验；`inspect buildings` 只读显示 | 校验写反会误挡建筑；字段位置写错会让 TS 契约不一致 | 开局所有建筑可建；合成一个 `unlock.techLevel > 当前` 的建筑被拒；当前缺省下 `build` 行为与接入前逐位相同 |
-| **F7 分批校准 + gate** | 扩展 `tests/economy-recipe-calibration.test.ts`：按 §6 的分组利润带、`steel` 两侧、无钉价；按批 A→B→C→D 校准种子与系数 | 一次全调会互相掩盖；参考点选择影响结论 | 每组产货建筑在参考点落带；`iron`/`steel`/`machinery` 两侧都有市场（每 12 月 ≥1 次）；无商品长期钉 0.25×/4×；`wages+profits ∈ [0.5,1.5]×realGdp` |
+| **F7 分批校准 + gate** ✅ | 扩展 `tests/economy-recipe-calibration.test.ts`：按 §6 的分组利润带、`steel` 两侧、无钉价；按批 A→B→C→D 校准种子与系数 | 一次全调会互相掩盖；参考点选择影响结论 | 每组产货建筑在参考点落带；`iron`/`steel`/`machinery` 两侧都有市场（每 12 月 ≥1 次）；无商品长期钉 0.25×/4×；`wages+profits ∈ [0.5,1.5]×realGdp` |
 
 ### 7.1 拆分的迁移顺序（降低红绿时间）
 
@@ -427,6 +433,40 @@ F6 给建筑加**前瞻 `unlock` 字段**并在 `build` 动作里执行，**行�
   现名册 22 类全部无阈值且每类可入队；`randomDecision` 的 build 候选仍产出可应用的决策；`newWorld().version === 11`。
 - **未做（刻意）**：科技树（plan 0005）、任何真实解锁阈值、F7 分批再校准。
 
+### 7.8 F7 已落地的安排（World v11，名册/结构不变）
+
+F7 是一次 **numbers-only** 的分批校准（B-1 商品/配方 → B-2 基础设施 → B-3 造价/工期/建造点 → B-4
+gate 扫尾），不改任何公式、结构或世界形状（仍 **v11**）。全部为数据面改动：
+
+- **B-1 配方与基价**（`engine/data.ts`）：
+  - **家具厂**砍材料单（`fabric 1.14→0.7、steel 0.3→0.18、machinery 0.18→0.1、wood 0.1→0.06、
+    coal 0.18→0.1`）——改前产出价值 ≈ 投入价值，毛利仅 0.3%。
+  - **兵工厂**提产出/砍投入（`arms 0.9→1.0`；`steel 0.5→0.36、machinery 0.3→0.18、iron 0.3→0.18、
+    coal 0.18→0.12`）——改前毛利 1.0%。
+  - **钢铁厂**改为**低机械、高煤**（`iron 3.5→3.2、coal 0.5→1.0、machinery 0.18→0.1`），使其对机械
+    涨价的暴露变小、整段基线内毛利保持为正（改前 84 月仅 +1.9%）。
+  - **机械厂**（`steel 0.5→0.55、machinery 0.82→0.8`）、**酿酒厂**（`grain 1.0→1.35`）、**奢侈品厂**
+    （`fabric 1.14→1.5、output 0.49→0.48`）微调入带。
+  - **要塞**（`arms 0.03→0.08`；`steel 0.1→0.02、wood 0.1→0.03`）、**船坞**（`machinery 0.1→0.14`；
+    `steel 0.2→0.08、wood 0.2→0.08`）——改前两者为**负增值**配方，F7 定为可盈利的小量军事产出。
+  - **基价**：`machinery 6.0→5.2`、`steel 2.2→2.6`（钢铁链在 84 月内保持正毛利；`steel>iron`、
+    `steel<machinery` 关系不变）。
+- **B-2 基础设施**：`INFRA_SUPPLY` 由 3.0/1.5/2.0/0.8 降到 **2.5/1.1/1.6/0.7**，并重定少数种子
+  铁路/港口座数（QING 港 14→16；PRU 铁 6→7、港 10→12；RUS 铁 2→5、港 12→14；AUS 铁 4→7、港 5→9），
+  使 1836 十国 ratio **全部 ≥1（1.10–2.30）**、84 月有国家自然跌破 1（QING/PRU/RUS/AUS），
+  debuff **由产业增长触发**、不预触发、不触地板。
+- **B-3 造价/工期/建造点**：核对无误，**未改**——重型 > 轻工 > 采掘（造价），铁路（8 月）/运河
+  （6 月）最长，**无奇廉/奇慢项**；`CAPACITY_COST` 铁路 4 / 运河 3 最高，与工程量口径一致。
+- **B-4 gate**（`tests/economy-recipe-calibration.test.ts` 新增 5 项）：逐族毛利带（24/48/84 月）、
+  「每类产货建筑均为正毛利」、「新建才出现的工事（学校/要塞/船坞）建成后可盈利」、
+  「基础设施：1836 不预触发 + 84 月有国家跌破 1 + 不低于 0.35 地板」、造价/工期/建造点排序。
+- **实测（种子 9100，7 大国产量加权毛利，m24/m48/m84）**：农业 53.6/58.3/56.9；采掘 50.5–54.9；
+  轻工 6.1–19.6；重工 2.2（钢铁 m84）–31.0（钢铁 m24）；服务 44.4–50.5；军事 53.3–59.0。
+  84 月内**无商品钉在 0.25×/4× 超 3 个月**；grain/wood/coal/iron/fabric/machinery/steel **每 12 月
+  两侧性 12/12**。
+- **不变量**：`C+I+G+NX===GDP`、金币守恒、60/120 月确定性、鸦片门、工资分摊恒等式全部保持；
+  世界版本仍 **v11**。`claude plugin test .` **382 pass / 0 fail**；`claude plugin validate .` 通过。
+
 ## 8. 验收
 
 - `v3_inspect economy` 能逐类读到**单产建筑**的「产出 − 投入 − 工资 = 利润（毛利，金/座）」。
@@ -454,6 +494,7 @@ F6 给建筑加**前瞻 `unlock` 字段**并在 `build` 动作里执行，**行�
   但会让早期建造依赖钢铁链。F2 时定。
 - **`forts` / `navalYards` 的产出**：军事成本中心（无货产出 + 军事效果）还是小量军械/机械产出？
   本文按小量产出写；若要军事效果（士气/质量/防御），需新增结算点，超本切片范围。
+  → **F7 已定：取小量产出并校准为可盈利（`forts` arms 0.08、`navalYards` machinery 0.14，§7.8）。**
 - **`lumberMills` 的 `outputModifier`**：复用 `mineOutput` 还是新增 `lumberOutput`？
 - **基础设施字段命名**：`econ.transportInfrastructure` 保留 vs 改名 `econ.infrastructure`；
   `ModifierStat` 是否同步。建议字段改名、ModifierStat 保留（降政策改动）。
@@ -467,6 +508,8 @@ F6 给建筑加**前瞻 `unlock` 字段**并在 `build` 动作里执行，**行�
 - **基础设施供给是否受市场接入/科技门控**：本 ADR 的供给系数是常数；是否乘 tech/access 待定。
   → **F5 已定：常数**，不乘 tech/access。
 - **种子座数分配**：三矿与七工的初始分配、新建筑的国别初值（可按 techLevel/region 给）。
+  → **F7 已定：工业/采掘座数沿用 F2/F3 的守恒分配；新建筑仍起步 0 座（私人不投建）；
+  仅重定少数种子铁路/港口座数，使 1836 基础设施 ratio 不预触发（§7.8）。**
 - **学校是否在建成时加识字率/教育效果**：本文只让其产出 `services`；加 side effect 需改
   `completeBuilding`。
 - **`unlock` 与 plan 0005 的接口**：科技树里「解锁」是节点还是等级门槛，留给 0005。

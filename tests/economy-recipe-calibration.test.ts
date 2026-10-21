@@ -1,7 +1,16 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { ARTISAN_OUTPUT, BUILDING_IDS, GOODS, makeRngForWorld } from '../engine/data'
+import {
+  ARTISAN_OUTPUT,
+  BUILDINGS,
+  BUILDING_IDS,
+  BUILDING_TIME,
+  GOODS,
+  infrastructureStats,
+  makeRngForWorld,
+} from '../engine/data'
+import { CAPACITY_COST } from '../engine/construction'
 import { advance, computeEconomy, inspectEconomy, newWorld } from '../engine/sim'
-import type { GoodId, WorldState } from '../types'
+import type { BuildingId, GoodId, WorldState } from '../types'
 
 // Plan 0008 B5 (plan §5) calibration gates. Baseline: seed 9100, 84 months,
 // no player/AI decisions, matching the other baseline suites.
@@ -250,6 +259,160 @@ describe('B5 recipe calibration gates (plan 0008 §5)', () => {
       let sumWages = 0
       for (const building of BUILDING_IDS) sumWages += snap.buildingProfits[building].wages
       expect(Math.abs(sumWages - snap.wages)).toBeLessThan(1e-6)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Plan 0011 F7: the batched calibration pass. Per-family operating-margin
+// bands, the unified-infrastructure ratio regime, and the build
+// cost/time/capacity ordering. The bands are the family "sensible operating
+// band" plan 0011 §6/§7 requires; material-light, no-input sectors clear a high
+// band because the valueAdded wage-allocation fiction only charges them about
+// half of revenue as wages, while the material-processing industries sit in the
+// plan's 5-25% band (see plan 0011 §7.8).
+
+const FAMILIES: Record<string, readonly BuildingId[]> = {
+  agriculture: ['farms'],
+  extraction: ['coalMines', 'ironMines', 'lumberMills'],
+  lightIndustry: ['textileMills', 'furnitureWorks', 'distilleries', 'luxuryWorks'],
+  heavyIndustry: ['steelMills', 'machineryWorks', 'arsenals'],
+  services: ['universities', 'offices'],
+  military: ['barracks'],
+}
+
+// [floor, ceiling] on the 7-major production-weighted gross operating margin.
+const FAMILY_BANDS: Record<string, [number, number]> = {
+  agriculture: [0.48, 0.62],
+  extraction: [0.42, 0.62],
+  lightIndustry: [0.04, 0.25],
+  heavyIndustry: [0.0, 0.36],
+  services: [0.38, 0.58],
+  military: [0.45, 0.65],
+}
+
+type FamilyRow = Record<BuildingId, { profit: number; revenue: number }>
+
+function aggregateProduction(world: WorldState): FamilyRow {
+  const out = {} as FamilyRow
+  for (const id of BUILDING_IDS) out[id] = { profit: 0, revenue: 0 }
+  for (const cid of MAJORS) {
+    const profits = countryOf(world, cid).econ.buildingProfits
+    for (const id of BUILDING_IDS) {
+      out[id].profit += profits[id].profit
+      out[id].revenue += profits[id].revenue
+    }
+  }
+  return out
+}
+
+describe('F7 building calibration gates (plan 0011 §6/§7)', () => {
+  test('every goods-producing family lands in its calibrated margin band at 24/48/84 months', async () => {
+    const world = newWorld(BASELINE_SEED, 'QING')
+    const samples: Record<number, FamilyRow> = {}
+    for (let month = 1; month <= MONTHS; month += 1) {
+      advance(world, 1, [], rngFor(world))
+      if (month === 24 || month === 48 || month === MONTHS) {
+        samples[month] = aggregateProduction(world)
+      }
+    }
+    for (const month of [24, 48, MONTHS]) {
+      const rows = samples[month]
+      expect(rows, `month ${month}`).toBeDefined()
+      if (rows === undefined) continue
+      for (const [family, types] of Object.entries(FAMILIES)) {
+        let profit = 0
+        let revenue = 0
+        for (const id of types) {
+          profit += rows[id].profit
+          revenue += rows[id].revenue
+        }
+        const margin = revenue > 0 ? profit / revenue : 0
+        const [floor, ceiling] = FAMILY_BANDS[family]
+        expect(margin, `${family} m${month}`).toBeGreaterThanOrEqual(floor)
+        expect(margin, `${family} m${month}`).toBeLessThanOrEqual(ceiling)
+      }
+    }
+  })
+
+  test('every production type is profitable at the reference point (no permanently dead type)', async () => {
+    const world = newWorld(BASELINE_SEED, 'QING')
+    const seen: Record<string, { profit: number; revenue: number }> = {}
+    for (const id of PRODUCTION_BUILDINGS) seen[id] = { profit: 0, revenue: 0 }
+    for (let month = 1; month <= MONTHS; month += 1) {
+      advance(world, 1, [], rngFor(world))
+      if (month !== 24 && month !== MONTHS) continue
+      const rows = aggregateProduction(world)
+      for (const id of PRODUCTION_BUILDINGS) {
+        seen[id].profit += rows[id].profit
+        seen[id].revenue += rows[id].revenue
+      }
+    }
+    for (const id of PRODUCTION_BUILDINGS) {
+      const margin = seen[id].revenue > 0 ? seen[id].profit / seen[id].revenue : 0
+      expect(margin, `${id} margin`).toBeGreaterThan(0)
+      expect(margin, `${id} margin`).toBeLessThan(0.62)
+    }
+  })
+
+  test('works that only ever grow when built (schools/forts/navalYards) are profitable once built', async () => {
+    const world = newWorld(BASELINE_SEED, 'QING')
+    for (let month = 1; month <= 24; month += 1) advance(world, 1, [], rngFor(world))
+    const clone = JSON.parse(JSON.stringify(countryOf(world, 'GBR'))) as ReturnType<
+      typeof countryOf
+    >
+    clone.econ.buildings.schools = 6
+    clone.econ.buildings.forts = 3
+    clone.econ.buildings.navalYards = 2
+    const snap = computeEconomy(clone)
+    for (const id of ['schools', 'forts', 'navalYards'] as BuildingId[]) {
+      const row = snap.buildingProfits[id]
+      expect(row.revenue, `${id} revenue`).toBeGreaterThan(0)
+      expect(row.profit, `${id} profit`).toBeGreaterThan(0)
+    }
+  })
+
+  test('the unified infrastructure ratio: no 1836 pre-trigger, an emergent late-game debuff, no crush', async () => {
+    const world = newWorld(BASELINE_SEED, 'QING')
+    const ids = Object.keys(world.countries)
+    // 1836: every nation starts at or above its need — the debuff must not be
+    // pre-triggered just because the pool became a real demand model.
+    for (const id of ids) {
+      const stats = infrastructureStats(countryOf(world, id))
+      expect(stats.ratio, `${id} seed ratio`).toBeGreaterThanOrEqual(1)
+      expect(stats.multiplier, `${id} seed multiplier`).toBe(1)
+    }
+    for (let month = 1; month <= MONTHS; month += 1) advance(world, 1, [], rngFor(world))
+    let debuffed = 0
+    for (const id of ids) {
+      const stats = infrastructureStats(countryOf(world, id))
+      // The pool is never crushed past the floor, and never a meaningless
+      // runaway either (a >3x surplus would make the mechanic irrelevant).
+      expect(stats.multiplier, `${id} m${MONTHS} multiplier`).toBeGreaterThanOrEqual(0.35)
+      expect(stats.ratio, `${id} m${MONTHS} ratio`).toBeLessThan(3)
+      if (stats.ratio < 1) debuffed += 1
+    }
+    // Industry outgrowing infrastructure makes the debuff emerge somewhere.
+    expect(debuffed).toBeGreaterThanOrEqual(2)
+  })
+
+  test('build cost / time / capacity keep a plausible ordering', () => {
+    // Cost: heavy > light > extraction > farms.
+    expect(BUILDINGS.steelMills.cost).toBeGreaterThan(BUILDINGS.textileMills.cost)
+    expect(BUILDINGS.machineryWorks.cost).toBeGreaterThan(BUILDINGS.textileMills.cost)
+    expect(BUILDINGS.textileMills.cost).toBeGreaterThan(BUILDINGS.coalMines.cost)
+    expect(BUILDINGS.coalMines.cost).toBeGreaterThan(BUILDINGS.farms.cost)
+    // Railroads and canals are the longest, costliest, most capacity-hungry works.
+    expect(BUILDING_TIME.railroads).toBeGreaterThan(BUILDING_TIME.steelMills)
+    expect(BUILDING_TIME.canals).toBeGreaterThan(BUILDING_TIME.textileMills)
+    expect(CAPACITY_COST.railroads).toBeGreaterThan(CAPACITY_COST.steelMills)
+    expect(CAPACITY_COST.canals).toBeGreaterThan(CAPACITY_COST.schools)
+    // Nothing is absurd: every type takes at least 2 months and at most 8.
+    for (const id of BUILDING_IDS) {
+      expect(BUILDING_TIME[id], `${id} time`).toBeGreaterThanOrEqual(2)
+      expect(BUILDING_TIME[id], `${id} time`).toBeLessThanOrEqual(8)
+      expect(BUILDINGS[id].cost, `${id} cost`).toBeGreaterThan(0)
+      expect(CAPACITY_COST[id], `${id} capacity`).toBeGreaterThan(0)
     }
   })
 })

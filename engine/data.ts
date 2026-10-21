@@ -47,12 +47,12 @@ export const GOODS: Record<GoodId, { name: string; basePrice: number }> = {
   iron: { name: '铁矿石', basePrice: 1 },
   // Priced at the OLD `iron` base price so every downstream consumer that switched
   // from `iron` to `steel` sees its real input cost unchanged. Tunable — F7 tunes.
-  steel: { name: '钢铁', basePrice: 2.2 },
+  steel: { name: '钢铁', basePrice: 2.6 },
   fabric: { name: '布料', basePrice: 2 },
   clothes: { name: '成衣', basePrice: 3 },
   liquor: { name: '酒类', basePrice: 2.6 },
   furniture: { name: '家具', basePrice: 3.2 },
-  machinery: { name: '机械', basePrice: 6 },
+  machinery: { name: '机械', basePrice: 5.2 },
   arms: { name: '军械', basePrice: 5.5 },
   luxury: { name: '奢侈品', basePrice: 10 },
   opium: { name: '鸦片', basePrice: 2.5 },
@@ -396,14 +396,14 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
   },
   furnitureWorks: {
     output: { furniture: 1.54 },
-    input: { wood: 0.1, coal: 0.18, fabric: 1.14, steel: 0.3, machinery: 0.18 },
+    input: { wood: 0.06, coal: 0.1, fabric: 0.7, steel: 0.18, machinery: 0.1 },
     labor: 0.7,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
   },
   distilleries: {
     output: { liquor: 1.9 },
-    input: { grain: 1.0, coal: 0.18, wood: 0.1, machinery: 0.18 },
+    input: { grain: 1.35, coal: 0.2, wood: 0.11, machinery: 0.19 },
     labor: 0.6,
     gates: { tech: true, industrial: true },
     // The old bundled factory gated liquor by `industrial` alone (plan 0011 F3).
@@ -411,8 +411,8 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     outputModifier: 'factoryOutput',
   },
   machineryWorks: {
-    output: { machinery: 0.82 },
-    input: { steel: 0.5, coal: 0.18, wood: 0.1, machinery: 0.18 },
+    output: { machinery: 0.8 },
+    input: { steel: 0.55, coal: 0.2, wood: 0.1, machinery: 0.18 },
     labor: 1.0,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
@@ -420,21 +420,21 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
   steelMills: {
     output: { steel: 4.0 },
     // Ore (raw `iron`) + coal are smelted into steel: the only consumer of ore.
-    input: { iron: 3.5, coal: 0.5, machinery: 0.18 },
+    input: { iron: 3.2, coal: 1.0, machinery: 0.1 },
     labor: 1.0,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
   },
   arsenals: {
-    output: { arms: 0.9 },
-    input: { steel: 0.5, machinery: 0.3, coal: 0.18, iron: 0.3 },
+    output: { arms: 1.0 },
+    input: { steel: 0.36, machinery: 0.18, coal: 0.12, iron: 0.18 },
     labor: 0.9,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
   },
   luxuryWorks: {
-    output: { luxury: 0.49 },
-    input: { fabric: 1.14, coal: 0.18, wood: 0.1, machinery: 0.18 },
+    output: { luxury: 0.48 },
+    input: { fabric: 1.5, coal: 0.26, wood: 0.14, machinery: 0.24 },
     labor: 0.8,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
@@ -460,14 +460,14 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     labor: 0.2,
   },
   forts: {
-    output: { arms: 0.03 },
-    input: { steel: 0.1, wood: 0.1 },
+    output: { arms: 0.08 },
+    input: { steel: 0.02, wood: 0.03 },
     labor: 0.3,
     gates: { tech: true, industrial: true },
   },
   navalYards: {
-    output: { machinery: 0.1 },
-    input: { steel: 0.2, wood: 0.2 },
+    output: { machinery: 0.14 },
+    input: { steel: 0.08, wood: 0.08 },
     labor: 0.8,
     gates: { tech: true, industrial: true },
   },
@@ -618,10 +618,10 @@ export function buildOf(id: string): BuildingId | undefined {
 
 /** Infrastructure each provider building adds per month (plan §4.1). */
 export const INFRA_SUPPLY: Partial<Record<BuildingId, number>> = {
-  railroads: 3.0,
-  ports: 1.5,
-  canals: 2.0,
-  telegraphs: 0.8,
+  railroads: 2.5,
+  ports: 1.1,
+  canals: 1.6,
+  telegraphs: 0.7,
 }
 
 /** Shortfall-multiplier floor: a linear debuff cannot bite harder than this. */
@@ -923,7 +923,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 13,
     tariff: 8,
     spending: spending(6, 0.8, 4, 1, 0.5, 1.5),
-    buildings: buildings({ farms: 3000, coalMines: 18, ironMines: 15, lumberMills: 2, textileMills: 9, furnitureWorks: 2, distilleries: 1, machineryWorks: 4, steelMills: 1, arsenals: 2, luxuryWorks: 1, railroads: 0, ports: 14, universities: 4, barracks: 40, offices: 4, workshops: 12 }),
+    buildings: buildings({ farms: 3000, coalMines: 18, ironMines: 15, lumberMills: 2, textileMills: 9, furnitureWorks: 2, distilleries: 1, machineryWorks: 4, steelMills: 1, arsenals: 2, luxuryWorks: 1, railroads: 0, ports: 16, universities: 4, barracks: 40, offices: 4, workshops: 12 }),
     marketAccess: 0.45,
     unemployment: 6,
     resources: resources(85, 60, 65, 40),
@@ -1088,7 +1088,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 4,
     tariff: 8,
     spending: spending(4.5, 0.5, 1.8, 1.1, 0.8, 1.5),
-    buildings: buildings({ farms: 180, coalMines: 36, ironMines: 31, lumberMills: 3, textileMills: 26, furnitureWorks: 6, distilleries: 4, machineryWorks: 13, steelMills: 2, arsenals: 5, luxuryWorks: 4, railroads: 6, ports: 10, universities: 11, barracks: 22, offices: 8, workshops: 10 }),
+    buildings: buildings({ farms: 180, coalMines: 36, ironMines: 31, lumberMills: 3, textileMills: 26, furnitureWorks: 6, distilleries: 4, machineryWorks: 13, steelMills: 2, arsenals: 5, luxuryWorks: 4, railroads: 7, ports: 12, universities: 11, barracks: 22, offices: 8, workshops: 10 }),
     marketAccess: 0.7,
     unemployment: 5,
     resources: resources(60, 45, 80, 70),
@@ -1143,7 +1143,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 6,
     tariff: 15,
     spending: spending(6, 1.2, 3, 0.3, 0.4, 1),
-    buildings: buildings({ farms: 900, coalMines: 36, ironMines: 31, lumberMills: 3, textileMills: 14, furnitureWorks: 4, distilleries: 3, machineryWorks: 8, steelMills: 1, arsenals: 3, luxuryWorks: 2, railroads: 2, ports: 12, universities: 6, barracks: 50, offices: 6, workshops: 8 }),
+    buildings: buildings({ farms: 900, coalMines: 36, ironMines: 31, lumberMills: 3, textileMills: 14, furnitureWorks: 4, distilleries: 3, machineryWorks: 8, steelMills: 1, arsenals: 3, luxuryWorks: 2, railroads: 5, ports: 14, universities: 6, barracks: 50, offices: 6, workshops: 8 }),
     marketAccess: 0.5,
     unemployment: 4,
     resources: resources(80, 90, 40, 55),
@@ -1198,7 +1198,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: -5,
     tariff: 10,
     spending: spending(4, 0.6, 2.2, 0.6, 0.7, 1),
-    buildings: buildings({ farms: 420, coalMines: 31, ironMines: 26, lumberMills: 3, textileMills: 18, furnitureWorks: 5, distilleries: 3, machineryWorks: 10, steelMills: 2, arsenals: 4, luxuryWorks: 3, railroads: 4, ports: 5, universities: 8, barracks: 30, offices: 7, workshops: 10 }),
+    buildings: buildings({ farms: 420, coalMines: 31, ironMines: 26, lumberMills: 3, textileMills: 18, furnitureWorks: 5, distilleries: 3, machineryWorks: 10, steelMills: 2, arsenals: 4, luxuryWorks: 3, railroads: 7, ports: 9, universities: 8, barracks: 30, offices: 7, workshops: 10 }),
     marketAccess: 0.65,
     unemployment: 6,
     resources: resources(65, 65, 50, 45),

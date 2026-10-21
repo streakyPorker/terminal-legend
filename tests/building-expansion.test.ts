@@ -95,9 +95,12 @@ describe('F4 building expansion: schools / canals / telegraphs / forts / navalYa
     expect(Object.keys(BUILDING_RECIPES.canals.input).length).toBeGreaterThan(0)
     expect(Object.keys(BUILDING_RECIPES.telegraphs.input).length).toBeGreaterThan(0)
 
-    // forts / navalYards — small military output.
-    expect(BUILDING_RECIPES.forts.output).toEqual({ arms: 0.03 })
-    expect(BUILDING_RECIPES.navalYards.output).toEqual({ machinery: 0.1 })
+    // forts / navalYards — small military output. F7 calibrated both: forts'
+    // arms output (0.03 → 0.08) and navalYards' machinery output (0.1 → 0.14)
+    // now clear a positive operating margin instead of being value-destroying at
+    // the F4 draft coefficients (plan 0011 F7).
+    expect(BUILDING_RECIPES.forts.output).toEqual({ arms: 0.08 })
+    expect(BUILDING_RECIPES.navalYards.output).toEqual({ machinery: 0.14 })
     expect(BUILDING_RECIPES.forts.gates?.tech).toBe(true)
     expect(BUILDING_RECIPES.forts.gates?.industrial).toBe(true)
     expect(BUILDING_RECIPES.navalYards.gates?.tech).toBe(true)

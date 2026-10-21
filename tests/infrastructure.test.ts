@@ -155,13 +155,14 @@ describe('unified infrastructure pool (plan 0011 F5)', () => {
 
   test('infrastructure upkeep consumes throughput materials and administrative services', () => {
     const world = newWorld(9204, 'GBR')
-    const c = set(blank(countryOf(world, 'GBR')), 'railroads', 10) // supply 30, level 100
+    const c = set(blank(countryOf(world, 'GBR')), 'railroads', 10)
+    const supply = 10 * (INFRA_SUPPLY.railroads ?? 0)
     const upkeep = infrastructureUpkeep(c)
-    close(upkeep.wood ?? 0, 30 * (INFRA_UPKEEP.throughput.wood ?? 0))
-    close(upkeep.coal ?? 0, 30 * (INFRA_UPKEEP.throughput.coal ?? 0))
+    close(upkeep.wood ?? 0, supply * (INFRA_UPKEEP.throughput.wood ?? 0))
+    close(upkeep.coal ?? 0, supply * (INFRA_UPKEEP.throughput.coal ?? 0))
     close(
       upkeep.services ?? 0,
-      30 * (INFRA_UPKEEP.throughput.services ?? 0) + 1 * (INFRA_UPKEEP.admin.services ?? 0),
+      supply * (INFRA_UPKEEP.throughput.services ?? 0) + 1 * (INFRA_UPKEEP.admin.services ?? 0),
     )
     // The upkeep is booked as an intermediate demand (services included), so a
     // world with infrastructure demands more wood/coal/services than a blank one.

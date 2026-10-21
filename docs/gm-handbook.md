@@ -116,9 +116,9 @@
 | 商品 | id | 基价 | 商品 | id | 基价 |
 | --- | --- | ---: | --- | --- | ---: |
 | 粮食 | `grain` | 1.0 | 家具 | `furniture` | 3.2 |
-| 木材 | `wood` | 1.2 | 机械 | `machinery` | 6.0 |
+| 木材 | `wood` | 1.2 | 机械 | `machinery` | 5.2 |
 | 煤炭 | `coal` | 1.6 | 军械 | `arms` | 5.5 |
-| 铁矿石 | `iron` | 1.0 | 钢铁 | `steel` | 2.2 |
+| 铁矿石 | `iron` | 1.0 | 钢铁 | `steel` | 2.6 |
 | 布料 | `fabric` | 2.0 | 奢侈品 | `luxury` | 10.0 |
 | 成衣 | `clothes` | 3.0 | 鸦片 | `opium` | 2.5 |
 | 酒类 | `liquor` | 2.6 | 服务 | `services` | 4.0 |
@@ -144,17 +144,17 @@
 | 铁矿 `ironMines` | iron 0.96 | 无 | 0.6 | tech |
 | 伐木场 `lumberMills` | wood 0.96 | 无 | 0.4 | tech |
 | 纺织厂 `textileMills` | fabric 1.45、clothes 0.68 | grain 1.0、coal 0.18、wood 0.1、machinery 0.18 | 0.9 | tech + industrial |
-| 家具厂 `furnitureWorks` | furniture 1.54 | wood 0.1、coal 0.18、fabric 1.14、**steel 0.3**、machinery 0.18 | 0.7 | tech + industrial |
-| 酿酒厂 `distilleries` | liquor 1.9 | grain 1.0、coal 0.18、wood 0.1、machinery 0.18 | 0.6 | tech + industrial（liquor 仅 industrial） |
-| 机械厂 `machineryWorks` | machinery 0.82 | **steel 0.5**、coal 0.18、wood 0.1、machinery 0.18 | 1.0 | tech + industrial |
-| 钢铁厂 `steelMills` | **steel 4.0** | **iron(铁矿石) 3.5**、coal 0.5、machinery 0.18 | 1.0 | tech + industrial |
-| 兵工厂 `arsenals` | arms 0.9 | **steel 0.5**、machinery 0.3、coal 0.18、iron 0.3 | 0.9 | tech + industrial |
-| 奢侈品厂 `luxuryWorks` | luxury 0.49 | fabric 1.14、coal 0.18、wood 0.1、machinery 0.18 | 0.8 | tech + industrial |
+| 家具厂 `furnitureWorks` | furniture 1.54 | wood 0.06、coal 0.1、fabric 0.7、**steel 0.18**、machinery 0.1 | 0.7 | tech + industrial |
+| 酿酒厂 `distilleries` | liquor 1.9 | grain 1.35、coal 0.2、wood 0.11、machinery 0.19 | 0.6 | tech + industrial（liquor 仅 industrial） |
+| 机械厂 `machineryWorks` | machinery 0.8 | **steel 0.55**、coal 0.2、wood 0.1、machinery 0.18 | 1.0 | tech + industrial |
+| 钢铁厂 `steelMills` | **steel 4.0** | **iron(铁矿石) 3.2**、coal 1.0、machinery 0.1 | 1.0 | tech + industrial |
+| 兵工厂 `arsenals` | arms 0.9 | **steel 0.36**、machinery 0.18、coal 0.12、iron 0.18 | 0.9 | tech + industrial |
+| 奢侈品厂 `luxuryWorks` | luxury 0.48 | fabric 1.5、coal 0.26、wood 0.14、machinery 0.24 | 0.8 | tech + industrial |
 | 学校 `schools` | services 0.1 | 无 | 0.15 | access |
 | 运河 `canals` | 无 | wood 0.05 | 0.3 | 无 |
 | 电报 `telegraphs` | 无 | wood 0.02、iron 0.02 | 0.2 | 无 |
-| 要塞 `forts` | arms 0.03 | steel 0.1、wood 0.1 | 0.3 | tech + industrial |
-| 船坞 `navalYards` | machinery 0.1 | steel 0.2、wood 0.2 | 0.8 | tech + industrial |
+| 要塞 `forts` | arms 0.08 | steel 0.02、wood 0.03 | 0.3 | tech + industrial |
+| 船坞 `navalYards` | machinery 0.14 | steel 0.08、wood 0.08 | 0.8 | tech + industrial |
 | 铁路 `railroads` | 无 | **steel 0.5**、wood 0.4 | 0.2 | 无 |
 | 港口 `ports` | 无 | 无 | 0.4 | 无 |
 | 大学 `universities` | services 0.2 | 无 | 0.2 | 无 |
@@ -162,8 +162,9 @@
 | 官署 `offices` | services 0.8 | 无 | 0.1 | 无 |
 | 营造所 `workshops` | 无（产出建造点，`sim.ts` 特判） | wood 1、grain 0.6、iron 0.3 | 0 | 无 |
 
-- **门控乘数**：tech `1 + 等级 × 0.07`；infrastructure `0.6 + 交通 / 160`；
-  access `0.55 + 市场接入 × 0.9`；industrial 为煤铁禀赋因子（0.7~1.3）。
+- **门控乘数**：tech `1 + 等级 × 0.07`；access `0.55 + 市场接入 × 0.9`；industrial 为煤铁禀赋因子
+  （0.7~1.3）。旧的逐配方 infrastructure 门控（`0.6 + 交通 / 160`）**已退役**，由 F5 的统一基础设施
+  短缺乘数（对所有建筑生效）取代。
 - **中间投入进入需求**（用于定价与贸易），但**不计入 GDP**；GDP 只算最终用途。
 - 除逐建筑配方外，还有**国家级**项留在引擎里（手工业者产出、总人口服务项、鸦片国家
   `outputFactor`、工业城镇的煤(1.2)/铁矿石(0.6)/钢铁(0.2)/布(0.5)/木(0.3)消费，按 `popFactor`）。
@@ -179,8 +180,8 @@
   `furnitureWorks`/`distilleries`/`machineryWorks`/`steelMills`/`arsenals`/`luxuryWorks`** 七个
   单产/少产建筑（见上表），全部 tech+industrial 门控、共用 `factoryOutput`；旧的「liquor 仅
   industrial」覆盖保留在 `distilleries`。**输出系数 = 旧工厂该货系数 ÷ 该建筑的旧产出价值占比**，
-  故每货全国供给守恒；**投入合计复现旧工厂的每厂篮子**（煤/木/机械按座给全部七类），故聚合投入
-  价值守恒、参考点 7 大国加权**聚合工业毛利 ≈ 16%**（GBR 6.5% / FRA 11.6% / PRU 11.2%）。
+  故每货全国供给守恒；投入当时复现旧工厂的每厂篮子。**F7 再校准**后参考点 7 大国加权聚合工业
+  毛利 ≈ 16%（材料单已重定，逐类见 §4.3 与 `tests/economy-recipe-calibration.test.ts` 的 F7 带）。
   种子按旧产出价值占比拆座数（纺织 41.4%…钢铁 4.0%，余数给纺织），**总工业座数守恒**（516→516）。
   机械/军械/家具改吃 `steel`；`iron`（铁矿石）只作钢铁厂投入。`factories` 已从全部表面移除，
   派生口径改用工业建筑总数 `industrialBuildingCount`；`boom` 事件与 `工业起飞` 阈值改用该总数，
@@ -189,13 +190,13 @@
   门控 access；**建成时识字率 +0.002/座**）、**运河 `canals`** 与 **电报 `telegraphs`**
   （**无货产出的基建成本中心**，各给少量市场接入，并**供给统一基础设施**——运河 2.0/座、
   电报 0.8/座，见 F5）、**要塞 `forts`**
-  （产少量军械 arms 0.03）与 **船坞 `navalYards`**（产少量机械 machinery 0.1）。五类**种子起步 0 座**、
+  （产少量军械 arms，F7 定为 0.08）与 **船坞 `navalYards`**（产少量机械 machinery，F7 定为 0.14）。五类**种子起步 0 座**、
   `BUILDING_OUTPUT` 为空，故**私人投资不会自动投建**（公共/军事工程由国有或 AI 建造），1836 基线
   与物价校准不受扰动（plan 0011 §7.5）。
 - **F5 统一基础设施（World v11；ADR 0026、plan 0011 §7.6）**：把旧的「交通基础设施」标量升级为
   **唯一的国家级基础设施池**（**一个池，不分池**）。旧的 `econ.transportInfrastructure` 字段名保留
   （避免 v11 形状断裂），但语义改为**派生**：`level = clamp(100 × 供给/需求, 0, 100)`，每月按建筑座数重算。
-  - **供给**（`INFRA_SUPPLY`，每座/月）：铁路 3.0、港口 1.5、运河 2.0、电报 0.8。
+  - **供给**（`INFRA_SUPPLY`，每座/月，F7 校准）：铁路 2.5、港口 1.1、运河 1.6、电报 0.7。
   - **需求**（`BUILDINGS[*].infrastructureNeed`，每座/月）：重工业最高（钢铁厂 0.22、机械 0.18）、
     轻工业次之（0.09–0.18）、服务/公共最低（0.03–0.08）、**农场 0**（自给农业不依赖国家运输网）。
   - **短缺 debuff**：`ratio = 供给 / max(ε, 需求)`；`乘数 = ratio ≥ 1 ? 1 : clamp(ratio, 0.35, 1)`，
@@ -205,8 +206,22 @@
     服务来自现有官署/大学/学校。
   - **GM 读取**：`v3_inspect economy` 新增「统一基础设施」一行（供给 ÷ 需求 = ratio、水平、产出乘数、
     本月维护消耗）；`v3_inspect buildings` 每类显示「基础设施需求」；`v3_forecast` 显示下月产出乘数。
-  - **数值**：1836 基线（种子 9100）仅 AUS（ratio 0.88）触发 debuff，其余供过于求无罚；工业化推进而
-    基建维护不足时 debuff 才显现（84 月 AUS 0.42、PRU 0.63、RUS 0.72）。**F7 再统一校准。**
+  - **数值（F7 已校准）**：1836 基线（种子 9100）十国 ratio 全部 ≥1（1.10–2.30），**不预触发**；
+    工业化推进而基建不扩建时 debuff 显现——84 月 QING 0.87、PRU 0.54、RUS 0.66、AUS 0.51 触发，
+    其余供过于求无罚；最低不低于 0.5（未触地板）。
+- **F7 数值校准（World v11，plan 0011 §7.8）**：一次 numbers-only 的分批校准，不改公式/结构。
+  - **配方**：把 F3「投入守恒」留下的、产出价值几乎等于投入的家具厂/兵工厂改成可盈利（家具厂砍
+    材料单、兵工厂提产出/砍投入），钢铁厂改为**低机械、高煤**的投入组合以耐受机械涨价，奢侈品厂
+    提布料投入；要塞/船坞产出提高到能覆盖投入。
+  - **基价**：`machinery` 6.0→5.2、`steel` 2.2→2.6（使钢铁链在整段基线内保持正毛利）。
+  - **族毛利带**（7 大国产量加权，24/48/84 月）：农业 48–62%、采掘 42–62%、轻工业 4–25%、
+    重工业 0–36%、服务 38–58%、军事 45–65%；**每类产货建筑均为正毛利**（改前家具厂 0.3%、
+    兵工厂 1.0% 近乎不赚）。带宽被 `WAGE_ALLOCATION='valueAdded'` 的「无投入部门天然高毛利」
+    结构决定（见 `tests/economy-recipe-calibration.test.ts` 的 F7 gate）。
+  - **基础设施**：`INFRA_SUPPLY` 与少数种子铁路/港口座数重定，使 1836 十国 ratio 全部 ≥1、
+    84 月有国家自然跌破 1（debuff 由产业增长触发的设计意图成立）。
+  - **不变量**：`C+I+G+NX===GDP`、金币守恒、60/120 月确定性、鸦片门、工资分摊恒等式全部保持；
+    世界版本仍 v11。
 - **B5 工厂再平衡（ADR 0021、plan 0008 §5）**：工厂配方调轻了材料单、并下调成衣/酒/家具产出，
   使工厂在参考点可盈利。7 大国产量的加权**聚合工厂毛利落在 5–20% 带内**；工业核心 GBR/FRA/PRU
   亦在带内，资源富集、工资低的 RUS/QING/JAP 在带上界之上（属预期）。F1（World v11）重定了工厂
