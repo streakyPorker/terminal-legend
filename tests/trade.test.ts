@@ -40,11 +40,11 @@ const marketsFor = (
   return out
 }
 
-describe('T1a world schema (v7)', () => {
-  test('the world is version 7 and carries region, trade and opium', async () => {
+describe('T1a world schema (v8)', () => {
+  test('the world is version 8 and carries region, trade and opium', async () => {
     const world = newWorld(9001, 'QING')
     const qing = world.countries.QING
-    expect(world.version).toBe(7)
+    expect(world.version).toBe(8)
     expect(qing).toBeDefined()
     if (qing === undefined) return
     expect(qing.region).toBe('eastAsia')

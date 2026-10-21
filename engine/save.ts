@@ -4,7 +4,7 @@ import { BUILDING_IDS } from './data'
 import { normalizeConstructionQueue } from './sim'
 
 /** Current world shape; older in-memory worlds are discarded like old saves. */
-export const CURRENT_WORLD_VERSION = 7
+export const CURRENT_WORLD_VERSION = 8
 
 const safeName = (name: string | undefined): string => {
   const cleaned = (name ?? 'save').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32)
@@ -45,6 +45,7 @@ export async function saveGame(
  * construction-rent / per-project capacity fields default to 0.
  */
 function normalizeWorld(world: WorldState): WorldState {
+  if (!Array.isArray(world.tradeRoutes)) world.tradeRoutes = []
   for (const country of Object.values(world.countries)) {
     const buildings = country.econ.buildings as Record<string, number>
     if (typeof buildings.workshops !== 'number') {

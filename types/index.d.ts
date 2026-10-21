@@ -1,8 +1,9 @@
 // Type contract for terminal-legend.
 // Self-contained by design: the engine loads it as the plugin's `types` entry
 // and type-checks every `$.state` key the hooks module names against it.
-// World model v6: bilateral trade quantities, NX accounting, gold settlement and
-// resource imports are live (plan 0004 T1a/T1b).
+// World model v8: persistent bilateral trade routes sit in front of the
+// spot clearing (ADR 0020); bilateral quantities, NX accounting, gold
+// settlement and resource imports remain live (plan 0004 T1a/T1b).
 
 export type GameDate = { year: number; month: number }
 
@@ -42,6 +43,33 @@ export type TradeFlow = {
   exportDuty: number
   /** quantity × unitPrice, the exporter's domestic book value. */
   value: number
+}
+
+/**
+ * A persistent bilateral trade route (ADR 0020). Routes are the durable match
+ * between one exporter's surplus and one importer's deficit; each month the
+ * route pass runs before the residual (spot) market, so a routed pair trades
+ * without the spot friction. `world.tradeRoutes` is the single source of truth
+ * (mirrors `world.wars` / `world.indemnities`); `Country.trade` stays the
+ * derived current-month aggregate.
+ */
+export type TradeRoute = {
+  /** Deterministic id: `route-<good>-<from>-<to>`, unique per pair and good. */
+  id: string
+  good: GoodId
+  /** Exporting country id. */
+  from: string
+  /** Importing country id. */
+  to: string
+  /** Route size: capacity = level × ROUTE_UNIT_VOLUME × port/transport factor. */
+  level: number
+  /** State routes are opened by the player/state; private ones by the market. */
+  owner: 'state' | 'private'
+  openedAt: GameDate
+  /** Quantity carried last month (after the soft and payment cuts). */
+  lastQty: number
+  /** Importer's unit gain last month: domestic price − route landed price. */
+  lastMargin: number
 }
 
 /**
@@ -660,6 +688,12 @@ export type WorldState = {
   tradeTensions: TradeTension[]
   /** Diplomatic situations; at most one opium crisis may ever exist (plan 0004 §4). */
   situations: SituationRecord[]
+  /**
+   * Persistent bilateral trade routes (ADR 0020). The single source of truth
+   * for durable trade links; `Country.trade` is only the derived current-month
+   * aggregate. Sorted reads always tie-break by id, never by insertion order.
+   */
+  tradeRoutes: TradeRoute[]
   /** Auto-load this world when a session starts in the project. */
   resumeOnStart: boolean
   ai: AiState

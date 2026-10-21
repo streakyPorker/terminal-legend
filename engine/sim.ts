@@ -12,6 +12,7 @@ import type {
   LogKind,
   PolicyEffect,
   PolicyProposal,
+  TradeRoute,
   TradeTension,
   War,
   WarGoal,
@@ -73,8 +74,19 @@ import {
   effectiveResources,
   effectiveSupply,
   embargoed,
+  RELATION_CUTOFF,
+  ROUTE_GROW_UTILIZATION,
+  ROUTE_MAX_LEVEL,
+  ROUTE_MAX_PER_COUNTRY,
+  ROUTE_SEED_PER_PAIR,
+  ROUTE_UNIT_VOLUME,
+  routeCapacityFactor,
+  routeId,
+  routeLandedPrice,
   settleTrade,
+  TRADABLE_GOODS,
   type MarketSnapshot,
+  type RouteService,
   type TradeBalance,
   type TradeBlocker,
   type TradeSettlement,
@@ -2665,6 +2677,155 @@ function prepareIndemnities(world: WorldState): void {
   world.indemnities = active
 }
 
+/**
+ * Grows, decays or removes each standing route after settlement (ADR 0020),
+ * then opens at most one fresh route per country. Growth uses the quantity the
+ * route *matched* (before the soft/payment cuts) so a solvency squeeze does not
+ * kill structurally sound routes; `lastQty` instead records what was actually
+ * delivered. Deterministic: routes are visited in array order, every candidate
+ * sort carries an explicit id tie-break, and there is no RNG.
+ */
+export function growRoutes(
+  world: WorldState,
+  services: Map<string, RouteService>,
+  markets: Record<string, MarketSnapshot>,
+): void {
+  const kept: TradeRoute[] = []
+  for (const route of world.tradeRoutes) {
+    const from = world.countries[route.from]
+    const to = world.countries[route.to]
+    if (from === undefined || to === undefined) continue
+    const blocked =
+      atWar(world, route.from, route.to) ||
+      embargoed(from.embargoes, route.to, route.good) ||
+      embargoed(to.embargoes, route.from, route.good) ||
+      (to.diplo.relations[route.from] ?? 0) < RELATION_CUTOFF
+    const service = services.get(route.id)
+    const matched = service?.matched ?? 0
+    const capacity =
+      service?.capacity ?? route.level * ROUTE_UNIT_VOLUME * routeCapacityFactor(from, to)
+    const margin = to.econ.prices[route.good] - routeLandedPrice(from, to, route.good)
+    const healthy =
+      !blocked && margin > 0 && capacity > 0 && matched / capacity >= ROUTE_GROW_UTILIZATION
+    const level = healthy ? Math.min(ROUTE_MAX_LEVEL, route.level + 1) : route.level - 1
+    if (level <= 0) continue
+    kept.push({ ...route, level, lastQty: service?.flow.quantity ?? 0, lastMargin: margin })
+  }
+  world.tradeRoutes = kept
+  autoOpenRoutes(world, markets)
+}
+
+/** Opens at most one route per country for a complementary pair (ADR 0020). */
+function autoOpenRoutes(world: WorldState, markets: Record<string, MarketSnapshot>): void {
+  const ids = Object.keys(world.countries).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+  const count = new Map<string, number>()
+  const has = new Set<string>()
+  for (const route of world.tradeRoutes) {
+    count.set(route.from, (count.get(route.from) ?? 0) + 1)
+    count.set(route.to, (count.get(route.to) ?? 0) + 1)
+    has.add(route.id)
+  }
+  type Candidate = { importer: string; exporter: string; good: GoodId; margin: number }
+  const candidates: Candidate[] = []
+  for (const importerId of ids) {
+    const importer = world.countries[importerId]
+    const market = markets[importerId]
+    if (importer === undefined || market === undefined) continue
+    for (const good of TRADABLE_GOODS) {
+      if (market.demand[good] - market.production[good] <= 0) continue
+      for (const exporterId of ids) {
+        if (exporterId === importerId) continue
+        const exporter = world.countries[exporterId]
+        const exporterMarket = markets[exporterId]
+        if (exporter === undefined || exporterMarket === undefined) continue
+        if (exporterMarket.production[good] - exporterMarket.demand[good] <= 0) continue
+        if (has.has(routeId(good, exporterId, importerId))) continue
+        if (atWar(world, exporterId, importerId)) continue
+        if (embargoed(importer.embargoes, exporterId, good)) continue
+        if (embargoed(exporter.embargoes, importerId, good)) continue
+        if ((importer.diplo.relations[exporterId] ?? 0) < RELATION_CUTOFF) continue
+        const margin = importer.econ.prices[good] - routeLandedPrice(exporter, importer, good)
+        candidates.push({ importer: importerId, exporter: exporterId, good, margin })
+      }
+    }
+  }
+  candidates.sort(
+    (a, b) =>
+      b.margin - a.margin ||
+      (a.good < b.good ? -1 : a.good > b.good ? 1 : 0) ||
+      (a.importer < b.importer ? -1 : a.importer > b.importer ? 1 : 0) ||
+      (a.exporter < b.exporter ? -1 : a.exporter > b.exporter ? 1 : 0),
+  )
+  const opened = new Set<string>()
+  for (const candidate of candidates) {
+    if (candidate.margin <= 0) continue
+    if (opened.has(candidate.importer)) continue
+    if ((count.get(candidate.importer) ?? 0) >= ROUTE_MAX_PER_COUNTRY) continue
+    if ((count.get(candidate.exporter) ?? 0) >= ROUTE_MAX_PER_COUNTRY) continue
+    const id = routeId(candidate.good, candidate.exporter, candidate.importer)
+    if (has.has(id)) continue
+    world.tradeRoutes.push({
+      id,
+      good: candidate.good,
+      from: candidate.exporter,
+      to: candidate.importer,
+      level: 1,
+      owner: world.tick % 2 === 0 ? 'private' : 'state',
+      openedAt: { ...world.date },
+      lastQty: 0,
+      lastMargin: candidate.margin,
+    })
+    has.add(id)
+    opened.add(candidate.importer)
+    count.set(candidate.importer, (count.get(candidate.importer) ?? 0) + 1)
+    count.set(candidate.exporter, (count.get(candidate.exporter) ?? 0) + 1)
+  }
+}
+
+/**
+ * Seeds the initial route network at world creation (ADR 0020): one clearing on
+ * the calibrated markets, then a level-1 route for the top flows into each
+ * (importer, good). Deterministic; the residual market still handles any flow
+ * not seeded, so the 1836 economy is unchanged in kind.
+ */
+export function bootstrapRoutes(world: WorldState): void {
+  const countries = Object.values(world.countries)
+  const markets: Record<string, MarketSnapshot> = {}
+  for (const country of countries) markets[country.id] = inspectEconomy(country)
+  const balance = clearTrade(countries, markets)
+  const groups = new Map<string, TradeFlow[]>()
+  for (const flow of balance.flows) {
+    const key = `${flow.good}|${flow.to}`
+    const list = groups.get(key)
+    if (list === undefined) groups.set(key, [flow])
+    else list.push(flow)
+  }
+  const routes: TradeRoute[] = []
+  for (const list of groups.values()) {
+    list.sort((a, b) => b.value - a.value || (a.from < b.from ? -1 : a.from > b.from ? 1 : 0))
+    for (const flow of list.slice(0, ROUTE_SEED_PER_PAIR)) {
+      routes.push({
+        id: routeId(flow.good, flow.from, flow.to),
+        good: flow.good,
+        from: flow.from,
+        to: flow.to,
+        level: 1,
+        owner: 'private',
+        openedAt: { ...world.date },
+        lastQty: 0,
+        lastMargin: 0,
+      })
+    }
+  }
+  routes.sort(
+    (a, b) =>
+      (a.good < b.good ? -1 : a.good > b.good ? 1 : 0) ||
+      (a.from < b.from ? -1 : a.from > b.from ? 1 : 0) ||
+      (a.to < b.to ? -1 : a.to > b.to ? 1 : 0),
+  )
+  world.tradeRoutes = routes
+}
+
 export function advance(
   world: WorldState,
   months: number,
@@ -2709,8 +2870,17 @@ export function advance(
     const markets: Record<string, MarketSnapshot> = {}
     for (const country of countries) markets[country.id] = inspectEconomy(country)
     // Phase B: clear each tradable good globally, then cap imports by soft
-    // capacity (plan §2.3) before anything is derived from the flows.
-    const balance = clearTrade(countries, markets, tradeBlocker(world))
+    // capacity (plan §2.3) before anything is derived from the flows. Standing
+    // routes reserve their supply first (ADR 0020); the routeServices map keeps
+    // each route's shared flow so growth/decay can read it after the cuts.
+    const routeServices = new Map<string, RouteService>()
+    const balance = clearTrade(
+      countries,
+      markets,
+      tradeBlocker(world),
+      world.tradeRoutes,
+      routeServices,
+    )
     const capacities = applyCapacity(countries, balance, world.tick)
     // Payment capacity (plan §10) is a second, independent limiter: a country
     // cannot fund imports past its export revenue, private capital and a small
@@ -2739,6 +2909,9 @@ export function advance(
         deriveResourceImports(balance.flows, country.id),
       )
     }
+    // Routes grow, decay or open once per month, after every country has been
+    // settled, so their margin reads the freshly updated domestic prices.
+    growRoutes(world, routeServices, markets)
     driftRelations(world)
     applyTradeRelations(world, log)
     resolveWars(world, rng, log)
@@ -3209,6 +3382,82 @@ export function applyDecision(
           return { ok: false, text: `${tag} 未知外交动作 ${move}` }
       }
     }
+    case 'route': {
+      const op = String(params.op ?? 'open')
+      const goodParam = String(params.good ?? '')
+      const good = asGood(goodParam)
+      if (good === undefined || !TRADABLE_GOODS.includes(good)) {
+        return { ok: false, text: `${tag} 未知或不可贸易商品 ${goodParam}` }
+      }
+      const partnerId = String(params.partner ?? '')
+      const partner = world.countries[partnerId]
+      if (partner === undefined) return { ok: false, text: `${tag} 未知伙伴 ${partnerId}` }
+      if (partnerId === country.id) return { ok: false, text: `${tag} 不能与本国开通贸易路线` }
+      if (atWar(world, country.id, partnerId)) {
+        return { ok: false, text: `${tag} 与${partner.name}处于战争状态，无法通商` }
+      }
+      if (
+        embargoed(country.embargoes, partnerId, good) ||
+        embargoed(partner.embargoes, country.id, good)
+      ) {
+        return { ok: false, text: `${tag} 与${partner.name}就该商品存在禁运` }
+      }
+      // Direction: the endpoint with the larger net surplus exports. A tie goes
+      // to the lexicographically smaller id so the pair is symmetric.
+      const own = inspectEconomy(country)
+      const other = inspectEconomy(partner)
+      const ownSurplus = own.production[good] - own.demand[good]
+      const partnerSurplus = other.production[good] - other.demand[good]
+      const playerExports =
+        ownSurplus > partnerSurplus ||
+        (ownSurplus === partnerSurplus && country.id < partnerId)
+      const fromId = playerExports ? country.id : partnerId
+      const toId = playerExports ? partnerId : country.id
+      const id = routeId(good, fromId, toId)
+      const index = world.tradeRoutes.findIndex(route => route.id === id)
+      const existing = index < 0 ? undefined : world.tradeRoutes[index]
+      const label = `${GOODS[good].name} ${fromId}→${toId}`
+      if (op === 'open') {
+        if (existing !== undefined) {
+          return { ok: false, text: `${tag} 与${partner.name}的${label}航线已存在（等级 ${existing.level}）` }
+        }
+        world.tradeRoutes.push({
+          id,
+          good,
+          from: fromId,
+          to: toId,
+          level: 1,
+          owner: 'state',
+          openedAt: { ...world.date },
+          lastQty: 0,
+          lastMargin: 0,
+        })
+        return { ok: true, text: `${tag} 开通${label}航线（等级 1，国有）` }
+      }
+      if (existing === undefined) {
+        return { ok: false, text: `${tag} 未找到与${partner.name}的${label}航线` }
+      }
+      if (op === 'raise') {
+        existing.level = Math.min(ROUTE_MAX_LEVEL, existing.level + 1)
+        return { ok: true, text: `${tag} 将${label}航线提升到等级 ${existing.level}` }
+      }
+      if (op === 'lower') {
+        existing.level -= 1
+        if (existing.level <= 0) world.tradeRoutes.splice(index, 1)
+        return {
+          ok: true,
+          text:
+            existing.level <= 0
+              ? `${tag} 关闭了${label}航线`
+              : `${tag} 将${label}航线降低到等级 ${existing.level}`,
+        }
+      }
+      if (op === 'close') {
+        world.tradeRoutes.splice(index, 1)
+        return { ok: true, text: `${tag} 关闭了${label}航线` }
+      }
+      return { ok: false, text: `${tag} 未知航线操作 ${op}` }
+    }
     case 'situation': {
       // A crisis proposal (plan §4.2): context for the arbitration only.
       const stance = String(params.stance ?? '')
@@ -3563,5 +3812,6 @@ export function councilInterrupt(before: WorldState, after: WorldState): string 
 export function newWorld(seed: number, playerId: string): WorldState {
   const world = createWorld(seed, playerId)
   calibrateWorld(world)
+  bootstrapRoutes(world)
   return world
 }

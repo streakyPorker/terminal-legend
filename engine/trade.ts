@@ -1,4 +1,12 @@
-import type { Country, Embargo, GoodId, ResourceId, Resources, TradeFlow } from '../types'
+import type {
+  Country,
+  Embargo,
+  GoodId,
+  ResourceId,
+  Resources,
+  TradeFlow,
+  TradeRoute,
+} from '../types'
 import { GOODS, GOOD_IDS, REGION_COST } from './data'
 
 export { REGION_COST }
@@ -7,6 +15,30 @@ export { REGION_COST }
 export const TOP_PARTNERS = 6
 /** Relations below this cut a partner out of the candidate list (plan §1.2). */
 export const RELATION_CUTOFF = -50
+
+/**
+ * Persistent-route constants (ADR 0020). The route pass runs before the spot
+ * market, so a routed pair trades at a discounted landed price with no relation
+ * risk; only the residual (un-routed) surplus/deficit clears as spot, with a
+ * friction markup and a narrower candidate list. These are the calibration
+ * knobs for the soft gate.
+ */
+/** Units a level-1 route can carry per month, before the port/transport factor. */
+export const ROUTE_UNIT_VOLUME = 2
+/** Largest a route may grow to. */
+export const ROUTE_MAX_LEVEL = 5
+/** Percentage-point progress of a partner's route before it may grow. */
+export const ROUTE_GROW_UTILIZATION = 0.8
+/** Multiplier on the residual (spot) landed price; spot pays a friction. */
+export const ROUTE_RESIDUAL_FRICTION = 1.15
+/** Candidate exporters per importer in the residual pass (narrower than spot). */
+export const ROUTE_RESIDUAL_TOP_PARTNERS = 3
+/** Discount on a route's landed price: no spot friction, no relation risk. */
+export const ROUTE_SPOT_DISCOUNT = 0.9
+/** Most routes a single country may hold (as either endpoint). */
+export const ROUTE_MAX_PER_COUNTRY = 12
+/** Seeded routes kept per (importer, good) at world creation. */
+export const ROUTE_SEED_PER_PAIR = 3
 /**
  * Share of GDP the private sector may borrow abroad in one month to fund the
  * import bill it cannot pay from export revenue or private capital (plan §10
@@ -97,6 +129,51 @@ export function landedPrice(from: Country, to: Country, good: GoodId): number {
   )
 }
 
+/**
+ * Landed cost on an established route (ADR 0020): identical to `landedPrice`
+ * but without the relation-risk premium and with the route discount. A route is
+ * a standing relationship, so it carries no spot friction; this price only
+ * feeds the growth margin and display, never a gold account.
+ */
+export function routeLandedPrice(from: Country, to: Country, good: GoodId): number {
+  const regionCost = REGION_COST[from.region][to.region]
+  const accessFactor = 1.15 - to.econ.marketAccess * 0.25
+  const transportFactor = 1.2 - to.econ.transportInfrastructure / 500
+  return (
+    from.econ.prices[good] *
+    (1 + exportDutyRate(from) / 100) *
+    (1 + to.econ.tariff / 100) *
+    regionCost *
+    accessFactor *
+    transportFactor *
+    ROUTE_SPOT_DISCOUNT
+  )
+}
+
+/** Port and transport multiplier on a route's monthly capacity (ADR 0020). */
+export function routeCapacityFactor(from: Country, to: Country): number {
+  return (
+    1 +
+    (from.econ.transportInfrastructure + to.econ.transportInfrastructure) / 400 +
+    to.econ.buildings.ports * 0.02
+  )
+}
+
+/** Deterministic route id: unique per (good, exporter, importer). */
+export const routeId = (good: GoodId, from: string, to: string): string =>
+  `route-${good}-${from}-${to}`
+
+/** A route as matched this month: its flow, its capacity and its served qty. */
+export type RouteService = {
+  route: TradeRoute
+  /** The shared flow object; the soft/payment cuts scale it in place. */
+  flow: TradeFlow
+  /** Capacity this month, before any cut. */
+  capacity: number
+  /** Quantity the route pass assigned, before the cuts (its structural load). */
+  matched: number
+}
+
 /** Effective supply: domestic output plus imports minus exports (plan §2.1 step 7). */
 export function effectiveSupply(
   production: Record<GoodId, number>,
@@ -114,27 +191,23 @@ type Pair = { importer: Country; exporter: Country; landed: number }
 
 /**
  * Clears one tradable good globally (plan §2.2). Offers are each exporter's
- * surplus, bids each importer's need; every importer sees at most its six
- * cheapest partners; all (importer, exporter) pairs are matched cheapest-first
- * with a full deterministic tie-break. Pure: it reads the countries but never
- * mutates them, so every country is matched in the same pass.
+ * surplus, bids each importer's need; every importer sees at most
+ * `topPartners` cheapest partners; all (importer, exporter) pairs are matched
+ * cheapest-first with a full deterministic tie-break. Pure: it reads the
+ * countries but never mutates them, so every country is matched in the same
+ * pass. The offer/bid maps are consumed in place so a route pass can reserve
+ * supply first and the residual (spot) market sees only what is left.
  */
 function clearGood(
   good: GoodId,
   countries: Country[],
-  markets: Record<string, MarketSnapshot>,
+  offer: Map<string, number>,
+  bid: Map<string, number>,
   flows: TradeFlow[],
   isBlocked?: TradeBlocker,
+  friction = 1,
+  topPartners = TOP_PARTNERS,
 ): void {
-  const offer = new Map<string, number>()
-  const bid = new Map<string, number>()
-  for (const country of countries) {
-    const market = markets[country.id]
-    if (market === undefined) continue
-    const surplus = market.production[good] - market.demand[good]
-    if (surplus > 0) offer.set(country.id, surplus)
-    else if (surplus < 0) bid.set(country.id, -surplus)
-  }
   if (offer.size === 0 || bid.size === 0) return
 
   const pairs: Pair[] = []
@@ -147,12 +220,16 @@ function clearGood(
       if (relationOf(importer, exporter.id) < RELATION_CUTOFF) continue
       // An embargo or a war severs the pair regardless of price (plan §3).
       if (isBlocked !== undefined && isBlocked(importer.id, exporter.id, good)) continue
-      candidates.push({ importer, exporter, landed: landedPrice(exporter, importer, good) })
+      candidates.push({
+        importer,
+        exporter,
+        landed: landedPrice(exporter, importer, good) * friction,
+      })
     }
     candidates.sort(
       (a, b) => a.landed - b.landed || compareIds(a.exporter.id, b.exporter.id),
     )
-    pairs.push(...candidates.slice(0, TOP_PARTNERS))
+    pairs.push(...candidates.slice(0, topPartners))
   }
   pairs.sort(
     (a, b) =>
@@ -161,16 +238,14 @@ function clearGood(
       compareIds(a.exporter.id, b.exporter.id),
   )
 
-  const bidRemaining = new Map(bid)
-  const offerRemaining = new Map(offer)
   for (const pair of pairs) {
     const quantity = Math.min(
-      bidRemaining.get(pair.importer.id) ?? 0,
-      offerRemaining.get(pair.exporter.id) ?? 0,
+      bid.get(pair.importer.id) ?? 0,
+      offer.get(pair.exporter.id) ?? 0,
     )
     if (quantity <= 1e-9) continue
-    bidRemaining.set(pair.importer.id, (bidRemaining.get(pair.importer.id) ?? 0) - quantity)
-    offerRemaining.set(pair.exporter.id, (offerRemaining.get(pair.exporter.id) ?? 0) - quantity)
+    bid.set(pair.importer.id, (bid.get(pair.importer.id) ?? 0) - quantity)
+    offer.set(pair.exporter.id, (offer.get(pair.exporter.id) ?? 0) - quantity)
 
     const unitPrice = pair.exporter.econ.prices[good]
     flows.push({
@@ -184,6 +259,62 @@ function clearGood(
       exportDuty: 0,
       value: quantity * unitPrice,
     })
+  }
+}
+
+/**
+ * Reserves supply for every standing route before the spot market runs (ADR
+ * 0020). Routes are walked in a deterministic (good, from, to) order; a route
+ * severed by war/embargo or a relation below the cutoff is skipped, so its
+ * supply stays available to the residual pass. Each route pushes one shared
+ * flow object, the same one both endpoints read, which is what keeps the gold
+ * identities exact. Offer/bid are decremented in place.
+ */
+function routePass(
+  index: Record<string, Country>,
+  routes: TradeRoute[],
+  offer: Record<GoodId, Map<string, number>>,
+  bid: Record<GoodId, Map<string, number>>,
+  flows: TradeFlow[],
+  isBlocked: TradeBlocker | undefined,
+  services: Map<string, RouteService> | undefined,
+): void {
+  const ordered = [...routes].sort(
+    (a, b) =>
+      compareIds(a.good, b.good) || compareIds(a.from, b.from) || compareIds(a.to, b.to),
+  )
+  for (const route of ordered) {
+    if (!TRADABLE_GOODS.includes(route.good)) continue
+    if (route.from === route.to) continue
+    const from = index[route.from]
+    const to = index[route.to]
+    if (from === undefined || to === undefined) continue
+    if (relationOf(to, from.id) < RELATION_CUTOFF) continue
+    if (isBlocked !== undefined && isBlocked(route.to, route.from, route.good)) continue
+    const goodOffer = offer[route.good]
+    const goodBid = bid[route.good]
+    if (goodOffer === undefined || goodBid === undefined) continue
+    const offerRemaining = goodOffer.get(route.from) ?? 0
+    const bidRemaining = goodBid.get(route.to) ?? 0
+    const capacity = route.level * ROUTE_UNIT_VOLUME * routeCapacityFactor(from, to)
+    const quantity = Math.min(offerRemaining, bidRemaining, capacity)
+    if (quantity <= 1e-9) continue
+    goodOffer.set(route.from, offerRemaining - quantity)
+    goodBid.set(route.to, bidRemaining - quantity)
+    const unitPrice = from.econ.prices[route.good]
+    const flow: TradeFlow = {
+      good: route.good,
+      from: route.from,
+      to: route.to,
+      quantity,
+      unitPrice,
+      landedPrice: routeLandedPrice(from, to, route.good),
+      tariffPaid: 0,
+      exportDuty: 0,
+      value: quantity * unitPrice,
+    }
+    flows.push(flow)
+    services?.set(route.id, { route, flow, capacity, matched: quantity })
   }
 }
 
@@ -242,17 +373,45 @@ function deriveBalance(countries: Country[], flows: TradeFlow[]): TradeBalance {
 }
 
 /**
- * Global Top-6 bilateral quantity clearing for one month (plan §2.1 phases
- * A/B, §2.2). Deterministic and pure; the caller supplies the pre-clearing
+ * One month's global clearing (plan §2.1 phases A/B, §2.2). When `routes` are
+ * supplied, the standing routes reserve their supply/bid first (ADR 0020) and
+ * the residual clears as spot with friction and a narrower candidate list; when
+ * omitted the function is the original pure spot clearing (unit tests call it
+ * this way). Deterministic and pure; the caller supplies the pre-clearing
  * domestic snapshots so no country can be settled before another.
  */
 export function clearTrade(
   countries: Country[],
   markets: Record<string, MarketSnapshot>,
   isBlocked?: TradeBlocker,
+  routes?: TradeRoute[],
+  services?: Map<string, RouteService>,
 ): TradeBalance {
   const flows: TradeFlow[] = []
-  for (const good of TRADABLE_GOODS) clearGood(good, countries, markets, flows, isBlocked)
+  const offer = {} as Record<GoodId, Map<string, number>>
+  const bid = {} as Record<GoodId, Map<string, number>>
+  for (const good of TRADABLE_GOODS) {
+    const goodOffer = new Map<string, number>()
+    const goodBid = new Map<string, number>()
+    for (const country of countries) {
+      const market = markets[country.id]
+      if (market === undefined) continue
+      const surplus = market.production[good] - market.demand[good]
+      if (surplus > 0) goodOffer.set(country.id, surplus)
+      else if (surplus < 0) goodBid.set(country.id, -surplus)
+    }
+    offer[good] = goodOffer
+    bid[good] = goodBid
+  }
+  const routed = routes !== undefined && routes.length > 0
+  if (routed) {
+    routePass(byId(countries), routes, offer, bid, flows, isBlocked, services)
+  }
+  const friction = routed ? ROUTE_RESIDUAL_FRICTION : 1
+  const topPartners = routed ? ROUTE_RESIDUAL_TOP_PARTNERS : TOP_PARTNERS
+  for (const good of TRADABLE_GOODS) {
+    clearGood(good, countries, offer[good], bid[good], flows, isBlocked, friction, topPartners)
+  }
   return deriveBalance(countries, flows)
 }
 

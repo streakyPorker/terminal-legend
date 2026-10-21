@@ -395,6 +395,10 @@ function MarketPanel(props: { ui: UiKit; world: WorldState; width: number }): an
   const widths = [7, 7, 8, 8, 7, 11]
   const tradeWidths = [12, 10, 10, 10]
   const partners = partnerTotals(player).slice(0, 6)
+  const playerRoutes = props.world.tradeRoutes
+    .filter(route => route.from === player.id || route.to === player.id)
+    .sort((a, b) => b.lastQty - a.lastQty || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    .slice(0, 6)
   const opiumImports = player.trade.imports
     .filter(flow => flow.good === 'opium')
     .reduce((sum, flow) => sum + flow.quantity, 0)
@@ -464,6 +468,16 @@ function MarketPanel(props: { ui: UiKit; world: WorldState; width: number }): an
             })}
           </Box>
         )}
+        {playerRoutes.length > 0 ? (
+          <Box flexDirection="column">
+            <Text dimColor>贸易路线（等级 · 上月运量 · 进口方单位利差）</Text>
+            {playerRoutes.map(route => (
+              <Text dimColor key={route.id}>
+                {GOODS[route.good].name} {route.from}→{route.to} · L{route.level} · {fmtNumber(route.lastQty)} · {fmtSigned(route.lastMargin)}金
+              </Text>
+            ))}
+          </Box>
+        ) : null}
         <Text dimColor>
           鸦片依存 进口 {fmtNumber(opiumImports)} / 需求 {fmtNumber(opiumDemand)}（{opiumDependency}）
         </Text>

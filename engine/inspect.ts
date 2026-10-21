@@ -111,7 +111,7 @@ function laborSection(country: Country): string[] {
   ]
 }
 
-function tradeSection(country: Country): string[] {
+function tradeSection(world: WorldState, country: Country): string[] {
   const trade = country.trade
   const lines: string[] = []
   lines.push(
@@ -146,6 +146,20 @@ function tradeSection(country: Country): string[] {
   if (top.length > 0) {
     lines.push(`主要伙伴：${top.map(([id, value]) => `${id} ${n(value)} 金`).join('，')}`)
   }
+  const routes = world.tradeRoutes
+    .filter(route => route.from === country.id || route.to === country.id)
+    .sort(
+      (a, b) =>
+        b.lastQty - a.lastQty ||
+        (a.good < b.good ? -1 : a.good > b.good ? 1 : 0) ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    )
+    .slice(0, 8)
+  lines.push(
+    routes.length > 0
+      ? `贸易路线（${routes.length} 条）：${routes.map(route => `${GOODS[route.good].name} ${route.from}→${route.to} L${route.level} ${n(route.lastQty, 1)}（利 ${signed(route.lastMargin, 2)}）`).join('，')}`
+      : '贸易路线：无',
+  )
   return lines
 }
 
@@ -319,7 +333,7 @@ export function inspectWorld(world: WorldState, section: string): string {
       body = laborSection(country)
       break
     case 'trade':
-      body = tradeSection(country)
+      body = tradeSection(world, country)
       break
     case 'construction':
       body = constructionSection(country)

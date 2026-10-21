@@ -866,13 +866,23 @@ const TOOL_SPECS: {
   {
     name: 'v3_action',
     description:
-      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count）、cancel（取消国有项目，需 projectId）、tax（税率，需 rate）、tariff（关税：rate 为进口税率，可选 exportRate 单独设出口税率；省略则进出口同率）、spending（支出，需 category/amount）、research（研究方向，需 tech）、conscript（征兵，需 amount）、law（法案，需 name）。',
+      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count）、cancel（取消国有项目，需 projectId）、tax（税率，需 rate）、tariff（关税：rate 为进口税率，可选 exportRate 单独设出口税率；省略则进出口同率）、spending（支出，需 category/amount）、research（研究方向，需 tech）、conscript（征兵，需 amount）、law（法案，需 name）、route（贸易路线：op 取 open/raise/lower/close，需 good 与 partner）。',
     inputSchema: {
       type: 'object',
       properties: {
         action: {
           type: 'string',
-          enum: ['build', 'cancel', 'tax', 'tariff', 'spending', 'research', 'conscript', 'law'],
+          enum: [
+            'build',
+            'cancel',
+            'tax',
+            'tariff',
+            'spending',
+            'research',
+            'conscript',
+            'law',
+            'route',
+          ],
         },
         projectId: { type: 'string', description: 'cancel 时必填，建造队列中的项目 id。' },
         building: {
@@ -904,6 +914,13 @@ const TOOL_SPECS: {
         },
         amount: { type: 'number', minimum: 0, maximum: 50 },
         tech: { type: 'string' },
+        op: {
+          type: 'string',
+          enum: ['open', 'raise', 'lower', 'close'],
+          description: 'route 时必填：开通 / 提升 / 降低 / 关闭航线。',
+        },
+        good: { type: 'string', enum: [...GOOD_IDS], description: 'route 时必填，可贸易商品。' },
+        partner: { type: 'string', description: 'route 时必填，伙伴国家 id（如 GBR）。' },
         name: {
           type: 'string',
           enum: [
@@ -1636,6 +1653,9 @@ export const register: Register = (on, options) => {
         'tech',
         'name',
         'projectId',
+        'op',
+        'good',
+        'partner',
       ]) {
         const value = args[key]
         if (
