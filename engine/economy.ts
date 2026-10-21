@@ -6,8 +6,12 @@ import type {
   GoodId,
 } from '../types'
 import {
+  ARTISAN_OUTPUT,
+  ARTISAN_SERVICE_OUTPUT,
+  BUILDINGS,
   BUILDING_IDS,
   BUILDING_RECIPES,
+  CAPITAL_LABOR_SCALE,
   CONSUMPTION_PROPENSITY,
   CONSUMER_GOODS,
   GOODS,
@@ -15,6 +19,7 @@ import {
   GOVERNMENT_DEMAND,
   INCOME_ELASTICITY,
   SUBSISTENCE,
+  WAGE_ALLOCATION,
   deriveLabor,
   effectiveCount,
   resourceMultiplier,
@@ -109,6 +114,35 @@ function storedUtilization(country: Country, id: BuildingId): number {
   return Number.isFinite(value) ? clamp(value, 0, 1) : 1
 }
 
+/**
+ * Weight of one building type in the wage-allocation rule (ADR 0021, plan 0008
+ * B5). The caller normalises by the summed weights and splits the national wage
+ * bill by it, so the split stays exhaustive for every basis. `'labor'` returns
+ * `labor × count` exactly as the pre-B5 baseline did.
+ */
+function wageBasisWeight(
+  id: BuildingId,
+  revenue: number,
+  inputCost: number,
+  count: number,
+): number {
+  const recipe = BUILDING_RECIPES[id]
+  let weight: number
+  switch (WAGE_ALLOCATION.basis) {
+    case 'valueAdded':
+      weight = Math.max(0, revenue - inputCost)
+      break
+    case 'capitalPlusLabor':
+      weight = (recipe.labor + BUILDINGS[id].cost * CAPITAL_LABOR_SCALE) * count
+      break
+    case 'labor':
+    default:
+      weight = recipe.labor * count
+  }
+  const override = WAGE_ALLOCATION.weights?.[id]
+  return override === undefined ? weight : weight * override
+}
+
 function computeProduction(country: Country): Record<GoodId, number> {
   ensureConstructionFields(country)
   const tech = techMultiplier(country)
@@ -164,11 +198,13 @@ function computeProduction(country: Country): Record<GoodId, number> {
   raw.opium *= country.opium.outputFactor
   // Artisans supply the bottom of the consumer market before factories do;
   // without them an agrarian country reads as permanently short of clothes.
-  // National (per-artisan/pop) terms, not per-building recipes.
-  raw.clothes += country.pops.artisans * 0.035
-  raw.liquor += country.pops.artisans * 0.01
-  raw.furniture += country.pops.artisans * 0.006
-  raw.services += (country.pops.total / 1000) * 0.5 * access + country.pops.artisans * 0.01
+  // National (per-artisan/pop) terms, not per-building recipes; coefficients
+  // live in data.ts (ARTISAN_OUTPUT) so B5 can calibrate them with the recipes.
+  raw.clothes += country.pops.artisans * (ARTISAN_OUTPUT.clothes ?? 0)
+  raw.liquor += country.pops.artisans * (ARTISAN_OUTPUT.liquor ?? 0)
+  raw.furniture += country.pops.artisans * (ARTISAN_OUTPUT.furniture ?? 0)
+  raw.services +=
+    (country.pops.total / 1000) * 0.5 * access + country.pops.artisans * ARTISAN_SERVICE_OUTPUT
   for (const id of GOOD_IDS) out[id] = output(id, raw[id])
   return out
 }
@@ -444,17 +480,15 @@ export function computeEconomy(
   const profits = realGdp * (1 - laborShare)
 
   // Per-building-type operating profit (ADR 0021 B2, driven from B3). It uses
-  // this month's recipe output/input valued at this month's prices and
-  // allocates the national wage bill by labor × count. `utilization` is written
-  // as *next* month's operating rate (ADR 0022): a profitable type recovers
-  // toward 1, a losing one decays toward UTIL_IDLE_FLOOR. `computeProduction`
-  // reads this stored value next month, so the feedback stays one month behind.
+  // this month's recipe output/input valued at this month's prices and splits the
+  // national wage bill by the `WAGE_ALLOCATION` rule (plan 0008 B5).
+  // `utilization` is written as *next* month's operating rate (ADR 0022): a
+  // profitable type recovers toward 1, a losing one decays toward
+  // UTIL_IDLE_FLOOR. `computeProduction` reads this stored value next month, so
+  // the feedback stays one month behind.
   const prices = country.econ.prices
   const buildings = country.econ.buildings
-  let laborWeightTotal = 0
-  for (const id of BUILDING_IDS) laborWeightTotal += BUILDING_RECIPES[id].labor * buildings[id]
-  const buildingProfits = {} as Record<BuildingId, BuildingProfit>
-  for (const id of BUILDING_IDS) {
+  const rows = BUILDING_IDS.map((id) => {
     const recipe = BUILDING_RECIPES[id]
     const count = buildings[id]
     const effCount = effectiveCount(count)
@@ -466,16 +500,40 @@ export function computeEconomy(
     for (const [good, coef] of Object.entries(recipe.input) as [GoodId, number][]) {
       inputCost += coef * prices[good] * effCount
     }
-    const wageWeight =
-      laborWeightTotal > 0 ? (recipe.labor * count) / laborWeightTotal : 0
+    return { id, count, revenue, inputCost }
+  })
+  // Weights come after every row's revenue/input cost so the `valueAdded` basis
+  // can read them; the `labor` basis reproduces the old total exactly.
+  let wageWeightTotal = 0
+  const wageWeights = {} as Record<BuildingId, number>
+  for (const row of rows) {
+    const weight = wageBasisWeight(row.id, row.revenue, row.inputCost, row.count)
+    wageWeights[row.id] = weight
+    wageWeightTotal += weight
+  }
+  // A deeply crashed `valueAdded` economy can have no positive-weight type at
+  // all (every building's value added ≤ 0). Fall back to the labour rule so the
+  // split is still exhaustive and `Σ buildingProfits.wages === nationalWages`
+  // holds for every basis, not just the well-behaved case.
+  if (!(wageWeightTotal > 0)) {
+    wageWeightTotal = 0
+    for (const row of rows) {
+      const weight = BUILDING_RECIPES[row.id].labor * row.count
+      wageWeights[row.id] = weight
+      wageWeightTotal += weight
+    }
+  }
+  const buildingProfits = {} as Record<BuildingId, BuildingProfit>
+  for (const row of rows) {
+    const wageWeight = wageWeightTotal > 0 ? wageWeights[row.id] / wageWeightTotal : 0
     const typeWages = wages * wageWeight
-    const profit = revenue - inputCost - typeWages
-    const profitPerBuilding = profit / Math.max(1, count)
+    const profit = row.revenue - row.inputCost - typeWages
+    const profitPerBuilding = profit / Math.max(1, row.count)
     const target = profitPerBuilding > 0 ? 1 : UTIL_IDLE_FLOOR
-    const prevUtil = storedUtilization(country, id)
-    buildingProfits[id] = {
-      revenue,
-      inputCost,
+    const prevUtil = storedUtilization(country, row.id)
+    buildingProfits[row.id] = {
+      revenue: row.revenue,
+      inputCost: row.inputCost,
       wages: typeWages,
       profit,
       utilization: clamp(prevUtil + (target - prevUtil) * UTIL_SMOOTHING, 0, 1),

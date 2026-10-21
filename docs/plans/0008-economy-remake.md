@@ -149,6 +149,31 @@ export type TaxRates = Record<TaxBaseId, number>   // 百分比
    `price_g = (Σ 投入成本 at 上游价) × (1 + 目标毛利) + 工价分摊`，逐层解出。
 4. 目标是让每类建筑在参考点有**正、且合理**的利润率（工厂 5–20% 区间），形成真实信号。
 
+**B5 实测结论**：`GOODS.basePrice` 13 项全部保持原值——市场价由供需清算驱动，改基价只挪动
+中心而不改变相对余缺；真正的病灶是工厂 `input` 占总收入 ~87%（材料成本过高）与消费者品的
+全局过剩，故 B5 的杠杆是**配方系数 + 工资分摊基础**，而非基价。
+
+### 5.1 工资分摊规则 `WAGE_ALLOCATION`（B5）
+
+`economy.ts` 原先把全国工资 `realGdp × laborShare` 按 `labor × count` 摊到各建筑类型。B5 把它抽成
+`engine/data.ts` 的配置常量（**注明：plan 0009 会把它迁到 `engine/config/economy.ts`**）：
+
+```ts
+type WageAllocationBasis = 'labor' | 'valueAdded' | 'capitalPlusLabor'
+export const WAGE_ALLOCATION: {
+  basis: WageAllocationBasis
+  weights?: Partial<Record<BuildingId, number>>
+} = { basis: 'valueAdded' }
+```
+
+- `'labor'` = 旧行为（逐位复现，默认历史基线）；`'valueAdded'` 按 `max(0, revenue − inputCost)` 分摊；
+  `'capitalPlusLabor'` 按 `(labor + 建造成本 × CAPITAL_LABOR_SCALE)` 的「劳动 + 资本」代理分摊。
+  `weights` 再按建筑类型乘一个系数。三种 basis 都保持 `Σ buildingProfits.wages === nationalWages`（精确）。
+- **B5 选择 `'valueAdded'`**：`'labor'` 下无法同时满足「GBR 工厂 ≥5%」与「聚合 ≤20%」——
+  labor 给 GBR（工厂密集）过大的工资份额；`valueAdded`（工资随增值走）把聚合压到 ≈16%，
+  工业核心 GBR/FRA/PRU 进入 5–20% 带内。价格与配方本身不足以达标（A/B 验证），故动用 basis；
+  `weights` 未使用。
+
 **Gate（新增 `tests/economy-recipe-calibration.test.ts`）**
 - 84 月基线内没有商品长期钉在 0.25×/4× 价格上下限（>3 个月连续）。
 - grain/wood/coal/iron/fabric/machinery 每 12 个月至少各有一次全局 bid>0 且 offer>0（扩展 economy-calibration.test.ts）。
@@ -156,7 +181,11 @@ export type TaxRates = Record<TaxBaseId, number>   // 百分比
 - 没有「所有国家永久亏损」的建筑类型。
 - `wages+profits ∈ [0.5,1.5]×realGdp`；`C+I+G+NX == GDP`（已有）。
 - 大清第 12 月至少出口一种商品 ≥5 金/月（沿用 E1 目标）。
-- 工厂毛利落在 5–20% 带内（信号有意义、不可套利）。
+- 工厂毛利落在 5–20% 带内（信号有意义、不可套利）。**参考点**取七大国产量的加权聚合
+  （plan §5 允许「种子平均」）；工业核心 GBR/FRA/PRU 各自也在带内，资源富集、工资低的国家
+  （RUS/QING/JAP）在上界之上，属预期。
+- 消费品（成衣/酒/家具）要么真双向贸易，要么**明确判为本地自给**。B5 取后者（手工匠供给），
+  并写入 `tests/economy-recipe-calibration.test.ts` 与 `docs/playtest-issues.md`。
 
 ## 6. 工作包与顺序
 
@@ -166,7 +195,7 @@ export type TaxRates = Record<TaxBaseId, number>   // 百分比
 | **B2（利润率）** ✅ | 加 `buildingProfits`（算+存+inspect），不改决策 | 无（行为保持）；新增 building-recipes.test |
 | **B3（决策联动）** ✅ | 私有投资改用利润率；加 utilization 门控与深度亏损折旧 | economic-loop 投资相关、60/84 基线 |
 | **B4（税基）** ✅ | 移除 `taxRate`，加 `taxes`；重写 `incomeParts`；`v3_action tax`；fiscal/sim/thresholds/inspect | fiscal.test「税是 GDP 份额」、经济循环高税侵蚀 |
-| **B5（再校准）** | 调 `GOODS.basePrice` 与配方系数；加校准测试；收敛 PT-002/PT-001 | economy-calibration、trade 基线 |
+| **B5（再校准）** ✅ | 调配方系数与 `WAGE_ALLOCATION`；加校准测试；收敛 PT-002/PT-001 | economy-calibration、trade 基线 |
 | **B6（文档）** | ADR 0021–0023、README/GLOSSARY、playtest 状态更新 | — |
 
 - **进度**：B1+B2+B3 已实现（ADR 0021、ADR 0022，World v9）。`BUILDING_RECIPES` 为产出与中间投入的单一真源，
@@ -179,7 +208,15 @@ export type TaxRates = Record<TaxBaseId, number>   // 百分比
   （`land/profit/consumption/tariff`）与快照 `Economy.taxBaseQty`；`incomeParts` 按税基累加、
   不再吃 GDP；`v3_action tax { base, rate }`；可支配收入按私人税负（土+企+消）扣减，关税在边境征清。
   初始税率 `land 2 / profit 2 / consumption 3`（tariff 取种子）使 10 国合计 ≈ 旧制总额（无财政冲击）；
-  `C+I+G+NX === GDP`、金币守恒、60/120 月确定性、鸦片门全部保持。**B5/B6 尚未开始。**
+  `C+I+G+NX === GDP`、金币守恒、60/120 月确定性、鸦片门全部保持。
+  **B5 已实现**（2026-10-21）：工资分摊抽成配置 `WAGE_ALLOCATION`（见 §5.1），工厂配方重定
+  （`input {grain 0.5, coal 0.18, iron 0.2, fabric 0.2, wood 0.1, machinery 0.18}`、
+  `output {fabric 0.6, clothes 0.28, liquor 0.14, furniture 0.16, machinery 0.18, arms 0.07, luxury 0.035}`），
+  工厂从「~87% 材料成本、整体亏损」变为在 7 个主要国家的**产量加权聚合毛利 ≈ 15.8%（5–20% 带内）**，
+  工业核心 GBR/FRA/PRU 各自落在 5–20%（GBR 7%、FRA 12%、PRU 18%）。机械两侧基线恢复到
+  `≥ months − 2`（0007-E1 原界，重新收紧）。新增 `tests/economy-recipe-calibration.test.ts`
+  （9 项 gate）。PT-002 按 §5 的另一允许路径收敛：成衣/酒/家具判定为**本地自给**（手工匠供给），
+  不做全球双向贸易——真双向会掏空农村真实收入并饿死鸦片危机门。**B6 尚未开始。**
 
 - ①（贸易路线，ADR 0020）先于本计划落地；B5 再校准会顺带重定路线收益。
 - 每个包独立提交、测试全绿再进下一个。

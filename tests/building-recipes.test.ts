@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { BUILDING_IDS, BUILDING_RECIPES, makeRngForWorld } from '../engine/data'
+import { BUILDING_IDS, BUILDING_RECIPES, WAGE_ALLOCATION, makeRngForWorld } from '../engine/data'
 import { UTIL_IDLE_FLOOR, advance, computeEconomy, inspectEconomy, newWorld } from '../engine/sim'
 import type { WorldState } from '../types'
 
@@ -108,5 +108,70 @@ describe('buildingProfits snapshot (ADR 0021 B2)', () => {
     expect(Number.isFinite(sumProfit)).toBe(true)
     expect(sumProfit).toBeGreaterThan(-Math.abs(snap.profits) - 100)
     expect(sumProfit).toBeLessThan(5 * snap.realGdp + 500)
+  })
+})
+
+describe('WAGE_ALLOCATION bases (plan 0008 B5)', () => {
+  const withBasis = <T>(
+    basis: typeof WAGE_ALLOCATION.basis,
+    weights: typeof WAGE_ALLOCATION.weights,
+    body: () => T,
+  ): T => {
+    const saved = { ...WAGE_ALLOCATION }
+    try {
+      WAGE_ALLOCATION.basis = basis
+      WAGE_ALLOCATION.weights = weights
+      return body()
+    } finally {
+      WAGE_ALLOCATION.basis = saved.basis
+      WAGE_ALLOCATION.weights = saved.weights
+    }
+  }
+
+  test('every basis partitions the national wage bill exactly', async () => {
+    const world = newWorld(9705, 'QING')
+    const qing = countryOf(world, 'QING')
+    advance(world, 1, [], makeRngForWorld(world))
+
+    for (const basis of ['labor', 'valueAdded', 'capitalPlusLabor'] as const) {
+      const snap = withBasis(basis, undefined, () => computeEconomy(qing))
+      let sumWages = 0
+      for (const id of BUILDING_IDS) sumWages += snap.buildingProfits[id].wages
+      close(sumWages, snap.wages, 1e-6)
+      for (const id of BUILDING_IDS) {
+        const row = snap.buildingProfits[id]
+        close(row.profit, row.revenue - row.inputCost - row.wages, 1e-6)
+      }
+    }
+  })
+
+  test('the per-building weights multiply the chosen basis weight', async () => {
+    const world = newWorld(9706, 'QING')
+    const qing = countryOf(world, 'QING')
+    advance(world, 1, [], makeRngForWorld(world))
+
+    const base = withBasis('labor', undefined, () => computeEconomy(qing))
+    const weighted = withBasis('labor', { factories: 2 }, () => computeEconomy(qing))
+    // Doubling the factory weight raises the factory wage share and lowers it
+    // everywhere else, but the split still closes on the national bill.
+    expect(weighted.buildingProfits.factories.wages).toBeGreaterThan(base.buildingProfits.factories.wages)
+    let sumWages = 0
+    for (const id of BUILDING_IDS) sumWages += weighted.buildingProfits[id].wages
+    close(sumWages, weighted.wages, 1e-6)
+  })
+
+  test("the 'labor' basis reproduces the pre-B5 split (wages follow labor × count)", async () => {
+    const world = newWorld(9707, 'QING')
+    const qing = countryOf(world, 'QING')
+    advance(world, 1, [], makeRngForWorld(world))
+    const snap = withBasis('labor', undefined, () => computeEconomy(qing))
+
+    let total = 0
+    for (const id of BUILDING_IDS) total += BUILDING_RECIPES[id].labor * qing.econ.buildings[id]
+    for (const id of BUILDING_IDS) {
+      const expected =
+        total > 0 ? snap.wages * ((BUILDING_RECIPES[id].labor * qing.econ.buildings[id]) / total) : 0
+      close(snap.buildingProfits[id].wages, expected, 1e-6)
+    }
   })
 })

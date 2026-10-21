@@ -23,14 +23,30 @@ describe('utilization feedback (ADR 0022 B3)', () => {
     expect(gbr).toBeDefined()
     if (gbr === undefined) return
 
+    // Before B5 the seed factories were themselves unprofitable, so the idle
+    // signal was read straight off the seed. B5 made factories profitable, so
+    // drive a sustained loss the way the market would (dear inputs, cheap
+    // output) and re-pin it each month: `computeEconomy` smooths prices back
+    // toward base, so a one-off crash would recover on its own.
+    const crashFactory = (): void => {
+      for (const good of ['fabric', 'clothes', 'liquor', 'furniture', 'machinery', 'arms', 'luxury'] as const) {
+        gbr.econ.prices[good] = GOODS[good].basePrice * 0.25
+      }
+      for (const good of ['grain', 'coal', 'iron', 'wood'] as const) {
+        gbr.econ.prices[good] = GOODS[good].basePrice * 4
+      }
+    }
+    crashFactory()
     advance(world, 1, [], makeRngForWorld(world))
     const first = gbr.econ.buildingProfits.factories.utilization
-    // GBR factories are unprofitable, so the rate already left full capacity
-    // and cannot fall below the idle floor.
+    // A loss-making type leaves full capacity and cannot fall below the floor.
     expect(first).toBeLessThan(1)
     expect(first).toBeGreaterThanOrEqual(UTIL_IDLE_FLOOR)
 
-    advance(world, 11, [], makeRngForWorld(world))
+    for (let index = 0; index < 11; index += 1) {
+      crashFactory()
+      advance(world, 1, [], makeRngForWorld(world))
+    }
     const later = gbr.econ.buildingProfits.factories.utilization
     expect(later).toBeLessThan(first)
     expect(later).toBeGreaterThanOrEqual(UTIL_IDLE_FLOOR)
@@ -83,11 +99,16 @@ describe('utilization feedback (ADR 0022 B3)', () => {
       if (qing === undefined) throw new Error('missing QING')
       qing.econ.privateCapital = 400
       const savedOutput = { ...BUILDING_RECIPES.mines.output }
+      const savedInput = { ...BUILDING_RECIPES.mines.input }
       try {
         // Muting the mine recipe makes mines unprofitable while the legacy
-        // shortage signal (`BUILDING_OUTPUT`) still ranks them highest.
+        // shortage signal (`BUILDING_OUTPUT`) still ranks them highest. B5's
+        // `valueAdded` wage basis gives a zero-input, near-zero-output mine a
+        // near-zero wage, so it would stay trivially profitable; a small input
+        // keeps the muted mine genuinely in the red.
         if (muteMineOutput) {
           BUILDING_RECIPES.mines.output = { coal: 0.0001, iron: 0.0001, wood: 0.0001 }
+          BUILDING_RECIPES.mines.input = { coal: 1 }
         }
         let mines = 0
         let other = 0
@@ -103,6 +124,7 @@ describe('utilization feedback (ADR 0022 B3)', () => {
         return { mines, other }
       } finally {
         BUILDING_RECIPES.mines.output = savedOutput
+        BUILDING_RECIPES.mines.input = savedInput
       }
     }
 
@@ -123,12 +145,14 @@ describe('utilization feedback (ADR 0022 B3)', () => {
     if (lossGbr === undefined || controlGbr === undefined) return
 
     const start = controlGbr.econ.buildings.factories
+    // B5's factories carry a smaller material bill than the pre-B5 row, so the
+    // crash must be a little deeper for the loss to reach the deep-shrink path.
     const crashFactory = (country: typeof lossGbr): void => {
       for (const good of ['fabric', 'clothes', 'liquor', 'furniture', 'machinery', 'arms', 'luxury'] as const) {
-        country.econ.prices[good] = GOODS[good].basePrice * 0.25
+        country.econ.prices[good] = GOODS[good].basePrice * 0.2
       }
       for (const good of ['grain', 'coal', 'iron', 'wood'] as const) {
-        country.econ.prices[good] = GOODS[good].basePrice * 4
+        country.econ.prices[good] = GOODS[good].basePrice * 5
       }
     }
     crashFactory(lossGbr)

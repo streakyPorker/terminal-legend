@@ -54,6 +54,52 @@ export const GOODS: Record<GoodId, { name: string; basePrice: number }> = {
 
 export const GOOD_IDS = Object.keys(GOODS) as GoodId[]
 
+// ============================================================ config: economy ==
+// CONFIG SECTION. The engine formula that consumes these lives in
+// `engine/economy.ts`; plan 0009 (ADR 0024) will relocate this block to
+// `engine/config/economy.ts` without changing its shape. Kept declarative so the
+// wage-split rule can be retuned without touching the profit formula.
+
+/**
+ * How the national wage bill is split across building types when snapshotting
+ * per-building operating profit (ADR 0021, plan 0008). The split is a *fiction*
+ * that keeps `Σ buildingProfits.wages === nationalWages` exact while attributing
+ * wages per type:
+ *
+ * - `'labor'`         — by `recipe.labor × count` (the pre-B5 rule).
+ * - `'valueAdded'`    — by `max(0, revenue − inputCost)` (gross value added at
+ *                       this month's prices); negative value added is clamped to
+ *                       zero so a loss-making type never receives negative wages.
+ * - `'capitalPlusLabor'` — by `(recipe.labor + capitalProxy) × count`, where the
+ *                       capital proxy is a building's construction cost scaled by
+ *                       `CAPITAL_LABOR_SCALE` (see below).
+ */
+export type WageAllocationBasis = 'labor' | 'valueAdded' | 'capitalPlusLabor'
+
+/**
+ * Wage-allocation rule for `buildingProfits` (plan 0008 B5). `'labor'`
+ * reproduces the pre-B5 baseline exactly; B5 selected `'valueAdded'` because
+ * under `'labor'` the industrial core's factories cannot be made profitable
+ * without breaking the 20% aggregate ceiling: with `'labor'`, the calibrated
+ * recipe leaves GBR at ~4% factory margin at 20.7% aggregate, and any recipe
+ * that lifts GBR to 5% pushes the aggregate well past 20%. Charging wages in
+ * proportion to value added (wages track productivity) lifts the industrial core
+ * and pulls the aggregate to ~16%. `weights` multiplies the chosen basis weight
+ * per building type; it is unset in B5.
+ */
+export const WAGE_ALLOCATION: {
+  basis: WageAllocationBasis
+  weights?: Partial<Record<BuildingId, number>>
+} = { basis: 'valueAdded' }
+
+/**
+ * Capital proxy per gold of construction cost used by the `capitalPlusLabor`
+ * basis: `capitalProxy(b) = BUILDINGS[b].cost × CAPITAL_LABOR_SCALE`, so a
+ * 4-gold factory contributes ~1.0 capital unit, comparable to its 1.0 labour
+ * coefficient. Deterministic, no RNG.
+ */
+export const CAPITAL_LABOR_SCALE = 0.25
+
 /**
  * Region-pair transport cost multipliers (plan 0004 §1.2). Symmetric; the
  * diagonal is 1.0 so domestic-equivalent pairs pay no transport friction.
@@ -249,11 +295,13 @@ export type BuildingRecipe = {
 }
 
 /**
- * Coefficients are exact copies of the literals previously hardcoded in
- * `computeProduction` and the per-building intermediate block in
- * `computeDemand`; changing one changes production/demand by the same amount
- * it always would. `workshops` output is construction points, special-cased in
- * sim.ts, so its `output` is empty.
+ * B1 copied these from the literals previously hardcoded in `computeProduction`
+ * and the per-building intermediate block in `computeDemand`; B5 (plan 0008 §5)
+ * then recalibrated the factories row (details in plan 0008 B5). It cut the
+ * material inputs and trimmed the consumer-good output so that a factory's value
+ * added covers its allocated wage at the (locally glutted) consumer-good prices
+ * — the pre-B5 row was ~87% material cost and ran at a loss. `workshops` output
+ * is construction points, special-cased in sim.ts, so its `output` is empty.
  */
 export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
   farms: {
@@ -275,14 +323,14 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
   factories: {
     output: {
       fabric: 0.6,
-      clothes: 0.38,
-      liquor: 0.2,
-      furniture: 0.22,
+      clothes: 0.28,
+      liquor: 0.14,
+      furniture: 0.16,
       machinery: 0.18,
       arms: 0.07,
       luxury: 0.035,
     },
-    input: { grain: 1.0, coal: 0.35, iron: 0.4, fabric: 0.45, wood: 0.2, machinery: 0.18 },
+    input: { grain: 0.5, coal: 0.18, iron: 0.2, fabric: 0.2, wood: 0.1, machinery: 0.18 },
     labor: 1.0,
     gates: { tech: true, industrial: true },
     outputGates: { liquor: { industrial: true } },
@@ -319,6 +367,29 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     labor: 0,
   },
 }
+
+/**
+ * Handicraft ("artisan") monthly output per ten-thousand artisans, per good.
+ * These are the national, population-derived terms `computeProduction` always
+ * added by hand alongside `BUILDING_RECIPES` (ADR 0021 keeps them out of the
+ * per-building recipes because they scale with the artisan pop, not buildings).
+ *
+ * B5 (plan 0008 §5) leaves these at their original values. Cutting them would
+ * make clothes/liquor/furniture genuinely two-sided, but it also strips the
+ * agrarian economies of their domestic handicraft, collapses real consumer
+ * income downstream and — fatally — starves the QING→GBR opium trade that the
+ * opium-crisis gates depend on (plan 0004 §4.1). The gate therefore resolves
+ * PT-002 the other allowed way: these goods are documented as intentionally
+ * local (artisan self-supply), not globally traded.
+ */
+export const ARTISAN_OUTPUT: Partial<Record<GoodId, number>> = {
+  clothes: 0.035,
+  liquor: 0.01,
+  furniture: 0.006,
+}
+
+/** Artisan service output per ten-thousand artisans (national term). */
+export const ARTISAN_SERVICE_OUTPUT = 0.01
 
 export const BUILDINGS: Record<BuildingId, { name: string; cost: number; note: string }> = {
   farms: { name: '农场', cost: 1.5, note: '粮食与原料，吸纳农业人口' },

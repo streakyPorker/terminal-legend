@@ -97,7 +97,11 @@ type BuildingProfit = {
 
 - `effectiveCount_b = effectiveCount(count_b)`（`count^0.98`；B3 再乘 `utilization`）。
 - **工资分摊规则**：按 `labor_b × count_b` 的占比，把全国工资 `realGdp × laborShare` 分到各类型；
-  占比之和为 1，故 `Σ buildingProfits.wages === 全国 wages`（精确）。
+  占比之和为 1，故 `Σ buildingProfits.wages === 全国 wages`（精确）。B5（plan 0008 §5）把这条规则
+  抽成配置常量 **`WAGE_ALLOCATION`**（`engine/data.ts`）：`basis ∈ {'labor'|'valueAdded'|'capitalPlusLabor'}`
+  加可选 `weights`；`'labor'` 即本文原规则（逐位复现），B5 默认改用 `'valueAdded'`（见 plan 0008 §5.1）。
+  **注**：该常量在 plan 0009（ADR 0024）的配置分层落地时会迁移到 `engine/config/economy.ts`，
+  形状不变。
 - **毛利率** = `profit / revenue`（`revenue > 0` 时）。
 - **关系说明**：`Σ profit_b = Σ(revenue_b − inputCost_b) − 全国 wages`。它按**市场价、毛产出**
   估值，与宏观 `realGdp × (1 − laborShare)`（按基期价、增值口径）不是同一量，通常更大；
