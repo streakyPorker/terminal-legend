@@ -335,7 +335,7 @@ function buildingsSection(country: Country): string[] {
     }
   }
   lines.push(
-    '说明：本版 17 类建筑均开局解锁；`unlock`（F6）与 `infrastructureNeed`（F5）字段待后续落地。',
+    '说明：本版 22 类建筑均开局解锁；`unlock`（F6）与 `infrastructureNeed`（F5）字段待后续落地。',
   )
   return lines
 }

@@ -42,6 +42,11 @@ export const CAPACITY_COST: Record<BuildingId, number> = {
   steelMills: 2.5,
   arsenals: 2,
   luxuryWorks: 2,
+  schools: 1,
+  canals: 3,
+  telegraphs: 1.5,
+  forts: 2,
+  navalYards: 2.5,
   railroads: 4,
   ports: 1.5,
   universities: 2,
@@ -101,6 +106,11 @@ export const BUILDING_COST_MULTIPLIER: Record<BuildingId, number> = {
   steelMills: 1,
   arsenals: 1,
   luxuryWorks: 1,
+  schools: 1,
+  canals: 1,
+  telegraphs: 1,
+  forts: 1,
+  navalYards: 1,
   railroads: 1,
   ports: 1,
   universities: 1,
@@ -121,6 +131,11 @@ export const BUILDING_COST_ADDEND: Record<BuildingId, number> = {
   steelMills: 0,
   arsenals: 0,
   luxuryWorks: 0,
+  schools: 0,
+  canals: 0,
+  telegraphs: 0,
+  forts: 0,
+  navalYards: 0,
   railroads: 0,
   ports: 0,
   universities: 0,
@@ -391,6 +406,31 @@ export function completeBuilding(country: Country, building: BuildingId, count: 
   }
   if (building === 'ports') {
     country.econ.marketAccess = clamp(country.econ.marketAccess + count * 0.01, 0, 1)
+  }
+  // Plan 0011 F4. schools resolve the plan's §10 待定 ("建成时加识字率"): a
+  // completed primary school raises literacy on the spot (mirroring universities'
+  // education role). canals/telegraphs get the transitional railroad-style
+  // transport side effect now; F5 replaces it with the unified infrastructure
+  // supply (canals 2.0, telegraphs 0.8). forts/navalYards have no completion side
+  // effect — their effect is their small military output (plan §10).
+  if (building === 'schools') {
+    country.pops.literacy = clamp(country.pops.literacy + count * 0.002, 0, 1)
+  }
+  if (building === 'canals') {
+    country.econ.transportInfrastructure = clamp(
+      country.econ.transportInfrastructure + count * 2,
+      0,
+      100,
+    )
+    country.econ.marketAccess = clamp(country.econ.marketAccess + count * 0.01, 0, 1)
+  }
+  if (building === 'telegraphs') {
+    country.econ.transportInfrastructure = clamp(
+      country.econ.transportInfrastructure + count * 0.8,
+      0,
+      100,
+    )
+    country.econ.marketAccess = clamp(country.econ.marketAccess + count * 0.005, 0, 1)
   }
   if (building === 'universities') {
     country.econ.administrativeCapacity = clamp(

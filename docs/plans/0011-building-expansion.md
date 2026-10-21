@@ -1,6 +1,6 @@
 # 建筑扩张与统一基础设施（Building Expansion + Infrastructure）
 
-- Status: **F1、F2、F3 已实现**（World v11：F1 `iron`→铁矿石、新增 `steel`，详见 §7.2；F2 `mines`→`coalMines`/`ironMines`/`lumberMills`，详见 §7.3；F3 `factories`→七个单产工业建筑，详见 §7.4）；F4–F7 待做。其余章节仍为提案（本文件描述，F2+ 再改引擎/测试）
+- Status: **F1、F2、F3、F4 已实现**（World v11：F1 `iron`→铁矿石、新增 `steel`，详见 §7.2；F2 `mines`→`coalMines`/`ironMines`/`lumberMills`，详见 §7.3；F3 `factories`→七个单产工业建筑，详见 §7.4；F4 加学校/运河/电报/要塞/船坞，详见 §7.5）；F5–F7 待做。其余章节仍为提案（本文件描述，F2+ 再改引擎/测试）
 - Depends on: ADR 0026（本计划对应的决策）、ADR 0021（建筑配方单一真源）、ADR 0022（利用率与利润投资）、ADR 0010/0012/0013（营造所与建造能力）、ADR 0005（不做存档兼容）
 - Scope: 把建筑名册从 9 类扩到 **22 类**（拆矿场、拆工厂、加 5 类）；引入 `steel` 商品与「铁矿石」语义；把「交通基础设施」升级为**统一基础设施**（供给/需求/线性 debuff/维护）；给建筑加前瞻 `unlock` 字段。世界版本升到 **v11**。
 - 来源：用户口述。核心诉求：「建筑盈利能力要读得清 → 单产/少产建筑」；「基础设施是一个统一的东西，铁路/港口/运河/电报都产它，所有建筑都要用它」；「商品按需加，先维护一个最小可用集」。
@@ -226,7 +226,7 @@ type BuildingDef = {
 | **F1 商品：加 `steel` + `iron`→铁矿石** ✅ | `GOODS`（+steel，iron 改名）、`SUBSISTENCE`/`INCOME_ELASTICITY` 补键、`GOVERNMENT_DEMAND.construction` iron→steel、`TRADABLE_GOODS` 加 steel；`GoodId` 扩项 | `Record<GoodId,number>` 漏键会编译失败；改基价会挪动物价中心 | `GOODS.steel` 存在且 `iron.name='铁矿石'`；`SUBSISTENCE/INCOME_ELASTICITY` 含 `steel:0`；`zeroGoods`/`basePrices` 覆盖 steel；`steel` 可贸易、非消费品 |
 | **F2 拆矿场** ✅ | `mines` → `coalMines`/`ironMines`/`lumberMills`（名册/配方/时间/建造点/投资/输出/种子） | 漏改任一 `Record<BuildingId,…>` 或派生消费点即编译失败；种子座数分配改变产出总量 | 每个新矿只产 1 货；`steelMills` 吃 `iron`+`coal`；全仓无 `mines` 残留；种子座数总和守恒或按资源禀赋可解释 |
 | **F3 拆工厂** ✅ | `factories` → 7 个工业建筑；机械/军械/铁路/家具改吃 `steel` | 链条断裂（无 `steel` 来源）会让重工业停摆；`deriveUnemployment`/`boom` 事件读 `factories` 需改 | 每个工业建筑 output 键数 ≤2；`steelMills`/`machineryWorks`/`arsenals` 配方正确；`buildingProfits` 逐类可算；无 `factories` 残留 |
-| **F4 加 5 类建筑** | `schools`/`canals`/`telegraphs`/`forts`/`navalYards`（名册/配方/时间/建造点/投资/输出/种子） | 每个 `Record<BuildingId,…>` 都要补 5 键；运河/电报无产出需特判为成本中心 | 5 个 id 出现在全部 `Record<BuildingId,…>` 表；`canals`/`telegraphs` output 空且供给 >0；`completeBuilding` 对新增的可建筑无遗漏（或明确无副作用） |
+| **F4 加 5 类建筑** ✅ | `schools`/`canals`/`telegraphs`/`forts`/`navalYards`（名册/配方/时间/建造点/投资/输出/种子） | 每个 `Record<BuildingId,…>` 都要补 5 键；运河/电报无产出需特判为成本中心 | 5 个 id 出现在全部 `Record<BuildingId,…>` 表；`canals`/`telegraphs` output 空且供给 >0；`completeBuilding` 对新增的可建筑无遗漏（或明确无副作用） |
 | **F5 统一基础设施 + debuff** | `INFRA_SUPPLY`/`infrastructureNeed`；`ratio`/乘数；`computeProduction` 施加；`computeDemand` 加维护需求；月末写 `基础设施水平`；旧 `gates.infrastructure` 与旧曲线退场 | 改变了全部建筑的产出口径（行为变更）；维护需求进市场会推高 wood/coal/services 需求 | `ratio=1` → 乘数 1（无 debuff）；`ratio=0.5` → 乘数 0.5；`ratio≥1` 不奖励；维护需求按供给/水平正确计入 demand；`C+I+G+NX===GDP` 不变；60 月确定性 |
 | **F6 `unlock` + build 校验** | `BuildingDef.unlock/infrastructureNeed`；`build` 动作加 techLevel 校验 | 校验写反会误挡建筑；字段位置写错会让 TS 契约不一致 | 开局所有建筑可建；合成一个 `unlock.techLevel > 当前` 的建筑被拒；当前缺省下 `build` 行为与接入前逐位相同 |
 | **F7 分批校准 + gate** | 扩展 `tests/economy-recipe-calibration.test.ts`：按 §6 的分组利润带、`steel` 两侧、无钉价；按批 A→B→C→D 校准种子与系数 | 一次全调会互相掩盖；参考点选择影响结论 | 每组产货建筑在参考点落带；`iron`/`steel`/`machinery` 两侧都有市场（每 12 月 ≥1 次）；无商品长期钉 0.25×/4×；`wages+profits ∈ [0.5,1.5]×realGdp` |
@@ -343,6 +343,32 @@ F3 把打包的 `factories` 拆成七个单产/少产工业建筑，**World 版�
   工业货双侧性（351 pass / 0 fail）。
 - **可调数字（F7 统一校准）**：七建筑的 output/input 系数、`COUNTRY_SEEDS` 的国别占比、`GOODS` 基准价。
   参考点仍为 plan 0008 §5 的「七大国产量加权聚合」。
+
+### 7.5 F4 已落地的安排（World v11，名册不变）
+
+F4 把名册从 17 类扩到 **22 类**（加 5 类），**World 版本仍为 v11**。实际落地：
+
+- **五类建筑（每座/月；labor = 万人）**：
+  - `schools` 学校：初等教育。产出 `services 0.1`，门控 `{access}`，labor 0.15；造价 2、工期 3、建造点 1。
+  - `canals` 运河：**无货产出的成本中心**。投入 `wood 0.05`，labor 0.3；造价 6、工期 6、建造点 3。
+  - `telegraphs` 电报：**无货产出的成本中心**。投入 `wood 0.02、iron 0.02`，labor 0.2；造价 4、工期 2、建造点 1.5。
+  - `forts` 要塞：小量军械产出 `arms 0.03`，投入 `steel 0.1、wood 0.1`，门控 `{tech, industrial}`，labor 0.3；造价 4、工期 4、建造点 2。
+  - `navalYards` 船坞：小量机械产出 `machinery 0.1`，投入 `steel 0.2、wood 0.2`，门控 `{tech, industrial}`，labor 0.8；造价 5、工期 5、建造点 2.5。
+- **`completeBuilding` 完成副作用**（照铁路/港口/大学的既有模式）：
+  - `schools`：识字率 `+count × 0.002`（clamp 0..1）——**解决 §10 待定「学校是否在建成时加识字率/教育效果」：是**。
+  - `canals`：`transportInfrastructure +count × 2`、`marketAccess +count × 0.01`。
+  - `telegraphs`：`transportInfrastructure +count × 0.8`、`marketAccess +count × 0.005`。
+  - `forts` / `navalYards`：**明确无完成副作用**（其效果即上面的小量军事产出）。
+- **基础设施的过渡处理**：`canals`/`telegraphs` 在 F4 只走**旧的 `transportInfrastructure` 标量**（同铁路），**不实现**统一基础设施的供给/需求/线性 debuff（F5 才做，系数按 §4.1 的运河 2.0 / 电报 0.8 预留，见上）。这两类建筑在配方里 **`output` 为空**（成本中心）。
+- **`INVESTMENT_DEMAND`**（F1 后一律 `steel`，无 `iron` 键——故电报用 `steel` 而非 §3.2 草表里的 `iron`）：学校 `{furniture 0.1, wood 0.05}`、运河 `{wood 0.2, steel 0.15, machinery 0.05}`、电报 `{steel 0.1, wood 0.15}`、要塞 `{steel 0.15, wood 0.15}`、船坞 `{wood 0.3, steel 0.2, machinery 0.1}`。
+- **`BUILDING_OUTPUT`**（私人投资短缺信号）：五类**全为 `{}`**——与大学/官署一致，使**私人投资不会自动投建它们**（公共/军事工程由国有/AI 建造），从而不扰动 84 月基线与物价校准。
+- **`COUNTRY_SEEDS`**：五类**起步 0 座**（`buildings()` 辅助函数把缺省键补 0），由 F7 再校准国别初值；这样 1836 基线与 `economy-recipe-calibration` 全部 gate 保持不变。
+- **`deriveLabor`**：把五类按 labor 系数计入劳动需求（起步 0 座故基线不变，建成后生效）。
+- **同步更新的消费点**：`types/index.d.ts` 的 `BuildingId`、`randomDecision` 的 build 候选、`engine/ai.ts` 的提示词与国别建筑行、`hooks/register.tsx` 的两个建筑 enum（`v3_cheat` / `v3_action`）、`engine/inspect.ts` 的建筑计数文案（17→22）。
+- **不变量与 gate**：`tests/economy-recipe-calibration.test.ts` 全部 9 项 gate 绿（五类未进 `PRODUCTION_BUILDINGS` 生产利润带，其利润带留待 F7）；`C+I+G+NX===GDP`、金币守恒、60/120 月确定性、工资分摊恒等式均绿（新增 `tests/building-expansion.test.ts` 后 **359 pass / 0 fail**）。
+- **可调数字（F7 统一校准）**：五类的 recipe/input、`COUNTRY_SEEDS` 初值、`completeBuilding` 副作用系数（学校识字、运河/电报交通）。
+- **F4 解决的 §10 待定**：① 学校建成加识字率 → **是**（完成副作用 +0.002/座）；② `forts`/`navalYards` 产出 → 取「**小量产出**」（军械/机械），不新增军事结算点；③ `transportInfrastructure` 种子标量 → **保留**（F4 仍走标量，F5 再决定派生/丢弃）。
+- **未做（刻意）**：统一基础设施供给/需求/debuff（F5）、`unlock` 校验（F6）、分批再校准（F7）。
 
 ## 8. 验收
 

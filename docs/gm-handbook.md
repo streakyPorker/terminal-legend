@@ -135,7 +135,7 @@
 ### 4.3 建筑配方（单一真源，ADR 0021）
 
 `engine/data.ts` 的 `BUILDING_RECIPES` 是**产出与中间投入的唯一来源**；`computeProduction`
-只读该表。17 类建筑每座每月：
+只读该表。22 类建筑每座每月：
 
 | 建筑 | output（每座/月） | input（每座/月） | labor | 门控 |
 | --- | --- | --- | ---: | --- |
@@ -150,6 +150,11 @@
 | 钢铁厂 `steelMills` | **steel 4.0** | **iron(铁矿石) 3.5**、coal 0.5、machinery 0.18 | 1.0 | tech + industrial |
 | 兵工厂 `arsenals` | arms 0.9 | **steel 0.5**、machinery 0.3、coal 0.18、iron 0.3 | 0.9 | tech + industrial |
 | 奢侈品厂 `luxuryWorks` | luxury 0.49 | fabric 1.14、coal 0.18、wood 0.1、machinery 0.18 | 0.8 | tech + industrial |
+| 学校 `schools` | services 0.1 | 无 | 0.15 | access |
+| 运河 `canals` | 无 | wood 0.05 | 0.3 | 无 |
+| 电报 `telegraphs` | 无 | wood 0.02、iron 0.02 | 0.2 | 无 |
+| 要塞 `forts` | arms 0.03 | steel 0.1、wood 0.1 | 0.3 | tech + industrial |
+| 船坞 `navalYards` | machinery 0.1 | steel 0.2、wood 0.2 | 0.8 | tech + industrial |
 | 铁路 `railroads` | 无 | **steel 0.5**、wood 0.4 | 0.2 | 无 |
 | 港口 `ports` | 无 | 无 | 0.4 | 无 |
 | 大学 `universities` | services 0.2 | 无 | 0.2 | 无 |
@@ -180,6 +185,13 @@
   机械/军械/家具改吃 `steel`；`iron`（铁矿石）只作钢铁厂投入。`factories` 已从全部表面移除，
   派生口径改用工业建筑总数 `industrialBuildingCount`；`boom` 事件与 `工业起飞` 阈值改用该总数，
   配置条件 `'factories'` 更名 `'industry'`（plan 0011 §7.4）。
+- **F4 加五类建筑（World v11，名册 17→22）**：**学校 `schools`**（初等教育，产服务，
+  门控 access；**建成时识字率 +0.002/座**）、**运河 `canals`** 与 **电报 `telegraphs`**
+  （**无货产出的基建成本中心**，F4 只走旧 `transportInfrastructure` 标量：运河 +2/座、电报
+  +0.8/座，并各给少量市场接入；统一基础设施的供给/需求/线性 debuff 留 **F5**）、**要塞 `forts`**
+  （产少量军械 arms 0.03）与 **船坞 `navalYards`**（产少量机械 machinery 0.1）。五类**种子起步 0 座**、
+  `BUILDING_OUTPUT` 为空，故**私人投资不会自动投建**（公共/军事工程由国有或 AI 建造），1836 基线
+  与物价校准不受扰动（plan 0011 §7.5）。
 - **B5 工厂再平衡（ADR 0021、plan 0008 §5）**：工厂配方调轻了材料单、并下调成衣/酒/家具产出，
   使工厂在参考点可盈利。7 大国产量的加权**聚合工厂毛利落在 5–20% 带内**；工业核心 GBR/FRA/PRU
   亦在带内，资源富集、工资低的 RUS/QING/JAP 在带上界之上（属预期）。F1（World v11）重定了工厂

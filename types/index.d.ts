@@ -168,6 +168,15 @@ export type BuildingId =
   | 'steelMills'
   | 'arsenals'
   | 'luxuryWorks'
+  // Plan 0011 F4: five new buildings. `schools` is primary education (services /
+  // literacy); `canals`/`telegraphs` are infrastructure providers (transitional
+  // transport side effects in F4, unified infra supply in F5); `forts`/`navalYards`
+  // are military (small arms / machinery output).
+  | 'schools'
+  | 'canals'
+  | 'telegraphs'
+  | 'forts'
+  | 'navalYards'
   | 'railroads'
   | 'ports'
   | 'universities'

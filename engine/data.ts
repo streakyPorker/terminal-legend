@@ -241,6 +241,14 @@ export const INVESTMENT_DEMAND: Record<BuildingId, Partial<Record<GoodId, number
   barracks: { wood: 0.1, furniture: 0.05 },
   offices: { furniture: 0.1, wood: 0.05 },
   workshops: { wood: 0.3, steel: 0.2, furniture: 0.05 },
+  // Plan 0011 F4: five new buildings. As after F1, every project buys the
+  // worked metal (`steel`), never raw ore — so telegraphs use `steel` even
+  // though the plan draft listed `iron`.
+  schools: { furniture: 0.1, wood: 0.05 },
+  canals: { wood: 0.2, steel: 0.15, machinery: 0.05 },
+  telegraphs: { steel: 0.1, wood: 0.15 },
+  forts: { steel: 0.15, wood: 0.15 },
+  navalYards: { wood: 0.3, steel: 0.2, machinery: 0.1 },
 }
 
 /**
@@ -270,6 +278,14 @@ export const BUILDING_OUTPUT: Record<BuildingId, Partial<Record<GoodId, number>>
   barracks: { arms: 0.05 },
   offices: {},
   workshops: {},
+  // Plan 0011 F4: the new buildings are public/military works. Empty here means
+  // private investment never picks them (like universities/offices), so they are
+  // only built by the state/AI and cannot perturb the goods calibration baseline.
+  schools: {},
+  canals: {},
+  telegraphs: {},
+  forts: {},
+  navalYards: {},
 }
 
 // ---------------------------------------------------------------- building recipes
@@ -419,6 +435,38 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
   },
+  // Plan 0011 F4. `schools` is the one new service producer (primary education);
+  // `canals`/`telegraphs` are no-output infrastructure cost centres (their
+  // transport side effect lands in `completeBuilding`; the unified infra supply
+  // is F5); `forts`/`navalYards` produce a small military good (arms / machinery).
+  schools: {
+    output: { services: 0.1 },
+    input: {},
+    labor: 0.15,
+    gates: { access: true },
+  },
+  canals: {
+    output: {},
+    input: { wood: 0.05 },
+    labor: 0.3,
+  },
+  telegraphs: {
+    output: {},
+    input: { wood: 0.02, iron: 0.02 },
+    labor: 0.2,
+  },
+  forts: {
+    output: { arms: 0.03 },
+    input: { steel: 0.1, wood: 0.1 },
+    labor: 0.3,
+    gates: { tech: true, industrial: true },
+  },
+  navalYards: {
+    output: { machinery: 0.1 },
+    input: { steel: 0.2, wood: 0.2 },
+    labor: 0.8,
+    gates: { tech: true, industrial: true },
+  },
   railroads: {
     output: {},
     input: { steel: 0.5, wood: 0.4 },
@@ -486,6 +534,11 @@ export const BUILDINGS: Record<BuildingId, { name: string; cost: number; note: s
   steelMills: { name: '钢铁厂', cost: 5, note: '钢铁，铁矿石与煤的冶炼' },
   arsenals: { name: '兵工厂', cost: 4.5, note: '军械，钢铁与机械的军工' },
   luxuryWorks: { name: '奢侈品厂', cost: 5, note: '奢侈品，布料与煤的高端制造' },
+  schools: { name: '学校', cost: 2, note: '初等教育，产出服务并在建成时提升识字率' },
+  canals: { name: '运河', cost: 6, note: '内河航运，提供交通基础设施（统一基础设施见 F5）' },
+  telegraphs: { name: '电报', cost: 4, note: '电报通信，提供交通基础设施与市场接入（统一基础设施见 F5）' },
+  forts: { name: '要塞', cost: 4, note: '国防工事，产少量军械' },
+  navalYards: { name: '船坞', cost: 5, note: '造舰产能，产少量机械' },
   railroads: { name: '铁路', cost: 7, note: '交通基础设施与市场接入' },
   ports: { name: '港口', cost: 3, note: '市场接入与关税收入' },
   universities: { name: '大学', cost: 5, note: '科技点数、识字率与行政能力' },
@@ -507,6 +560,11 @@ export const BUILDING_TIME: Record<BuildingId, number> = {
   steelMills: 5,
   arsenals: 4,
   luxuryWorks: 4,
+  schools: 3,
+  canals: 6,
+  telegraphs: 2,
+  forts: 4,
+  navalYards: 5,
   railroads: 8,
   ports: 3,
   universities: 5,
@@ -614,6 +672,9 @@ export function emptyTradeState(): TradeState {
 }
 
 const buildings = (counts: Partial<Record<BuildingId, number>>): Record<BuildingId, number> => {
+  // Any id a seed omits starts at 0. The F4 buildings (schools/canals/telegraphs/
+  // forts/navalYards) are deliberately seeded at 0: they grow only when built, so
+  // the 1836 baseline and the goods calibration are untouched (F7 re-calibrates).
   const out = {} as Record<BuildingId, number>
   for (const id of BUILDING_IDS) out[id] = counts[id] ?? 0
   return out
@@ -1379,6 +1440,11 @@ export function deriveLabor(country: Country): LaborStats {
     b.steelMills * laborOf('steelMills') +
     b.arsenals * laborOf('arsenals') +
     b.luxuryWorks * laborOf('luxuryWorks') +
+    b.schools * laborOf('schools') +
+    b.canals * laborOf('canals') +
+    b.telegraphs * laborOf('telegraphs') +
+    b.forts * laborOf('forts') +
+    b.navalYards * laborOf('navalYards') +
     b.railroads * laborOf('railroads') +
     b.ports * laborOf('ports') +
     b.offices * laborOf('offices') +
