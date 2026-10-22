@@ -69,3 +69,10 @@ export const LIVE_SALIENCE_SCALE = 100
 /** Prompt-shaping caps (plan 0010 §3): how much state the topic seed carries. */
 export const LIVE_PROMPT_RELATIONS_MAX = 5
 export const LIVE_PROMPT_RECENT_LOG = 4
+
+/**
+ * The three narratorial perspectives the generation prompt guides the model
+ * toward (plan 0010 E6): 史官 / 市井 / 列国舆论. Guidance only — the message
+ * carries no new world fields and no structural output change.
+ */
+export const LIVE_NARRATIVE_PERSPECTIVES = ['史官', '市井', '列国舆论'] as const

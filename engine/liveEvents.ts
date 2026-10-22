@@ -30,6 +30,7 @@ import {
   LIVE_MODIFIER_LABEL_MAX,
   LIVE_MODIFIER_MONTHS_MAX as MODIFIER_MONTHS_MAX,
   LIVE_MODIFIER_VALUE_CAP as MODIFIER_VALUE_CAP,
+  LIVE_NARRATIVE_PERSPECTIVES,
   LIVE_OPTION_ID_MAX,
   LIVE_OPTION_LABEL_MAX,
   LIVE_OPTION_RESULT_MAX,
@@ -304,6 +305,17 @@ function topRelations(country: Country, world: WorldState): string {
 // ---------------------------------------------------------------- prompt
 
 /**
+ * One-line cue per narratorial voice (plan 0010 E6). The labels themselves live
+ * in `config/events.ts`; `tests/live-events-perspectives.test.ts` drift-guards
+ * that every configured voice has a cue.
+ */
+const PERSPECTIVE_CUES: Record<string, string> = {
+  史官: '朝廷编年笔法，庄重克制的纪传体',
+  市井: '街头百姓口吻，口语、俚俗、切身',
+  列国舆论: '他国报章与朝野观感，疏离而带偏见',
+}
+
+/**
  * Builds the blocking generation prompt for one turn (ADR 0025 §2/§8): the
  * state facts the LLM needs, the salient topic seeds, the three narrative
  * voices as guidance, and the strict output format. Realism is prompt-only
@@ -357,10 +369,11 @@ export function buildLiveEventPrompt(
     })
   }
   lines.push('')
-  lines.push('### 叙事指引')
-  lines.push(
-    '三种旁白视角只作引导，自行取舍，不设硬结构：史官（朝廷编年、庄重）、市井（街头百姓、口语）、列国舆论（他国观感、疏离）。',
-  )
+  lines.push('### 叙事指引（三视角）')
+  lines.push('以下三种旁白视角只作引导，自行取舍，不设硬结构；同一事件用其中一两种视角落笔即可：')
+  for (const voice of LIVE_NARRATIVE_PERSPECTIVES) {
+    lines.push(`- ${voice}：${PERSPECTIVE_CUES[voice] ?? ''}。`)
+  }
   lines.push('现实主义：文本必须贴合上面的状态与题材，不要凭空创造与状态矛盾的数字或事件。')
   lines.push('')
   lines.push('### 输出格式（严格）')
