@@ -441,8 +441,11 @@ GLOSSARY（航线/到岸成本/软容量/禁运）。
 ### 科技
 
 - **基础研究率**（ADR 0018）：`base = 2 + 识字率 × 3 + 官僚效能 × 0.06`；
-  大学是主要放大器：`+ 大学数 × 0.9 × (0.4 + 识字率) × (1 + 教育支出 × 0.03) × (1 + 科技等级 × 0.02)`。
-- 10 级科技（`TECHS`），升级消耗 `techCost`；开局大清约 4 点/月。
+  大学是主要放大器：`+ 大学数 × 0.9 × (0.4 + 识字率) × (1 + 教育支出 × 0.03) × (1 + 科技层级 × 0.02)`。
+- **4 时代 / 16 节点科技树**（plan 0005 K0–K1，World v13）：`techTier = 1 + 时代×1.5 + 已解锁节点×0.05`
+  是旧 1–10 级线性科技的派生替代，受科技门控的产出/建造仍按 `1 + techTier×0.07`。节点成本按时代
+  1/2/3/4 = 80/180/360/640；`v3_action research tech=<节点 id>` 选择研究（校验前置 + 时代门槛）。
+  开局大清约 4 点/月。节点效果与跨分支溢出/国际扩散由 K2 接入。
 
 ### 军事
 
@@ -499,7 +502,7 @@ GLOSSARY（航线/到岸成本/软容量/禁运）。
 - **进度**：**E1 闭环已实现**（`engine/liveEvents.ts` + `hooks/`，`tests/live-events.test.ts`）；
   E2–E7（题材显著性调参、效果边界、多主体、三视角强化、例行场景）待做，见 plan 0010。
 
-来源：ADR 0018/0019/0025、`engine/data/tech.ts`（`TECHS`）、`engine/data/events.ts`（`EVENT_TEMPLATES`）、
+来源：ADR 0018/0019/0025、`engine/data/tech.ts`（`TECH_NODES`）、`engine/data/events.ts`（`EVENT_TEMPLATES`）、
 `engine/liveEvents.ts`、`engine/economy.ts`（研究率）、`engine/diplomacy.ts`（war goal）、
 `docs/plans/0004-trade-diplomacy.md` §4/§5、`docs/plans/0010-live-events.md`、`hooks/`。
 
