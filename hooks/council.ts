@@ -23,6 +23,7 @@ import {
   salientTopics,
   type LiveEventCandidate,
 } from '../engine/liveEvents'
+import { LIVE_MAX_EVENTS } from '../engine/config/events'
 import { fmtDate, fmtNumber, fmtSigned } from '../view/format'
 import {
   LIVE_EVENT_TIMEOUT_MS,
@@ -119,7 +120,7 @@ async function generateTurnEvents(
   const countryIds = Object.keys(world.countries)
   const candidates: LiveEventCandidate[] = parseLiveEventResponse(text, {
     countryIds,
-    maxEvents: 2,
+    maxEvents: LIVE_MAX_EVENTS,
   })
   return candidates.map((candidate, index) => ({
     id: `live-${world.tick}-${world.playerId}-${index}`,

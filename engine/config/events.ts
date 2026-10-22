@@ -21,6 +21,13 @@ export const LIVE_MAX_OPTIONS = 4
 export const LIVE_MAX_MODIFIERS = 8
 export const LIVE_MODIFIER_VALUE_CAP = 500
 export const LIVE_MODIFIER_MONTHS_MAX = 240
+/** Live-event field-length caps (plan 0010 §4). */
+export const LIVE_TITLE_MAX = 80
+export const LIVE_TEXT_MAX = 600
+export const LIVE_OPTION_LABEL_MAX = 60
+export const LIVE_OPTION_RESULT_MAX = 300
+export const LIVE_MODIFIER_LABEL_MAX = 40
+export const LIVE_OPTION_ID_MAX = 24
 export const LIVE_EFFECT_CAPS = {
   treasury: 300,
   radicals: 30,

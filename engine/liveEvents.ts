@@ -24,13 +24,19 @@ import {
   LIVE_MAX_MODIFIERS,
   LIVE_MAX_OPTIONS,
   LIVE_MAX_TOPICS,
+  LIVE_MODIFIER_LABEL_MAX,
   LIVE_MODIFIER_MONTHS_MAX as MODIFIER_MONTHS_MAX,
   LIVE_MODIFIER_VALUE_CAP as MODIFIER_VALUE_CAP,
+  LIVE_OPTION_ID_MAX,
+  LIVE_OPTION_LABEL_MAX,
+  LIVE_OPTION_RESULT_MAX,
   LIVE_PROMPT_RECENT_LOG,
   LIVE_PROMPT_RELATIONS_MAX,
   LIVE_RADICALS_MIN,
   LIVE_SALIENCE_SCALE,
   LIVE_SOL_LOW,
+  LIVE_TEXT_MAX,
+  LIVE_TITLE_MAX,
   LIVE_UNEMPLOYMENT_MIN,
   LIVE_WAR_SALIENCE,
 } from './config/events'
@@ -403,6 +409,9 @@ const EFFECT_KEYS = new Set([
 
 const MODIFIER_KEYS = new Set(['stat', 'stack', 'value', 'months', 'label'])
 
+/** A model option id must be short and shell-safe; otherwise it is renamed. */
+const OPTION_ID_PATTERN = new RegExp(`^[A-Za-z0-9_-]{1,${LIVE_OPTION_ID_MAX}}$`)
+
 /** A finite number within ±cap, or undefined (absent OR invalid). */
 function boundedNumber(value: unknown, cap: number): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
@@ -454,7 +463,7 @@ function parseModifiers(
     let label: string | undefined
     if (rawModifier.label !== undefined) {
       if (typeof rawModifier.label !== 'string') return undefined
-      label = rawModifier.label.slice(0, 40)
+      label = rawModifier.label.slice(0, LIVE_MODIFIER_LABEL_MAX)
     }
     out.push({
       stat: stat as ModifierStat,
@@ -539,13 +548,13 @@ function parseOption(
       return undefined
     }
   }
-  const label = typeof source.label === 'string' ? source.label.trim().slice(0, 60) : ''
-  const result = typeof source.result === 'string' ? source.result.trim().slice(0, 300) : ''
+  const label = typeof source.label === 'string' ? source.label.trim().slice(0, LIVE_OPTION_LABEL_MAX) : ''
+  const result = typeof source.result === 'string' ? source.result.trim().slice(0, LIVE_OPTION_RESULT_MAX) : ''
   if (label === '' || result === '') return undefined
   const effects = parseEffects(source.effects, countryIds)
   if (effects === undefined) return undefined
   const rawId = typeof source.id === 'string' ? source.id.trim() : ''
-  const id = /^[A-Za-z0-9_-]{1,24}$/.test(rawId) ? rawId : `opt${index + 1}`
+  const id = OPTION_ID_PATTERN.test(rawId) ? rawId : `opt${index + 1}`
   return { id, label, result, effects }
 }
 
@@ -577,8 +586,8 @@ export function parseLiveEventResponse(
     if (candidates.length >= maxEvents) break
     if (item === null || typeof item !== 'object' || Array.isArray(item)) continue
     const source = item as Record<string, unknown>
-    const title = typeof source.title === 'string' ? source.title.trim().slice(0, 80) : ''
-    const body = typeof source.text === 'string' ? source.text.trim().slice(0, 600) : ''
+    const title = typeof source.title === 'string' ? source.title.trim().slice(0, LIVE_TITLE_MAX) : ''
+    const body = typeof source.text === 'string' ? source.text.trim().slice(0, LIVE_TEXT_MAX) : ''
     if (title === '' || body === '') continue
     if (!Array.isArray(source.options) || source.options.length === 0) continue
     const eventOptions: EventOption[] = []
