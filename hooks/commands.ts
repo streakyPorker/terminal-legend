@@ -16,7 +16,7 @@ import {
   setUi,
   setWorld,
 } from './internal'
-import { advanceGame, resolveEvent, startDelegated, startSecretary } from './council'
+import { advanceGame, resolveEvent, startDelegated, startSecretary, stopDelegated } from './council'
 import { statusHint, statusText } from './prompt'
 
 // ---------------------------------------------------------------- commands
@@ -78,6 +78,11 @@ export async function runV3Command(
         if (current === undefined) return { text: '还没有进行中的游戏。' }
         const months = clamp(Math.floor(Number(parts[1] ?? current.world.secretary.delegation.months)), 1, 12)
         return { text: await startDelegated($, months) }
+      }
+
+      case 'stop': {
+        if (current === undefined) return { text: '还没有进行中的游戏。' }
+        return { text: stopDelegated($) }
       }
 
       case 'council': {

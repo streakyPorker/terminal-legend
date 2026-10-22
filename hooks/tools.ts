@@ -24,6 +24,7 @@ import {
   resolveEvent,
   startDelegated,
   startSecretary,
+  stopDelegated,
 } from './council'
 
 // Full toolset per ADR 0001: misuse is caught by the prompt and audited
@@ -188,7 +189,7 @@ export const TOOL_SPECS: {
   {
     name: 'v3_action',
     description:
-      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count）、cancel（取消国有项目，需 projectId）、tax（调整某一税基的税率，需 base（land=土地/profit=企业所得税/consumption=消费税/tariff=关税）与 rate；缺省 base 返回税菜单）、tariff（关税：rate 为进口税率，可选 exportRate 单独设出口税率；省略则进出口同率）、spending（支出，需 category/amount）、research（研究方向，需 tech）、conscript（征兵，需 amount）、law（法案，需 name）、route（贸易路线：op 取 open/raise/lower/close，需 good 与 partner）。',
+      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count；可选 position=head/tail/before/after，默认 tail，before 为 before/after 的锚点项目 id）、cancel（取消国有项目，需 projectId 或 index（1-based 队列序号））、reorder（调整建造队列顺位，需 projectId 或 index，配 position/before）、tax（调整某一税基的税率，需 base（land=土地/profit=企业所得税/consumption=消费税/tariff=关税）与 rate；缺省 base 返回税菜单）、tariff（关税：rate 为进口税率，可选 exportRate 单独设出口税率；省略则进出口同率）、spending（支出，需 category/amount）、research（研究方向，需 tech）、conscript（征兵，需 amount）、law（法案，需 name）、route（贸易路线：op 取 open/raise/lower/close，需 good 与 partner）。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -197,6 +198,7 @@ export const TOOL_SPECS: {
           enum: [
             'build',
             'cancel',
+            'reorder',
             'tax',
             'tariff',
             'spending',
@@ -206,7 +208,21 @@ export const TOOL_SPECS: {
             'route',
           ],
         },
-        projectId: { type: 'string', description: 'cancel 时必填，建造队列中的项目 id。' },
+        projectId: { type: 'string', description: 'cancel/reorder 时的项目 id（与 index 二选一）。' },
+        index: {
+          type: 'integer',
+          minimum: 1,
+          description: 'cancel/reorder 时可用，建造队列中的 1-based 序号（见 v3_inspect construction）。',
+        },
+        position: {
+          type: 'string',
+          enum: ['head', 'tail', 'before', 'after'],
+          description: 'build/reorder 时的落位（默认 tail）。',
+        },
+        before: {
+          type: 'string',
+          description: 'position 为 before/after 时的锚点项目 id。',
+        },
         building: {
           type: 'string',
           enum: [
@@ -447,6 +463,17 @@ export const TOOL_SPECS: {
       additionalProperties: false,
     },
   },
+  {
+    name: 'v3_control',
+    description:
+      '终末传奇：控制当前这一局的运行。action=stop 会在当前月推进结束后打断正在进行的后台托管；action=save 写入存档。只对玩家国家生效，基本只读；秘书调用会被审计。',
+    inputSchema: {
+      type: 'object',
+      properties: { action: { type: 'string', enum: ['stop', 'save'] } },
+      required: ['action'],
+      additionalProperties: false,
+    },
+  },
 ]
 
 type Args = Record<string, unknown>
@@ -584,6 +611,9 @@ export const handleV3Action = async ($: EngineInterface, e: any) => {
       'tech',
       'name',
       'projectId',
+      'index',
+      'position',
+      'before',
       'op',
       'good',
       'partner',
@@ -799,6 +829,26 @@ export const handleV3Save = async ($: EngineInterface, e: any) => {
   }
 }
 
+export const handleV3Control = async ($: EngineInterface, e: any) => {
+  try {
+    if (e.agentId !== undefined && (await auditOverreach($, '控制托管'))) {
+      return toolFail('秘书连续越权，控制托管的请求已被拒绝。')
+    }
+    const args = e as unknown as Args
+    const action = String(args.action ?? '')
+    if (action === 'stop') return toolOk(stopDelegated($))
+    if (action === 'save') {
+      const current = await activeWorld($)
+      if (current === undefined) return toolFail('还没有进行中的游戏。')
+      const path = await saveGame($, current.world)
+      return toolOk(`已保存到 ${path}`)
+    }
+    return toolFail(`未知的 v3_control 动作 ${action}`)
+  } catch (error) {
+    return toolFail(`控制失败：${String(error)}`)
+  }
+}
+
 export const handleV3Play = async ($: EngineInterface, e: any) => {
   try {
     if (isDelegatedRun()) return toolFail('托管进行中，请等它结束再切换国家。')
@@ -825,7 +875,7 @@ export const handleV3Play = async ($: EngineInterface, e: any) => {
 function manualFallback(): string {
   return [
     '（未找到 docs/gm-handbook.md；以下为工具与分区速查）',
-    '工具：v3_status / v3_inspect / v3_forecast / v3_manual / v3_advance / v3_action / v3_policy / v3_diplomacy / v3_situation / v3_event / v3_leader / v3_play / v3_save / v3_cheat',
+    '工具：v3_status / v3_inspect / v3_forecast / v3_manual / v3_advance / v3_action / v3_policy / v3_diplomacy / v3_situation / v3_event / v3_leader / v3_play / v3_save / v3_cheat / v3_control',
     `v3_inspect 分区（section）：${INSPECT_SECTIONS.join(' / ')}`,
     '规则：查询状态只走 MCP 工具，绝不读取 .terminal-legend/save.json。',
   ].join('\n')

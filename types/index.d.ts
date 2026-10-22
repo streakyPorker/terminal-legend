@@ -910,6 +910,40 @@ export type UiState = {
   council: CouncilState
 }
 
+/** Panel control actions (plan 0013 build panel). `council` opens the council. */
+export type ControlAction = 'next' | 'save' | 'council' | 'build' | 'cancel' | 'reorder'
+
+/**
+ * Payload carried by a panel control action. `build` uses `building`/`perSlot`
+ * (x, 1..5)/`slots` (y) to queue `y` slots of `x` buildings each; `cancel` and
+ * `reorder` address a project by `projectId` or 1-based `index` (matching
+ * `v3_inspect construction`) and move it to `position` (relative to `before`).
+ */
+export type ControlPayload = {
+  building?: BuildingId
+  /** Buildings per slot, 1..5 (the `x` of `x*y`). */
+  perSlot?: number
+  /** Number of slots to queue (the `y` of `x*y`). */
+  slots?: number
+  projectId?: string
+  /** 1-based position in `econ.constructionQueue`. */
+  index?: number
+  position?: 'head' | 'tail' | 'before' | 'after'
+  before?: string
+}
+
+/** Council-panel actions. */
+export type CouncilAction =
+  | 'approve'
+  | 'run'
+  | 'recompose'
+  | 'delegate-internal'
+  | 'delegate-diplomacy'
+  | 'months'
+
+/** `v3_control` actions: stop an in-flight delegated run, or save. */
+export type ControlCommand = 'stop' | 'save'
+
 export type GameConfig = {
   aiModel: string
 }

@@ -115,3 +115,20 @@ export function isDelegatedRun(): boolean {
 export function setDelegatedRun(value: boolean): void {
   delegatedRun = value
 }
+
+// Set when the player asks the in-flight delegated run to stop (PT-039). The
+// monthly loop polls it and breaks after the current month; `v3_control`/`/v3
+// stop` set it, `startDelegated` clears it.
+let delegatedStopRequested = false
+
+export function requestDelegatedStop(): void {
+  delegatedStopRequested = true
+}
+
+export function isDelegatedStopRequested(): boolean {
+  return delegatedStopRequested
+}
+
+export function clearDelegatedStop(): void {
+  delegatedStopRequested = false
+}

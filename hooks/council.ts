@@ -1,9 +1,10 @@
 import type { EngineInterface } from 'claude-code'
-import type { GameEvent, LogEntry, WorldState } from '../types'
+import type { ControlAction, ControlPayload, CouncilAction, GameEvent, LogEntry, WorldState } from '../types'
 import { makeRngForWorld } from '../engine/data'
 import { decideForAi } from '../engine/ai'
 import {
   advance,
+  applyDecision,
   applyEventOption,
   clamp,
   clone,
@@ -23,19 +24,21 @@ import {
   type LiveEventCandidate,
 } from '../engine/liveEvents'
 import { fmtDate, fmtNumber, fmtSigned } from '../view/format'
-import type { ControlAction, CouncilAction } from '../view/panels'
 import {
   LIVE_EVENT_TIMEOUT_MS,
   SECRETARY_AGENT,
   SECRETARY_TIMEOUT_MS,
   activeWorld,
+  clearDelegatedStop,
   getUi,
   getWorld,
   isDelegatedRun,
+  isDelegatedStopRequested,
   openPane,
   patchUi,
   pendingOf,
   refreshStatus,
+  requestDelegatedStop,
   secretaryAnswers,
   setDelegatedRun,
   setWorld,
@@ -438,10 +441,95 @@ export async function auditOverreach(
   return blocked
 }
 
-export async function controlGame($: EngineInterface, action: ControlAction): Promise<string> {
+/** Upper bound on slots a single build-panel order may queue (plan 0013). */
+const MAX_SLOTS_PER_ORDER = 10
+
+function orderParams(payload?: ControlPayload): Record<string, string | number> {
+  const params: Record<string, string | number> = {}
+  if (payload?.projectId !== undefined) params.projectId = payload.projectId
+  if (payload?.index !== undefined) params.index = payload.index
+  if (payload?.position !== undefined) params.position = payload.position
+  if (payload?.before !== undefined) params.before = payload.before
+  return params
+}
+
+/** Applies one queue decision (cancel/reorder) from the build panel. */
+async function panelDecision(
+  $: EngineInterface,
+  action: string,
+  payload?: ControlPayload,
+): Promise<string> {
   const current = await activeWorld($)
   if (current === undefined) return '还没有进行中的游戏。'
+  if (isDelegatedRun()) return '托管进行中，请等它结束。'
   const world = clone(current.world)
+  const result = applyDecision(
+    world,
+    { countryId: world.playerId, action, params: orderParams(payload) },
+    makeRngForWorld(world),
+  )
+  if (!result.ok) return result.text
+  await setWorld($, world)
+  await saveGame($, world).catch(() => undefined)
+  await refreshStatus($)
+  await patchUi($, { notice: result.text })
+  return result.text
+}
+
+/**
+ * Queues `slots` (y) single entries of `perSlot` (x) buildings each — the `x*y`
+ * order of plan 0013, equivalent to `y` successive `v3_action build` calls.
+ * For `head` the slots keep their order by anchoring later ones after the first.
+ */
+async function panelBuild($: EngineInterface, payload?: ControlPayload): Promise<string> {
+  const current = await activeWorld($)
+  if (current === undefined) return '还没有进行中的游戏。'
+  if (isDelegatedRun()) return '托管进行中，请等它结束。'
+  const building = payload?.building
+  if (building === undefined) return '请选择要建造的建筑。'
+  const perSlot = clamp(Math.round(payload?.perSlot ?? 1), 1, 5)
+  const slots = clamp(Math.round(payload?.slots ?? 1), 1, MAX_SLOTS_PER_ORDER)
+  const world = clone(current.world)
+  const rng = makeRngForWorld(world)
+  let position: 'head' | 'tail' | 'before' | 'after' = payload?.position ?? 'tail'
+  let before = payload?.before
+  const texts: string[] = []
+  for (let index = 0; index < slots; index += 1) {
+    const known = new Set(world.econ.constructionQueue.map(project => project.id))
+    const result = applyDecision(
+      world,
+      {
+        countryId: world.playerId,
+        action: 'build',
+        params: { building, count: perSlot, position, ...(before === undefined ? {} : { before }) },
+      },
+      rng,
+    )
+    if (!result.ok) return [...texts, result.text].join('\n')
+    texts.push(result.text)
+    if (position === 'head') {
+      const inserted = world.econ.constructionQueue.find(project => !known.has(project.id))
+      if (inserted !== undefined) {
+        position = 'after'
+        before = inserted.id
+      }
+    }
+  }
+  await setWorld($, world)
+  await saveGame($, world).catch(() => undefined)
+  await refreshStatus($)
+  const text = texts.join('\n')
+  await patchUi($, { notice: text })
+  return text
+}
+
+export async function controlGame(
+  $: EngineInterface,
+  action: ControlAction,
+  payload?: ControlPayload,
+): Promise<string> {
+  const current = await activeWorld($)
+  if (current === undefined) return '还没有进行中的游戏。'
 
   if (action === 'next') {
     if (isDelegatedRun()) return '托管进行中，请等它结束。'
@@ -454,11 +542,25 @@ export async function controlGame($: EngineInterface, action: ControlAction): Pr
     return '已打开御前议事。'
   }
 
+  if (action === 'build') return panelBuild($, payload)
+  if (action === 'cancel') return panelDecision($, 'cancel', payload)
+  if (action === 'reorder') return panelDecision($, 'reorder', payload)
+
+  const world = clone(current.world)
   world.resumeOnStart = true
   await setWorld($, world)
   const path = await saveGame($, world).catch(() => '（保存失败）')
   $.ui.toast('已保存')
   return `已保存到 ${path}`
+}
+
+/** Requests the in-flight delegated run to stop after the current month (PT-039). */
+export function stopDelegated($: EngineInterface): string {
+  if (!isDelegatedRun()) return '当前没有正在进行的托管。'
+  requestDelegatedStop()
+  void patchUi($, { notice: '已请求停止托管，将在本月推进结束后停下…' }).catch(() => undefined)
+  $.ui.toast('已请求停止托管')
+  return '已请求停止托管，将在本月推进结束后停下。'
 }
 
 // Set by auditOverreach when the secretary oversteps during a managed run.
@@ -489,15 +591,16 @@ export async function startDelegated($: EngineInterface, months: number): Promis
   }
   const total = clamp(Number.isFinite(months) ? Math.round(months) : 1, 1, 12)
   overreachDuringRun = false
+  clearDelegatedStop()
   setDelegatedRun(true)
   await patchUi($, {
     council: { ...current.ui.council, isOpen: false, isRunning: true },
-    notice: `托管中：最多 ${total} 个月`,
+    notice: `托管中：最多 ${total} 个月（/v3 stop 可随时停下）`,
   })
   void runDelegated($, total).catch(() => {
     setDelegatedRun(false)
   })
-  return `托管已开始：最多 ${total} 个月；遇待决事件、战争或秘书越权会停下并提示。`
+  return `托管已开始：最多 ${total} 个月；遇待决事件、战争或秘书越权会停下并提示，也可用 /v3 stop（或 v3_control stop）手动停止。`
 }
 
 async function runDelegated($: EngineInterface, total: number): Promise<void> {
@@ -505,6 +608,10 @@ async function runDelegated($: EngineInterface, total: number): Promise<void> {
     let advancedCount = 0
     let reason = ''
     for (let index = 0; index < total; index += 1) {
+      if (isDelegatedStopRequested()) {
+        reason = '手动停止'
+        break
+      }
       const before = await activeWorld($)
       if (before === undefined) break
       const snapshot = clone(before.world)
@@ -516,7 +623,7 @@ async function runDelegated($: EngineInterface, total: number): Promise<void> {
       advancedCount += 1
       const after = await activeWorld($)
       if (after === undefined) break
-      reason = interruptReason(snapshot, after.world)
+      reason = isDelegatedStopRequested() ? '手动停止' : interruptReason(snapshot, after.world)
       if (reason !== '') break
     }
 
@@ -541,6 +648,7 @@ async function runDelegated($: EngineInterface, total: number): Promise<void> {
     $.ui.toast(header)
   } finally {
     setDelegatedRun(false)
+    clearDelegatedStop()
   }
 }
 

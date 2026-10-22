@@ -253,3 +253,48 @@ describe('v3_manual tool surface', () => {
     },
   )
 })
+
+// ---------------------------------------------------------------- PT-039 / PT-037
+
+describe('PT-039 control tool + PT-037 reorder schema (plan 0013)', () => {
+  test(
+    'v3_control is registered with a stop/save enum and v3_action exposes reorder',
+    async ($, on) => {
+      const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
+      const specs = new Map<string, { inputSchema: { properties?: Record<string, { enum?: string[] }> } }>()
+      setupSurface(anyOn, {
+        'tool.register': (_$: any, e: any) => {
+          specs.set(String(e.name), e)
+          return { value: undefined }
+        },
+      })
+      await startCampaign($ as any)
+
+      const control = specs.get('v3_control')
+      expect(control).toBeDefined()
+      expect(control?.inputSchema.properties?.action?.enum).toEqual(['stop', 'save'])
+
+      const action = specs.get('v3_action')
+      expect(action).toBeDefined()
+      const actionEnum = action?.inputSchema.properties?.action?.enum ?? []
+      expect(actionEnum).toContain('reorder')
+      expect(actionEnum).toContain('build')
+      expect(actionEnum).toContain('cancel')
+    },
+  )
+
+  test(
+    'v3_control stop with no run in flight is a non-error report',
+    async ($, on) => {
+      const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
+      setupSurface(anyOn)
+      await startCampaign($ as any)
+      const result = (await ($.tool.call as unknown as (e: unknown) => Promise<{
+        result?: string
+        deny?: string
+      }>)({ tool: 'mcp__terminal-legend__v3_control', action: 'stop' }))
+      expect(result.deny).toBeUndefined()
+      expect(result.result ?? '').toContain('托管')
+    },
+  )
+})

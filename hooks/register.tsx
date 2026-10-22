@@ -21,6 +21,7 @@ import {
   handleV3Action,
   handleV3Advance,
   handleV3Cheat,
+  handleV3Control,
   handleV3Diplomacy,
   handleV3Event,
   handleV3Forecast,
@@ -48,7 +49,7 @@ export const register: Register = (on, options) => {
     await $.command.register({
       name: 'v3',
       description: '终末传奇：维多利亚式大战略模拟（新游戏 / 推进 / 面板 / 事件 / 存档）',
-      argumentHint: '[new|next|run|council|secretary|delegate|panel|status|events|save|load|play|end|help]',
+      argumentHint: '[new|next|run|stop|council|secretary|delegate|panel|status|events|save|load|play|end|help]',
     })
     for (const spec of TOOL_SPECS) {
       await $.tool.register({ ...spec, isDeferred: false })
@@ -173,6 +174,7 @@ export const register: Register = (on, options) => {
   on('tool.call', { tool: 'mcp__terminal-legend__v3_event' }, handleV3Event)
   on('tool.call', { tool: 'mcp__terminal-legend__v3_leader' }, handleV3Leader)
   on('tool.call', { tool: 'mcp__terminal-legend__v3_save' }, handleV3Save)
+  on('tool.call', { tool: 'mcp__terminal-legend__v3_control' }, handleV3Control)
   on('tool.call', { tool: 'mcp__terminal-legend__v3_play' }, handleV3Play)
 
   // ------------------------------------------------------------ drawing
