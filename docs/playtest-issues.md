@@ -1058,4 +1058,4 @@
 - 关联：`engine/country.ts`、`engine/economy.ts`、`engine/data/buildings.ts`、
   `engine/config/diplomacy.ts`（`SENSITIVE_DRAG`）、`tests/trade-diplomacy.test.ts`、`tests/utilization.test.ts`
 - 优先级：**P1**
-- 状态：**fixed（本次提交）**
+- 状态：**fixed（b0a2193）**
