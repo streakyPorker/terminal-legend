@@ -9,10 +9,6 @@
 > 门面即本 README。**「模拟如何运转」的实现细节集中在 `docs/architecture.md`**（单一真源）；
 > 术语以 `GLOSSARY.md` 为准；GM 机制参考见 `docs/gm-handbook.md`；决策背景见 `docs/adr/`。
 
-![终末传奇 · 御前面板](docs/assets/panel.png)
-
-*面板示意：道光十六年十一月，大清。图中数据由真实世界状态渲染，非屏幕截图——实际界面以你的终端为准。*
-
 ## 快速开始
 
 **全局安装（可一键开关）**：
