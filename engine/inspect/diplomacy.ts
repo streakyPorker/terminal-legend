@@ -1,9 +1,8 @@
 import type { Country, WorldState } from '../../types'
 import { GOODS } from '../data'
 import {
-  OPIUM_CRISIS_TITLE,
-  SITUATION_TIMEOUT_MONTHS,
-  resultName,
+  situationStateText,
+  situationTitleOf,
   stanceSummary,
 } from '../situations'
 import { fmtDate, n, signed, warBetween } from './shared'
@@ -80,12 +79,9 @@ export function diplomacySection(world: WorldState, country: Country): string[] 
   } else {
     lines.push('局势：')
     for (const situation of world.situations) {
-      const state = situation.resolved
-        ? `已解决：${resultName(situation.resultId) || '—'}`
-        : situation.months >= SITUATION_TIMEOUT_MONTHS
-          ? '待仲裁'
-          : `等待各方（${situation.months}/${SITUATION_TIMEOUT_MONTHS} 月）`
-      lines.push(`- ${OPIUM_CRISIS_TITLE} ${state}｜${stanceSummary(situation)}`)
+      lines.push(
+        `- ${situationTitleOf(situation)} ${situationStateText(situation)}｜${stanceSummary(situation)}`,
+      )
     }
   }
   return lines

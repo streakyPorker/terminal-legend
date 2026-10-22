@@ -42,18 +42,20 @@ const flatScale = (stat: PolicyEffect['stat']): number => {
   return POLICY_FLAT_SCALE[stat] ?? 10
 }
 
-export function applyPolicy(
-  world: WorldState,
-  countryId: string,
-  proposal: PolicyProposal,
-): ActionResult {
-  const country = world.countries[countryId]
-  if (country === undefined) return { ok: false, text: `未知国家 ${countryId}` }
-  const name = String(proposal.name ?? '').trim().slice(0, 40)
-  if (name === '') return { ok: false, text: '政策需要一个名称。' }
-  const effects = Array.isArray(proposal.effects) ? proposal.effects.slice(0, 12) : []
-  if (effects.length === 0) return { ok: false, text: '政策至少需要一个效果条目。' }
+export type EffectValidation =
+  | { ok: true; effects: PolicyEffect[] }
+  | { ok: false; text: string }
 
+/**
+ * The single effect-entry validator shared by policies and situations (ADR 0003:
+ * the engine checks shapes, magnitudes are free). Rejects a non-`ModifierStat`,
+ * a non-finite value, `|value| > 200`, a >100% capped-stat entry and a bad
+ * stack; clamps `months` into 1..240. Returns normalized entries. Slicing to
+ * `maxCount` happens here so a situation's `maxEffects` envelope reuses the
+ * exact policy rule.
+ */
+export function validateEffects(raw: PolicyEffect[], maxCount = 12): EffectValidation {
+  const effects = Array.isArray(raw) ? raw.slice(0, maxCount) : []
   const parsed: PolicyEffect[] = []
   for (const effect of effects) {
     if (!MODIFIER_STATS.includes(effect.stat)) {
@@ -96,6 +98,23 @@ export function applyPolicy(
       label: effect.label,
     })
   }
+  return { ok: true, effects: parsed }
+}
+
+export function applyPolicy(
+  world: WorldState,
+  countryId: string,
+  proposal: PolicyProposal,
+): ActionResult {
+  const country = world.countries[countryId]
+  if (country === undefined) return { ok: false, text: `未知国家 ${countryId}` }
+  const name = String(proposal.name ?? '').trim().slice(0, 40)
+  if (name === '') return { ok: false, text: '政策需要一个名称。' }
+  const rawEffects = Array.isArray(proposal.effects) ? proposal.effects : []
+  if (rawEffects.length === 0) return { ok: false, text: '政策至少需要一个效果条目。' }
+  const validated = validateEffects(rawEffects)
+  if (!validated.ok) return { ok: false, text: validated.text }
+  const parsed = validated.effects
 
   // Compile the proposal into a `policy:<name>` block and re-run the C1
   // invariant validator on it. The shape checks above already produce today's

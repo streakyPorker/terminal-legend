@@ -5,7 +5,7 @@ import { BUILDING_IDS, GOODS, GOOD_IDS, SPENDING, WAR_GOAL_NAMES, techNodeName, 
 import { TAX_BASE_IDS, nationalDebt, sovereignFund } from './fiscal'
 import type { Rng } from './rng'
 import { SENSITIVE_GOODS, randomDecision, type Decision } from './sim'
-import { SITUATION_STANCES } from './situations'
+import { SITUATION_STANCES, openSituation, situationById } from './situations'
 
 export type AiReport = {
   decisions: Decision[]
@@ -273,7 +273,9 @@ function validParams(
     case 'invest':
       return finite(params.amount, -3, 3)
     case 'situation': {
-      if (!(SITUATION_STANCES as readonly string[]).includes(String(params.stance ?? ''))) {
+      const open = openSituation(world)
+      const stances = open === undefined ? SITUATION_STANCES : situationById(open.kind)?.stances ?? SITUATION_STANCES
+      if (!(stances as readonly string[]).includes(String(params.stance ?? ''))) {
         return false
       }
       return typeof params.narrative === 'string' && params.narrative.trim() !== ''

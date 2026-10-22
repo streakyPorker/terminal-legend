@@ -799,14 +799,22 @@ export type WarIndemnity = {
 export type SituationStance = 'crackdown' | 'compromise' | 'war' | 'aid' | 'neutral'
 
 /**
- * One participant's proposal for a situation (plan 0004 §4.2). Proposals are
- * arbitration context only — their effects are never applied; only the chosen
- * result pack (§4.3) lands on the world.
+ * One participant's proposal for a situation (plan 0004 §4.2; generalized by
+ * plan 0002). For an `arbiter-agent` situation (the opium crisis) the proposal
+ * is arbitration context only — its effects are never applied; only the chosen
+ * result pack lands. For an `engine` situation the engine validates `effects`
+ * (self) and `pressure` (other participants) with the same rules as a policy
+ * and installs them as `situation:`-sourced modifiers.
  */
 export type SituationProposal = {
   countryId: string
-  stance: SituationStance
+  /** A stance id validated against the situation definition's `stances`. */
+  stance: string
   narrative: string
+  /** Country-local effects; validated like a policy before install. */
+  effects?: PolicyEffect[]
+  /** Effects aimed at the other participants; validated like a policy. */
+  pressure?: PolicyEffect[]
 }
 
 /**
@@ -816,7 +824,8 @@ export type SituationProposal = {
  */
 export type SituationRecord = {
   id: string
-  kind: 'opium-crisis'
+  /** The situation definition id this record instantiates (plan 0002). */
+  kind: string
   opened: GameDate
   /** Participant country ids; `['QING','GBR']` for the opium crisis. */
   countries: string[]

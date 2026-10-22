@@ -1,13 +1,12 @@
 import type {
   Country,
   LogEntry,
-  SituationProposal,
   SituationRecord,
   SituationStance,
   WorldState,
-} from '../types'
-import { addModifier } from './modifiers'
-import { installBlock, validateBlockConfig } from './blocks'
+} from '../../types'
+import { addModifier } from '../modifiers'
+import { installBlock, validateBlockConfig } from '../blocks'
 import {
   compileSituationBlock,
   instantiateSituationBlock,
@@ -15,11 +14,11 @@ import {
   situationModifierId,
   situationPacksFor,
   situationSource,
-} from './config/blocks/situations'
-import { atWar, declareWar, strength } from './diplomacy'
-import { inspectEconomy } from './economy'
-import { clamp } from './internal'
-import type { Rng } from './rng'
+} from '../config/blocks/situations'
+import { atWar, declareWar, strength } from '../diplomacy'
+import { inspectEconomy } from '../economy'
+import { clamp } from '../internal'
+import type { Rng } from '../rng'
 import {
   OPIUM_CRACKDOWN_AUTHORITY,
   OPIUM_CRACKDOWN_GBR_PRESTIGE,
@@ -37,14 +36,14 @@ import {
   OPIUM_WAR_RELATION,
   OPIUM_WINDOW_END_YEAR,
   OPIUM_WINDOW_START_YEAR,
-  SITUATION_NARRATIVE_MAX,
   SITUATION_TIMEOUT_MONTHS,
-} from './config/situations'
+} from '../config/situations'
 
 /**
- * The one situation this slice ships: the opium crisis (plan 0004 §4). There is
- * deliberately no situation framework — a single id, a fixed window, four fixed
- * result packs. A given id may be opened at most once, ever.
+ * The bespoke half of the opium crisis (plan 0004 §4): a fixed window, a
+ * function-shaped gate, five stances and four fixed result packs. Plan 0002
+ * keeps this behaviour bit-for-bit behind the general situation registry; only
+ * `kind`/`id` are shared with it.
  */
 export const OPIUM_CRISIS_ID = 'opium-crisis'
 export const OPIUM_CRISIS_TITLE = '鸦片危机'
@@ -90,12 +89,6 @@ export const SITUATION_RESULT_NAMES: Record<SituationResultId, string> = {
   'war-open-market': '战争：开放市场',
   'war-reparations': '战争：赔款',
 }
-
-const dateIndex = (date: { year: number; month: number }): number =>
-  date.year * 12 + (date.month - 1)
-
-const isStance = (value: unknown): value is SituationStance =>
-  SITUATION_STANCES.includes(value as SituationStance)
 
 const isResultId = (value: unknown): value is SituationResultId =>
   SITUATION_RESULT_IDS.includes(value as SituationResultId)
@@ -145,88 +138,6 @@ function addLog(log: LogEntry[], world: WorldState, text: string): void {
   log.push({ date: { ...world.date }, kind: 'diplomacy', text })
 }
 
-function openCrisis(world: WorldState, log: LogEntry[]): SituationRecord {
-  const record: SituationRecord = {
-    id: OPIUM_CRISIS_ID,
-    kind: 'opium-crisis',
-    opened: { ...world.date },
-    countries: [...OPIUM_CRISIS_PARTICIPANTS],
-    proposals: [],
-    resolved: false,
-    months: 0,
-  }
-  world.situations.push(record)
-  addLog(log, world, `局势「${OPIUM_CRISIS_TITLE}」爆发：中英两国因鸦片贸易剑拔弩张`)
-  return record
-}
-
-/**
- * Monthly tick run by `advance` (plan §4.1): age every open situation by a
- * month, then open the opium crisis if its conditions hold. Opening must never
- * block the monthly council, and settling is the host's job (it needs the async
- * arbiter), so nothing here awaits.
- */
-export function tickSituations(world: WorldState, log: LogEntry[]): void {
-  for (const situation of world.situations) {
-    if (!situation.resolved) situation.months += 1
-  }
-  if (opiumCrisisDue(world)) openCrisis(world, log)
-}
-
-function openSituation(world: WorldState): SituationRecord | undefined {
-  return world.situations.find(one => !one.resolved)
-}
-
-/** True when every participant has submitted a proposal (plan §4.2). */
-function allProposed(situation: SituationRecord): boolean {
-  return situation.countries.every(id =>
-    situation.proposals.some(proposal => proposal.countryId === id),
-  )
-}
-
-/** Situations ready to settle: all proposals in, or 3 months elapsed (plan §4.2). */
-export function dueSituations(world: WorldState): SituationRecord[] {
-  return world.situations.filter(
-    situation =>
-      !situation.resolved &&
-      (situation.months >= SITUATION_TIMEOUT_MONTHS || allProposed(situation)),
-  )
-}
-
-/**
- * Records one participant's stance on the open situation. Engine validates the
- * stance enum and clamps the narrative like any other model text; one proposal
- * per participant (a resubmission replaces it). Proposals never carry effects
- * (plan §4.2).
- */
-export function recordSituationProposal(
-  world: WorldState,
-  countryId: string,
-  stance: string,
-  narrative: string,
-): { ok: boolean; text: string } {
-  const situation = openSituation(world)
-  if (situation === undefined) return { ok: false, text: '当前没有待决的局势。' }
-  if (!situation.countries.includes(countryId)) {
-    return { ok: false, text: `${countryId} 不是「${OPIUM_CRISIS_TITLE}」的参与方。` }
-  }
-  if (!isStance(stance)) return { ok: false, text: `无效的立场 ${stance}。` }
-  const text = narrative.trim().slice(0, SITUATION_NARRATIVE_MAX)
-  if (text === '') return { ok: false, text: '提案需要一句叙事。' }
-  const proposal: SituationProposal = { countryId, stance, narrative: text }
-  const existing = situation.proposals.find(one => one.countryId === countryId)
-  if (existing !== undefined) {
-    existing.stance = proposal.stance
-    existing.narrative = proposal.narrative
-  } else {
-    situation.proposals.push(proposal)
-  }
-  return {
-    ok: true,
-    text: `${countryId} 就「${OPIUM_CRISIS_TITLE}」提交立场：${SITUATION_STANCE_NAMES[stance]}`,
-  }
-}
-
 /**
  * Deterministic fallback, in the plan's priority order (plan §4.4): compromise,
  * then crackdown if GBR is not belligerent, then war (open-market, or
@@ -260,7 +171,7 @@ export function buildArbiterPrompt(world: WorldState, situation: SituationRecord
       `- ${id}：${
         proposal === undefined
           ? '（未提交）'
-          : `${SITUATION_STANCE_NAMES[proposal.stance]} — ${proposal.narrative}`
+          : `${SITUATION_STANCE_NAMES[proposal.stance as SituationStance] ?? proposal.stance} — ${proposal.narrative}`
       }`,
     )
   }
@@ -405,10 +316,11 @@ export function applySituationResult(
 }
 
 /**
- * Settles one situation: one arbitration call through the injected completer,
- * then the deterministic fallback when the reply is not one of the four ids
- * (plan §4.4). Asynchronous because the real completer is `$.model.complete`;
- * tests inject a stub. The chosen id is recorded so a save reproduces it.
+ * Settles one opium situation: one arbitration call through the injected
+ * completer, then the deterministic fallback when the reply is not one of the
+ * four ids (plan §4.4). Asynchronous because the real completer is
+ * `$.model.complete`; tests inject a stub. The chosen id is recorded so a save
+ * reproduces it.
  */
 export async function resolveSituation(
   world: WorldState,
@@ -429,44 +341,4 @@ export async function resolveSituation(
   }
   applySituationResult(world, situation, resultId, log)
   return resultId
-}
-
-/** Settles every due situation in order (stable: `world.situations` order). */
-export async function settleDueSituations(
-  world: WorldState,
-  complete: (prompt: string) => Promise<string>,
-  rng: Rng,
-  log: LogEntry[],
-): Promise<SituationResultId[]> {
-  const settled: SituationResultId[] = []
-  for (const situation of dueSituations(world)) {
-    settled.push(await resolveSituation(world, situation, complete, rng, log))
-  }
-  return settled
-}
-
-/** `QING:禁烟  GBR:待定` — each participant's declared stance (plan §4.5). */
-export function stanceSummary(situation: SituationRecord): string {
-  return situation.countries
-    .map(id => {
-      const proposal = situation.proposals.find(one => one.countryId === id)
-      return `${id}:${proposal === undefined ? '待定' : SITUATION_STANCE_NAMES[proposal.stance]}`
-    })
-    .join('  ')
-}
-
-/** Chinese name of a recorded result id, or '' when unknown/absent. */
-export function resultName(id: string | undefined): string {
-  return id !== undefined && isResultId(id) ? SITUATION_RESULT_NAMES[id] : ''
-}
-
-/** One line for the HUD/status output, or '' when nothing is open (plan §4.5). */
-export function situationStatus(world: WorldState): string {
-  const situation = openSituation(world)
-  if (situation === undefined) return ''
-  const countdown =
-    situation.months >= SITUATION_TIMEOUT_MONTHS
-      ? '待仲裁'
-      : `等待各方（${situation.months}/${SITUATION_TIMEOUT_MONTHS} 月）`
-  return `局势「${OPIUM_CRISIS_TITLE}」${stanceSummary(situation)} · ${countdown}`
 }

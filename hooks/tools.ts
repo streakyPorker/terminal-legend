@@ -6,7 +6,7 @@ import { applyDecision, applyPolicy, clamp, clone } from '../engine/sim'
 import { saveGame } from '../engine/save'
 import { forecastWorld, inspectWorld, INSPECT_SECTIONS, type InspectOptions } from '../engine/inspect'
 import { applyCheat, type CheatParams } from '../engine/cheat'
-import { SITUATION_STANCES, recordSituationProposal } from '../engine/situations'
+import { SITUATIONS, recordSituationProposal } from '../engine/situations'
 import { countryTag } from '../view/format'
 import {
   activeWorld,
@@ -44,6 +44,12 @@ export const SECRETARY_TOOLS = [
   'mcp__terminal-legend__v3_leader',
   'mcp__terminal-legend__v3_save',
 ] as const
+
+// Every stance any registered situation accepts; the schema offers the union so
+// the player can submit for a sample line as well as the opium crisis.
+const SITUATION_STANCE_IDS = [
+  ...new Set(SITUATIONS.flatMap(definition => definition.stances)),
+]
 
 // ---------------------------------------------------------------- tool specs
 
@@ -397,7 +403,7 @@ export const TOOL_SPECS: {
       type: 'object',
       properties: {
         action: { type: 'string', enum: ['submit', 'abstain'] },
-        stance: { type: 'string', enum: [...SITUATION_STANCES] },
+        stance: { type: 'string', enum: SITUATION_STANCE_IDS },
         narrative: { type: 'string', description: '一句提案叙事，submit 时必填。' },
       },
       required: ['action'],
