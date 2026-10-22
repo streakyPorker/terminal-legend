@@ -10,9 +10,9 @@ import type {
   WorldState,
 } from '../../types'
 import {
-  OPIUM_CRISIS_TITLE,
-  SITUATION_TIMEOUT_MONTHS,
-  resultName,
+  situationStateText,
+  situationStanceName,
+  situationTitleOf,
   stanceSummary,
 } from '../../engine/situations'
 import { bar, padEnd } from '../format'
@@ -149,8 +149,9 @@ export function partnerTotals(player: Country): PartnerTotal[] {
 }
 
 /**
- * A compact situation card (plan 0004 §4.5): the title, each participant's
- * stance, the countdown while open, or the recorded result once resolved.
+ * A compact situation card (plan 0004 §4.5, generalized by plan 0002 §4): the
+ * registry title, each participant's proposal (stance and narrative), the
+ * countdown or recorded outcome, and the `situation:<id>` modifier source.
  * Reused by the council and diplomacy panels; no new tab or widget.
  */
 export function SituationCard(props: { ui: UiKit; world: WorldState }): any {
@@ -158,20 +159,29 @@ export function SituationCard(props: { ui: UiKit; world: WorldState }): any {
   if (props.world.situations.length === 0) return null
   return (
     <Box flexDirection="column" marginTop={1}>
-      <Heading ui={props.ui} text="局势" hint="提案 · 倒计时 · 结果" />
-      {props.world.situations.map(situation => {
-        const state = situation.resolved
-          ? `已解决：${resultName(situation.resultId) || '—'}`
-          : situation.months >= SITUATION_TIMEOUT_MONTHS
-            ? '待仲裁'
-            : `等待各方（${situation.months}/${SITUATION_TIMEOUT_MONTHS} 月）`
-        return (
-          <Box flexDirection="column" key={`situation:${situation.id}`}>
-            <Text wrap="wrap">{`${OPIUM_CRISIS_TITLE} · ${state}`}</Text>
-            <Text dimColor wrap="wrap">{stanceSummary(situation)}</Text>
-          </Box>
-        )
-      })}
+      <Heading ui={props.ui} text="局势" hint="提案 · 倒计时 · 结果 · 来源" />
+      {props.world.situations.map(situation => (
+        <Box flexDirection="column" key={`situation:${situation.id}`}>
+          <Text wrap="wrap">{`${situationTitleOf(situation)} · ${situationStateText(situation)}`}</Text>
+          {situation.resolved
+            ? null
+            : situation.countries.map(id => {
+                const proposal = situation.proposals.find(one => one.countryId === id)
+                const label =
+                  proposal === undefined
+                    ? '待定'
+                    : `${situationStanceName(proposal.stance)}${
+                        proposal.narrative === '' ? '' : `：${proposal.narrative}`
+                      }`
+                return (
+                  <Text key={`situation:${situation.id}:${id}`} dimColor wrap="wrap">
+                    {`- ${id} ${label}`}
+                  </Text>
+                )
+              })}
+          <Text dimColor wrap="wrap">{`${stanceSummary(situation)} · 来源 situation:${situation.id}`}</Text>
+        </Box>
+      ))}
     </Box>
   )
 }
