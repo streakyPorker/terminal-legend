@@ -6,7 +6,7 @@
 
 > 世界版本：**v12**（**19 类建筑**、建筑配方与利用率/利润驱动投资、**四税基**、**铁矿石/钢铁**拆分、
 > **统一基础设施**（铁路/港口/电报合并为单一「基础设施」、运河删除，plan 0014/ADR 0029）、建筑 `unlock` 前向字段均已落地，ADR 0021/0022/0023/0026/0029；另有 **16 个 `v3_inspect`
-> 分区 + `v3_forecast` + `v3_manual`**、**逐回合实时事件 E1**（ADR 0025）。
+> 分区 + `v3_forecast` + `v3_manual`**、**逐回合实时事件 E1–E7**（ADR 0025，World v13）。
 > 数值口径以工具返回为准，本手册只解释**为什么**，不复述**是多少**。
 
 ---
@@ -495,24 +495,33 @@ GLOSSARY（航线/到岸成本/软容量/禁运）。
   人口、科技点与双边关系。
 - **饥荒触发条件**（ADR 0019）：生活水平 < 45 **且** 粮价 ≥ 基准 × 1.05；粮食过剩时不再触发。
 
-### 实时事件（逐回合，E1，ADR 0025 / plan 0010）
+### 实时事件（逐回合，E1–E7，ADR 0025 / plan 0010）
 
 - **缝合点**：每次 `v3_advance` 之后、御前会议呈现之前，世界先被扫描出**显著题材**，再由 LLM 现场生成
-  **0 至 2 个**可交互事件，写进 `world.events`（与随机事件同一数组、同一结算路径）；读档**不重新生成**。
-- **显著题材**：引擎按**经济 / 政治 / 外交 / 民生**四维扫描，各取一个最强信号，按显著性排序取
+  **0 至 2 个**可交互事件，写进 `world.events`（与随机事件同一数组、同一结算路径）。
+- **显著题材（E2）**：引擎按**经济 / 政治 / 外交 / 民生**四维扫描，各取一个最强信号，按显著性降序取
   1 至 2 个作为种子交给 LLM；旧的 10 个随机事件模板**降级为「题材方向」目录**（只提示往哪个方向写）。
-- **三视角旁白**：史官（朝廷编年）/ 市井（街头百姓）/ 列国舆论（他国观感）**只作为提示词引导**，不设硬结构。
-- **效果信封**：LLM 只写 `EventOption` 形状（国库 / 激进 / 合法性 / 威望 / 军队 / 人口 / 科技点 /
-  关系 + `modifiers[]`）；引擎校验并钳位（每回合 ≤2 事件、≤4 选项、数值上限见
-  `engine/config/events.ts`），再走既有 `applyEventOption` 落账。**坏事件整体丢弃**（宁愿 0 个，不落坏事件）。
-- **兜底**：生成同步执行、带有限超时（`LIVE_EVENT_TIMEOUT_MS`），超时或失败降级为模板/空事件；
+  各类阈值集中在 `engine/config/events.ts`（`LIVE_*`）。
+- **多主体（E5）**：引擎按「玩家优先 → GDP 降序 → id 破平」选最多 `LIVE_MAX_SUBJECTS`（=2）个主体分别生成；
+  已被先前主体认领的题材键从后续主体剔除（跨主体去重），无题材的主体直接跳过。每回合**模型调用硬上限**
+  `LIVE_MAX_MODEL_CALLS`（=2），生成事件恒 ≤ `LIVE_MAX_EVENTS`（=2）。
+- **三视角旁白（E6）**：史官（朝廷编年）/ 市井（街头百姓）/ 列国舆论（他国观感）**只作为提示词引导**，不设硬结构。
+- **效果信封（E3）**：LLM 只写 `EventOption` 形状（国库 / 激进 / 合法性 / 威望 / 军队 / 人口 / 科技点 /
+  关系 + `modifiers[]`）；引擎**校验、钳位、降级**（非有限值 / 未知字段 / 未知 stat / 越界一律**整条丢弃**），
+  每回合 ≤2 事件、≤4 选项，数值上限见 `engine/config/events.ts`，再走既有 `applyEventOption` 落账。
+  **坏事件整体丢弃**（宁愿 0 个，不落坏事件）。
+- **例行场景（E7）**：按日历低频出现（每 6 个月一次，约每年 1 至 2 次），选项**一律无效果**、可跳过；
+  跳过不产生效果、也不卡流程。
+- **持久化与可复现（E4）**：生成结果随事件写入 `world.events`，**读档直接复用、零模型调用**；
+  事件数组上限 `EVENTS_MAX = 80`，超限丢最旧。
+- **兜底**：生成同步执行、带有限超时（`LIVE_EVENT_TIMEOUT_MS` = 20000ms），超时或失败降级为空事件；
   **托管**（`months > 1`）走轻量模式、跳过生成，绝不阻塞推进。
-- **进度**：**E1 闭环已实现**（`engine/liveEvents.ts` + `hooks/`，`tests/live-events.test.ts`）；
-  E2–E7（题材显著性调参、效果边界、多主体、三视角强化、例行场景）待做，见 plan 0010。
+- **进度**：**E1–E7 全落地**（`engine/liveEvents.ts` + `engine/config/events.ts` + `hooks/council.ts`，
+  测试见 `tests/live-events*.test.ts`），World v13。
 
 来源：ADR 0018/0019/0025、`engine/data/tech.ts`（`TECH_NODES`）、`engine/data/events.ts`（`EVENT_TEMPLATES`）、
-`engine/liveEvents.ts`、`engine/economy.ts`（研究率）、`engine/diplomacy.ts`（war goal）、
-`docs/plans/0004-trade-diplomacy.md` §4/§5、`docs/plans/0010-live-events.md`、`hooks/`。
+`engine/liveEvents.ts`、`engine/config/events.ts`、`engine/economy.ts`（研究率）、`engine/diplomacy.ts`（war goal）、
+`docs/plans/0004-trade-diplomacy.md` §4/§5、`docs/plans/0010-live-events.md`、`hooks/council.ts`。
 
 ## 9. 口径速查 / FAQ（「为什么变了」）
 
@@ -550,8 +559,8 @@ GLOSSARY（航线/到岸成本/软容量/禁运）。
   字面量抽取、D2 `engine/data.ts` 拆桶均已完成**（`engine/config/*.ts`、`engine/data/*.ts`，World 仍 v11、
   行为零改动）；仅 **D3（可选）** 的其它模块域内常量归位未做。`C7` 的**债务压力 / 配方门控 / 科技乘数**
   三项作为「声明块」由引擎在既有接缝读其 `scales_with` 曲线。
-- **建筑扩张与统一基础设施（ADR 0026 / plan 0011，F1–F7 全落地，World v11）**、**实时事件 E1
-  （ADR 0025 / plan 0010）** 与 **代码拆分（plan 0012，S1–S6 全落地）** 亦已完成，见 §4.3、§8。
+- **建筑扩张与统一基础设施（ADR 0026 / plan 0011，F1–F7 全落地，World v11）**、**实时事件 E1–E7
+  （ADR 0025 / plan 0010，World v13）** 与 **代码拆分（plan 0012，S1–S6 全落地）** 亦已完成，见 §4.3、§8。
 - **建造面板与队列编排（ADR 0027 / plan 0013）** 与 **托管手动停止 `v3_control` + `/v3 stop`
   （ADR 0028）** 已落地。前者把建造搬到面板（19 类建筑 `x*y` 下单 + 队列 取消/重排），
   GM 侧同时暴露 `#index`/`projectId` 与 `reorder`；后者补上手工中断托管的入口。见 §2、§3、§4.6。
