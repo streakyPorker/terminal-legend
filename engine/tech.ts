@@ -1,5 +1,6 @@
 import type { Country, TechBranch, TechNodeDef, TechState, WorldState } from '../types'
-import { canResearchNode, techNodesInBranch } from './data/tech'
+import { canResearchNode, techNodesInBranch, TECH_NODES } from './data/tech'
+import { industrialBuildingCount } from './data/derivations'
 import { addModifier, MODIFIER_STAT_NAMES } from './modifiers'
 import {
   LEGITIMACY_MAX,
@@ -9,6 +10,20 @@ import {
 } from './config/balance'
 import { MORALE_MAX, MORALE_MIN } from './config/military'
 import {
+  TECH_AI_ADMIN_UNSTABLE,
+  TECH_AI_BRANCH_BASE,
+  TECH_AI_FACTORY_FLOOR,
+  TECH_AI_GENERAL_PRIORITY,
+  TECH_AI_INDUSTRY_SCARCE,
+  TECH_AI_LEGITIMACY_LOW,
+  TECH_AI_RADICALS_HIGH,
+  TECH_AI_TRAIT_ADMIN,
+  TECH_AI_TRAIT_INDUSTRY,
+  TECH_AI_TRAIT_MILITARY,
+  TECH_AI_TRAIT_WEIGHT,
+  TECH_AI_WAR_MILITARY,
+  TECH_AI_WEAK_ARMY_FLOOR,
+  TECH_AI_WEAK_ARMY_MILITARY,
   TECH_DIFFUSION_ALLIANCE,
   TECH_DIFFUSION_GAP_COEF,
   TECH_DIFFUSION_MAX,
@@ -208,4 +223,76 @@ export function flowTechOverflow(
     }
   }
   return completed
+}
+
+function traitMatches(traits: readonly string[], keywords: readonly string[]): boolean {
+  return traits.some(trait => keywords.some(keyword => trait.includes(keyword)))
+}
+
+/**
+ * The deterministic AI research choice (plan 0005 §2.5, K3). Every ready node
+ * scores by its branch weight — the general line is prioritised, then leader
+ * traits and the national situation (scarce industry, instability, war / weak
+ * army) tilt the three branches. Ties break by node id ascending and no RNG is
+ * involved, so the same seed + state always yields the same node.
+ */
+export function selectAiResearchNode(
+  world: WorldState,
+  country: Country,
+): TechNodeDef | undefined {
+  const ready = TECH_NODES.filter(node => canResearchNode(country.tech, node))
+  if (ready.length === 0) return undefined
+
+  const atWar = world.wars.some(
+    war => war.attackers.includes(country.id) || war.defenders.includes(country.id),
+  )
+  const unstable =
+    country.pops.radicals >= TECH_AI_RADICALS_HIGH ||
+    country.government.legitimacy <= TECH_AI_LEGITIMACY_LOW
+  const scarceIndustry = industrialBuildingCount(country) < TECH_AI_FACTORY_FLOOR
+  const weakArmy = country.military.army < TECH_AI_WEAK_ARMY_FLOOR
+  const traits = country.leader.traits
+
+  const score = (node: TechNodeDef): number => {
+    switch (node.branch) {
+      case 'general':
+        return TECH_AI_GENERAL_PRIORITY
+      case 'industry':
+        return (
+          TECH_AI_BRANCH_BASE +
+          (traitMatches(traits, TECH_AI_TRAIT_INDUSTRY) ? TECH_AI_TRAIT_WEIGHT : 0) +
+          (scarceIndustry ? TECH_AI_INDUSTRY_SCARCE : 0)
+        )
+      case 'admin':
+        return (
+          TECH_AI_BRANCH_BASE +
+          (traitMatches(traits, TECH_AI_TRAIT_ADMIN) ? TECH_AI_TRAIT_WEIGHT : 0) +
+          (unstable ? TECH_AI_ADMIN_UNSTABLE : 0)
+        )
+      case 'military':
+        return (
+          TECH_AI_BRANCH_BASE +
+          (traitMatches(traits, TECH_AI_TRAIT_MILITARY) ? TECH_AI_TRAIT_WEIGHT : 0) +
+          (atWar ? TECH_AI_WAR_MILITARY : 0) +
+          (weakArmy ? TECH_AI_WEAK_ARMY_MILITARY : 0)
+        )
+      default:
+        return TECH_AI_BRANCH_BASE
+    }
+  }
+
+  let best: TechNodeDef | undefined
+  let bestScore = Number.NEGATIVE_INFINITY
+  for (const node of ready) {
+    const value = score(node)
+    if (
+      best === undefined ||
+      value > bestScore ||
+      (value === bestScore && node.id < best.id)
+    ) {
+      best = node
+      bestScore = value
+    }
+  }
+  return best
 }

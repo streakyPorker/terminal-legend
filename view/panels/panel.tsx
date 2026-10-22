@@ -74,7 +74,14 @@ export function Panel(props: PanelProps): any {
       body = <MilitaryPanel ui={props.ui} world={props.world} />
       break
     case 'tech':
-      body = <TechPanel ui={props.ui} world={props.world} />
+      body = (
+        <TechPanel
+          ui={props.ui}
+          world={props.world}
+          width={props.width}
+          onControl={props.onControl}
+        />
+      )
       break
     case 'events':
       body = <EventsPanel ui={props.ui} world={props.world} onEvent={props.onEvent} />

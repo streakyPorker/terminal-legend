@@ -1,11 +1,20 @@
-import type { TechNodeDef, WorldState } from '../../types'
-import { TECH_NODES, canResearchNode, techNode, techTier } from '../../engine/data'
+import type { ControlPayload, Country, TechNodeDef, WorldState } from '../../types'
+import { TECH_NODES, canResearchNode, techNode, techNodeName, techTier } from '../../engine/data'
+import { techDiffusionBonus, techSpillRate } from '../../engine/tech'
 import { MODIFIER_STAT_NAMES } from '../../engine/modifiers'
 import { bar, fmtNumber, fmtPercent, padEnd } from '../format'
-import { Heading, StatLine, playerOf, type UiKit } from './shared'
+import { Heading, StatLine, playerOf, type ControlAction, type UiKit } from './shared'
 
+const BRANCH_LABELS: Record<TechNodeDef['branch'], string> = {
+  general: '通用时代线',
+  industry: '工业',
+  admin: '行政',
+  military: '军事',
+}
+
+/** A node's effects as one line: permanent modifiers and one-time stocks. */
 function effectText(node: TechNodeDef): string {
-  return node.effects
+  const text = node.effects
     .map(effect => {
       if (effect.kind === 'immediate') {
         return Object.entries(effect)
@@ -16,40 +25,100 @@ function effectText(node: TechNodeDef): string {
       return `${MODIFIER_STAT_NAMES[effect.stat]}${effect.value >= 0 ? '+' : ''}${effect.value}${effect.stack === 'flat' ? '' : '%'}`
     })
     .join('，')
+  return text === '' ? '无额外效果' : text
 }
 
-function nodeState(id: string, player: ReturnType<typeof playerOf>): { text: string; color?: string } {
-  if (player === undefined) return { text: '' }
+function prereqText(node: TechNodeDef): string {
+  const parts: string[] = []
+  if (node.prerequisites.length > 0) parts.push(node.prerequisites.map(techNodeName).join('＋'))
+  if (node.requiresAnyBranch !== undefined) {
+    parts.push(`任一分支 ${node.requiresAnyBranch} 项`)
+  }
+  return parts.length > 0 ? `前置：${parts.join('，')}` : '前置：无'
+}
+
+function statusOf(
+  player: Country,
+  node: TechNodeDef,
+): { text: string; color: string | undefined } {
   const tech = player.tech
-  if (tech.unlocked.includes(id)) return { text: '已解锁', color: 'green' }
-  if (tech.researching === id) return { text: '进行中', color: 'yellow' }
-  const node = techNode(id)
-  if (node !== undefined && canResearchNode(tech, node)) return { text: '可研究', color: 'cyan' }
-  return { text: '锁定' }
+  if (tech.unlocked.includes(node.id)) return { text: '已解锁', color: 'green' }
+  if (tech.researching === node.id) return { text: '进行中', color: 'yellow' }
+  if (canResearchNode(tech, node)) return { text: '可研究', color: 'cyan' }
+  return { text: '锁定', color: undefined }
 }
 
-export function TechPanel(props: { ui: UiKit; world: WorldState }): any {
+function NodeCard(props: {
+  ui: UiKit
+  player: Country
+  node: TechNodeDef
+  onSelect: (id: string) => void
+}): any {
+  const { Box, Text, Button } = props.ui
+  const { node, player } = props
+  const status = statusOf(player, node)
+  const progress = player.tech.nodes[node.id] ?? 0
+  const canPick = status.text === '可研究'
+  return (
+    <Box flexDirection="column">
+      <Box flexDirection="row" columnGap={1}>
+        {canPick ? (
+          <Button plain label={padEnd(node.name, 10)} onPress={() => props.onSelect(node.id)} />
+        ) : (
+          <Text color={status.color} wrap="truncate">{padEnd(node.name, 10)}</Text>
+        )}
+        <Text dimColor wrap="truncate">{padEnd(`时代${node.era}`, 5)}</Text>
+        <Text dimColor wrap="truncate">{padEnd(`${node.cost}点`, 6)}</Text>
+        <Text color={status.color}>{status.text}</Text>
+      </Box>
+      <Box flexDirection="row" columnGap={1}>
+        <Text color="cyan">{bar(progress, 1, 10)}</Text>
+        <Text dimColor>{fmtPercent(progress)}</Text>
+      </Box>
+      <Text dimColor wrap="wrap">{effectText(node)}</Text>
+      <Text dimColor wrap="wrap">{prereqText(node)}</Text>
+    </Box>
+  )
+}
+
+/**
+ * The tech tree page (plan 0005 §5, K3): era / rate / current research / spill
+ * and diffusion up top, then the general era line and the industry / admin /
+ * military columns. A narrow terminal degrades the three branches to one
+ * column. Picking a researchable node emits an `onControl('research')`; the
+ * panel never writes world state directly.
+ */
+export function TechPanel(props: {
+  ui: UiKit
+  world: WorldState
+  width: number
+  onControl: (control: ControlAction, payload?: ControlPayload) => void
+}): any {
   const { Box, Text } = props.ui
   const player = playerOf(props.world)
   if (player === undefined) return <Text dimColor>无进行中的游戏。</Text>
   const tech = player.tech
   const current = techNode(tech.researching)
-  const nextCost = current?.cost ?? 0
-  const progress = nextCost <= 0 ? 0 : tech.points / nextCost
+  const progress = current === undefined ? 0 : tech.points / current.cost
+  const spill = techSpillRate(player)
+  const diffusion = techDiffusionBonus(props.world, player)
+  const wide = props.width >= 96
+  const onSelect = (id: string): void => props.onControl('research', { tech: id })
 
-  const branchRows = (branch: TechNodeDef['branch']): any =>
-    TECH_NODES.filter(node => node.branch === branch).map(node => {
-      const state = nodeState(node.id, player)
-      return (
-        <Box flexDirection="row" columnGap={1} key={`node:${node.id}`}>
-          <Text color={state.color} wrap="truncate">{padEnd(`时代${node.era}`, 5)}</Text>
-          <Text color={state.color} wrap="truncate">{padEnd(node.name, 10)}</Text>
-          <Text dimColor wrap="truncate">{padEnd(`${node.cost}点`, 6)}</Text>
-          <Text color={state.color} wrap="truncate">{padEnd(state.text, 6)}</Text>
-          <Text dimColor wrap="truncate">{effectText(node)}</Text>
-        </Box>
-      )
-    })
+  const branch = (branchId: TechNodeDef['branch']): any => (
+    <Box flexDirection="column" key={`branch:${branchId}`}>
+      <Heading ui={props.ui} text={BRANCH_LABELS[branchId]} />
+      {TECH_NODES.filter(node => node.branch === branchId).map(node => (
+        <NodeCard
+          key={node.id}
+          ui={props.ui}
+          player={player}
+          node={node}
+          onSelect={onSelect}
+        />
+      ))}
+    </Box>
+  )
 
   return (
     <Box flexDirection="column">
@@ -60,33 +129,22 @@ export function TechPanel(props: { ui: UiKit; world: WorldState }): any {
       />
       <Box flexDirection="row" columnGap={1}>
         <Text dimColor>当前研究</Text>
-        <Text color="cyan">{padEnd(bar(progress, 1, 20), 21)}</Text>
+        <Text color="cyan">{bar(progress, 1, 20)}</Text>
         <Text>
-          {tech.researching === '' ? '待选' : techNode(tech.researching)?.name ?? tech.researching}{' '}
-          {fmtNumber(tech.points)} / {nextCost > 0 ? fmtNumber(nextCost) : '—'}
+          {current === undefined ? '待选' : current.name} {fmtNumber(tech.points)} /{' '}
+          {current === undefined ? '—' : fmtNumber(current.cost)}
         </Text>
       </Box>
       <StatLine ui={props.ui} label="月产出" value={`${fmtNumber(tech.pointsPerMonth)} 点`} />
+      <StatLine ui={props.ui} label="跨分支溢出" value={fmtPercent(spill)} />
+      <StatLine ui={props.ui} label="国际扩散" value={`+${fmtPercent(diffusion)}`} />
       <StatLine ui={props.ui} label="科技层级" value={techTier(tech).toFixed(2)} />
-      <StatLine ui={props.ui} label="大学" value={String(player.econ.buildings.universities)} />
-      <StatLine ui={props.ui} label="识字率" value={fmtPercent(player.pops.literacy)} />
-      <StatLine ui={props.ui} label="教育支出" value={player.econ.spending.education.toFixed(1)} />
 
-      <Box flexDirection="column" marginTop={1}>
-        <Heading ui={props.ui} text="通用时代线" />
-        {branchRows('general')}
-      </Box>
-      <Box flexDirection="column" marginTop={1}>
-        <Heading ui={props.ui} text="工业" />
-        {branchRows('industry')}
-      </Box>
-      <Box flexDirection="column" marginTop={1}>
-        <Heading ui={props.ui} text="行政" />
-        {branchRows('admin')}
-      </Box>
-      <Box flexDirection="column" marginTop={1}>
-        <Heading ui={props.ui} text="军事" />
-        {branchRows('military')}
+      <Box flexDirection="column" marginTop={1}>{branch('general')}</Box>
+      <Box flexDirection={wide ? 'row' : 'column'} columnGap={4} marginTop={1}>
+        {branch('industry')}
+        {branch('admin')}
+        {branch('military')}
       </Box>
     </Box>
   )

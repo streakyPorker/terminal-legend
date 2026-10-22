@@ -80,7 +80,14 @@ export function Report(props: ReportProps): any {
     case 'military':
       return <MilitaryPanel ui={props.ui} world={props.world} />
     case 'tech':
-      return <TechPanel ui={props.ui} world={props.world} />
+      return (
+        <TechPanel
+          ui={props.ui}
+          world={props.world}
+          width={props.width}
+          onControl={() => undefined}
+        />
+      )
     case 'log':
       return <LogPanel ui={props.ui} world={props.world} />
     default:

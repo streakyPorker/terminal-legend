@@ -979,13 +979,14 @@ export type UiState = {
 }
 
 /** Panel control actions (plan 0013 build panel). `council` opens the council. */
-export type ControlAction = 'next' | 'save' | 'council' | 'build' | 'cancel' | 'reorder'
+export type ControlAction = 'next' | 'save' | 'council' | 'build' | 'cancel' | 'reorder' | 'research'
 
 /**
  * Payload carried by a panel control action. `build` uses `building`/`perSlot`
  * (x, 1..5)/`slots` (y) to queue `y` slots of `x` buildings each; `cancel` and
  * `reorder` address a project by `projectId` or 1-based `index` (matching
  * `v3_inspect construction`) and move it to `position` (relative to `before`).
+ * `research` carries the tech node id in `tech` (plan 0005 K3).
  */
 export type ControlPayload = {
   building?: BuildingId
@@ -998,6 +999,8 @@ export type ControlPayload = {
   index?: number
   position?: 'head' | 'tail' | 'before' | 'after'
   before?: string
+  /** Tech node id for the `research` control (plan 0005 K3). */
+  tech?: string
 }
 
 /** Council-panel actions. */

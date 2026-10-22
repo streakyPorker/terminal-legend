@@ -65,3 +65,61 @@ export const TECH_DIFFUSION_TRADE_COEF = 0.2
 export const TECH_DIFFUSION_RELATION_DIVISOR = 1000
 export const TECH_DIFFUSION_ALLIANCE = 0.1
 export const TECH_DIFFUSION_MAX = 0.5
+
+/**
+ * Per-era node cost (plan 0005 §1.5, retuned in K4). The tree's costs are a
+ * single dial so the whole pace can be calibrated from one place; every node's
+ * `cost` derives from its era via `techNodeCost`. K4 tuned this so a 120-month
+ * baseline advances roughly one node every 2–4 years (docs/adr/0030-tech-tree.md).
+ */
+export const TECH_ERA_COSTS: readonly [number, number, number, number] = [80, 180, 360, 640]
+
+/** The configured cost of a node's era, clamped to the modelled 1–4 range. */
+export function techNodeCost(era: number): number {
+  const clamped = Math.min(TECH_MAX_ERA, Math.max(1, Math.round(era)))
+  return TECH_ERA_COSTS[clamped - 1] ?? TECH_ERA_COSTS[0] ?? 0
+}
+
+/**
+ * AI research selection (plan 0005 §2.5, K3). Non-player countries pick the
+ * next node deterministically: each ready node scores by its branch weight —
+ * the general line is prioritised so the common era line is completed first,
+ * then traits and the national situation tilt industry / administration /
+ * military. Ties break by node id ascending, so the same seed + state always
+ * yields the same choice. No RNG is involved.
+ */
+export const TECH_AI_GENERAL_PRIORITY = 5
+export const TECH_AI_BRANCH_BASE = 1
+
+/** Leader traits (substring match) that bias the AI toward a branch. */
+export const TECH_AI_TRAIT_INDUSTRY: readonly string[] = ['工业', '贸易', '工商', '实业']
+export const TECH_AI_TRAIT_ADMIN: readonly string[] = [
+  '改革',
+  '务实',
+  '维新',
+  '秩序',
+  '维稳',
+  '内斗',
+]
+export const TECH_AI_TRAIT_MILITARY: readonly string[] = [
+  '军事',
+  '扩张',
+  '海权',
+  '陆军',
+  '专制',
+  '民粹',
+  '殖民',
+  '防御',
+]
+export const TECH_AI_TRAIT_WEIGHT = 1
+
+/** Situation weights: scarce industry → industry; instability → admin; war → military. */
+export const TECH_AI_FACTORY_FLOOR = 12
+export const TECH_AI_INDUSTRY_SCARCE = 1.5
+export const TECH_AI_RADICALS_HIGH = 25
+export const TECH_AI_LEGITIMACY_LOW = 45
+export const TECH_AI_ADMIN_UNSTABLE = 1.5
+export const TECH_AI_WAR_MILITARY = 2
+/** An army under this size (ten-thousands) reads as weak. */
+export const TECH_AI_WEAK_ARMY_FLOOR = 20
+export const TECH_AI_WEAK_ARMY_MILITARY = 1

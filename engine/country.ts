@@ -17,6 +17,7 @@ import { debtPressure, nationalDebt } from './fiscal'
 import {
   flowTechOverflow,
   installTechNodeEffects,
+  selectAiResearchNode,
   techDiffusionBonus,
 } from './tech'
 import { applyModifiers, tickModifiers } from './modifiers'
@@ -499,11 +500,13 @@ export function simulateCountry(
   country.tech.points += monthlyResearch
   // Plan 0005 K1/K2: points flow into the chosen node; completing it appends to
   // `unlocked`, installs its effects and raises the era for a general-line node.
-  // An empty or stale choice falls back to the deterministic first-eligible
-  // node (the K3 AI-selection seam).
+  // An empty or stale choice falls back to the player's default pick or, for an
+  // AI country, the deterministic situation-weighted choice (K3).
   let node = techNode(country.tech.researching)
   if (node === undefined || country.tech.unlocked.includes(node.id)) {
-    node = defaultResearchNode(country.tech)
+    node = country.isPlayer
+      ? defaultResearchNode(country.tech)
+      : selectAiResearchNode(world, country)
     country.tech.researching = node?.id ?? ''
   }
   if (node !== undefined) {

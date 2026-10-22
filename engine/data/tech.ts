@@ -1,21 +1,21 @@
 import type { TechBranch, TechNodeDef, TechState } from '../../types'
-import { TECH_MAX_ERA, TECH_TIER_BASE, TECH_TIER_ERA_COEF, TECH_TIER_UNLOCKED_COEF } from '../config/tech'
+import { TECH_MAX_ERA, TECH_TIER_BASE, TECH_TIER_ERA_COEF, TECH_TIER_UNLOCKED_COEF, techNodeCost } from '../config/tech'
 
 /**
  * The 4-era / 16-node tech tree (plan 0005 §1): a 4-node general era line plus
- * industry / admin / military branches of 4 nodes each. Costs are the plan's
- * draft (era 1 = 80, 2 = 180, 3 = 360, 4 = 640); effects are stored in K1 and
- * wired by K2, so nothing here changes behaviour yet.
+ * industry / admin / military branches of 4 nodes each. Each node's cost comes
+ * from `TECH_ERA_COSTS` (config/tech.ts) so the whole pace is one dial; effects
+ * are stored in K1 and wired by K2.
  */
 export const TECH_NODES: TechNodeDef[] = [
   // ---- 通用时代线（4）----
-  { id: 'general-1836', era: 1, branch: 'general', name: '传统农业', cost: 80, prerequisites: [], effects: [] },
+  { id: 'general-1836', era: 1, branch: 'general', name: '传统农业', cost: techNodeCost(1), prerequisites: [], effects: [] },
   {
     id: 'general-1850',
     era: 2,
     branch: 'general',
     name: '蒸汽时代',
-    cost: 180,
+    cost: techNodeCost(2),
     prerequisites: ['general-1836'],
     effects: [{ kind: 'modifier', stat: 'techPoints', stack: 'percent', value: 5 }],
     year: 14,
@@ -25,7 +25,7 @@ export const TECH_NODES: TechNodeDef[] = [
     era: 3,
     branch: 'general',
     name: '工业时代',
-    cost: 360,
+    cost: techNodeCost(3),
     prerequisites: ['general-1850'],
     requiresAnyBranch: 2,
     effects: [{ kind: 'modifier', stat: 'techPoints', stack: 'percent', value: 10 }],
@@ -36,7 +36,7 @@ export const TECH_NODES: TechNodeDef[] = [
     era: 4,
     branch: 'general',
     name: '电气时代',
-    cost: 640,
+    cost: techNodeCost(4),
     prerequisites: ['general-1865'],
     requiresAnyBranch: 3,
     effects: [{ kind: 'modifier', stat: 'techPoints', stack: 'percent', value: 15 }],
@@ -48,7 +48,7 @@ export const TECH_NODES: TechNodeDef[] = [
     era: 1,
     branch: 'industry',
     name: '纺织机械化',
-    cost: 80,
+    cost: techNodeCost(1),
     prerequisites: ['general-1836'],
     effects: [
       { kind: 'modifier', stat: 'fabricOutput', stack: 'percent', value: 10 },
@@ -60,7 +60,7 @@ export const TECH_NODES: TechNodeDef[] = [
     era: 2,
     branch: 'industry',
     name: '蒸汽动力',
-    cost: 180,
+    cost: techNodeCost(2),
     prerequisites: ['industry-1', 'general-1850'],
     effects: [
       { kind: 'modifier', stat: 'mineOutput', stack: 'percent', value: 10 },
@@ -72,7 +72,7 @@ export const TECH_NODES: TechNodeDef[] = [
     era: 3,
     branch: 'industry',
     name: '钢铁工业',
-    cost: 360,
+    cost: techNodeCost(3),
     prerequisites: ['industry-2', 'general-1865'],
     effects: [
       { kind: 'modifier', stat: 'ironOutput', stack: 'percent', value: 12 },
@@ -84,7 +84,7 @@ export const TECH_NODES: TechNodeDef[] = [
     era: 4,
     branch: 'industry',
     name: '电气化',
-    cost: 640,
+    cost: techNodeCost(4),
     prerequisites: ['industry-3', 'general-1880'],
     effects: [
       { kind: 'modifier', stat: 'factoryOutput', stack: 'percent', value: 15 },
@@ -98,7 +98,7 @@ export const TECH_NODES: TechNodeDef[] = [
     era: 1,
     branch: 'admin',
     name: '文官制度',
-    cost: 80,
+    cost: techNodeCost(1),
     prerequisites: ['general-1836'],
     effects: [
       { kind: 'modifier', stat: 'bureaucracy', stack: 'flat', value: 5 },
@@ -110,7 +110,7 @@ export const TECH_NODES: TechNodeDef[] = [
     era: 2,
     branch: 'admin',
     name: '公共教育',
-    cost: 180,
+    cost: techNodeCost(2),
     prerequisites: ['admin-1', 'general-1850'],
     effects: [
       { kind: 'modifier', stat: 'literacy', stack: 'percent', value: 5 },
@@ -122,7 +122,7 @@ export const TECH_NODES: TechNodeDef[] = [
     era: 3,
     branch: 'admin',
     name: '财政改革',
-    cost: 360,
+    cost: techNodeCost(3),
     prerequisites: ['admin-2', 'general-1865'],
     effects: [
       { kind: 'modifier', stat: 'taxEfficiency', stack: 'percent', value: 8 },
@@ -134,7 +134,7 @@ export const TECH_NODES: TechNodeDef[] = [
     era: 4,
     branch: 'admin',
     name: '大众政治',
-    cost: 640,
+    cost: techNodeCost(4),
     prerequisites: ['admin-3', 'general-1880'],
     effects: [{ kind: 'immediate', legitimacy: 3, loyalists: 2, radicals: -2 }],
   },
@@ -144,7 +144,7 @@ export const TECH_NODES: TechNodeDef[] = [
     era: 1,
     branch: 'military',
     name: '线膛枪',
-    cost: 80,
+    cost: techNodeCost(1),
     prerequisites: ['general-1836'],
     effects: [{ kind: 'modifier', stat: 'armyStrength', stack: 'percent', value: 10 }],
   },
@@ -153,7 +153,7 @@ export const TECH_NODES: TechNodeDef[] = [
     era: 2,
     branch: 'military',
     name: '铁路动员',
-    cost: 180,
+    cost: techNodeCost(2),
     prerequisites: ['military-1', 'general-1850'],
     effects: [
       { kind: 'modifier', stat: 'manpower', stack: 'percent', value: 10 },
@@ -165,7 +165,7 @@ export const TECH_NODES: TechNodeDef[] = [
     era: 3,
     branch: 'military',
     name: '后装火炮',
-    cost: 360,
+    cost: techNodeCost(3),
     prerequisites: ['military-2', 'general-1865'],
     effects: [
       { kind: 'modifier', stat: 'armyStrength', stack: 'percent', value: 12 },
@@ -177,7 +177,7 @@ export const TECH_NODES: TechNodeDef[] = [
     era: 4,
     branch: 'military',
     name: '总参谋部',
-    cost: 640,
+    cost: techNodeCost(4),
     prerequisites: ['military-3', 'general-1880'],
     effects: [
       { kind: 'immediate', morale: 5 },

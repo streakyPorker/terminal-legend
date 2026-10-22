@@ -431,6 +431,7 @@ function orderParams(payload?: ControlPayload): Record<string, string | number> 
   if (payload?.index !== undefined) params.index = payload.index
   if (payload?.position !== undefined) params.position = payload.position
   if (payload?.before !== undefined) params.before = payload.before
+  if (payload?.tech !== undefined) params.tech = payload.tech
   return params
 }
 
@@ -526,6 +527,7 @@ export async function controlGame(
   if (action === 'build') return panelBuild($, payload)
   if (action === 'cancel') return panelDecision($, 'cancel', payload)
   if (action === 'reorder') return panelDecision($, 'reorder', payload)
+  if (action === 'research') return panelDecision($, 'research', payload)
 
   const world = clone(current.world)
   world.resumeOnStart = true
