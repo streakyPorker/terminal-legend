@@ -70,17 +70,17 @@ Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplo
 | `v3_save` | 保存 |
 
 **建造编排（ADR 0027）**：御前面板与经济面板共享一个建造面板——「可建建筑」清单按 6 族列出
-全部 22 类建筑（`建 1×1` / `建 5×1` / `⇤1×1` 队首插单），「建造队列」逐条给出 `#index`、`id`、
+全部 19 类建筑（`建 1×1` / `建 5×1` / `⇤1×1` 队首插单），「建造队列」逐条给出 `#index`、`id`、
 进度与 `取消`/`↑`/`↓`/`置顶`（私人条目可见但无控制）。GM 侧对应 `v3_action build` 的
 `position`(head/tail/before/after)+`before`、`v3_action cancel` 按 `projectId` **或** 1-based
 `index`、以及 `v3_action reorder`；重排**保留已投入进度**，引擎分配逻辑不变。
 
 ## 世界模型（摘要）
 
-- 10 个国家、14 种商品、22 种建筑、6 类支出、10 级科技；每月一次结算，逐月原地推进。
+- 10 个国家、14 种商品、19 种建筑、6 类支出、10 级科技；每月一次结算，逐月原地推进。
 - GDP 按支出法 C+I+G+NX 核算；税收来自四个真实税基（土地/企业利润/消费/关税），GDP 只作派生指标。
 - 建造靠营造所产出的建造点，队列顺位施工；贸易有持久航线与双向关税；国库是带符号的净资产。
-- 世界结构变化会提升 `WorldState.version`，旧存档直接拒绝（ADR 0005）；当前 **v11**。
+- 世界结构变化会提升 `WorldState.version`，旧存档直接拒绝（ADR 0005）；当前 **v12**。
 
 > 结算流水线、建筑配方与逐建筑利润、建造能力公式、到岸价与航线、净资产财政与债务压力、
 > 四税基公式、修正叠算、完整文件树——全部细节见 **[`docs/architecture.md`](docs/architecture.md)**。
@@ -113,7 +113,8 @@ Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplo
 | ADR 0023 四税基（GDP 退为派生指标） | ✅ 已实现（World v10） |
 | plan 0009 / ADR 0024 配置分层与修正块 | ✅ 已实现（C1–C7 + D1/D2） |
 | plan 0010 / ADR 0025 逐回合实时事件 E1 | ✅ E1 闭环已实现（E2–E7 待做） |
-| plan 0011 / ADR 0026 建筑扩张与统一基础设施（World v11） | ✅ 已实现（F1–F7） |
+| plan 0011 / ADR 0026 建筑扩张与统一基础设施（World v11） | ✅ 已实现（F1–F7；四类基础设施模型已由 plan 0014 合并取代） |
+| plan 0014 / ADR 0029 基础设施合并（铁路/港口/电报→单一「基础设施」，删运河，World v12） | ✅ 已实现（`f751a0e`） |
 | plan 0012 代码拆分（hooks/engine/view 拆桶、测试分文件） | ✅ 已实现（S1–S6） |
 | plan 0013 建造面板 + 队列编排（ADR 0027）、v3_control 停止托管（ADR 0028） | ✅ 已实现（`5f78f77` 引擎 / `f390a14` 面板 / `175d9de` 控制） |
 | 0006 GM ⇄ 引擎接口（全走 MCP，禁止读存档） | ✅ 已实现（v3_inspect 16 分区 + v3_forecast + v3_manual） |
@@ -128,7 +129,7 @@ Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplo
 | --- | --- |
 | [`docs/architecture.md`](docs/architecture.md) | **模拟如何运转的单一真源**：世界模型、经济循环、建筑配方/利润、建造能力、贸易、财政、四税基、修正、文件树 |
 | [`docs/plans/`](docs/plans/) | 工作包与路线（0001–0014） |
-| [`docs/adr/`](docs/adr/) | 架构决策记录（0001–0028） |
+| [`docs/adr/`](docs/adr/) | 架构决策记录（0001–0029） |
 | [`docs/gm-handbook.md`](docs/gm-handbook.md) | GM 机制手册（工具、经济、贸易、财政、口径 FAQ） |
 | [`docs/playtest-issues.md`](docs/playtest-issues.md) | 试玩问题记录 |
 | [`GLOSSARY.md`](GLOSSARY.md) | 术语表 |

@@ -1,6 +1,6 @@
 # 基础设施建筑合并（infrastructure merge）
 
-- Status: **proposed**（2026-10-22 试玩提出，后续再议）
+- Status: **implemented**（World **v12**，代码提交 `f751a0e`；决策见 `docs/adr/0029-infrastructure-merge.md`）
 - Depends on: `docs/plans/0011-building-expansion.md` F5（统一基础设施池）、ADR 0026
 - 关联：`docs/plans/0013-construction-ui.md`（建造面板）
 
@@ -12,6 +12,11 @@ F5 把「交通基础设施」升级为**统一池**：铁路 / 港口 / 运河 
 问题：四种建筑都在供给同一个池，但**造价、工程量、供给量各不相同**，玩家每次要手算
 「每金净供给」才知道该建哪个。1836 试玩中，QING 的 ratio 从 1.10 一路跌到 0.79，
 玩家问「再建多少才够、哪个值得」——说明**选择成本高于选择本身的价值**。
+
+> **已实现（v12）**：采纳方案 A——把铁路/港口/电报合并为单一 `infrastructure`（显示名「基础设施」），
+> **删除运河**，名册 22→19。保留 **`INFRA_BUILDING_IDS` 接缝**（当前只含 `infrastructure`）与逐建筑
+> 系数表 + 遗留映射，使将来的拆分**只改数据**即可完成。1836 十国 ratio 与合并前偏差 **<5%**（最大 2.63%）。
+> 详细决定、系数校准与不变量见 ADR 0029。
 
 ## 1. 需求
 
