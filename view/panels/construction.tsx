@@ -1,5 +1,5 @@
 import type { BuildingId, ControlPayload, WorldState } from '../../types'
-import { BUILDINGS, BUILDING_IDS } from '../../engine/data'
+import { BUILDINGS, BUILDING_IDS, INFRA_BUILDING_IDS } from '../../engine/data'
 import {
   CAPACITY_COST,
   CONSTRUCTION_COST_PER_POINT,
@@ -36,7 +36,7 @@ const BUILDING_GROUPS: BuildingGroup[] = [
   { label: '重工', ids: ['machineryWorks', 'steelMills'] },
   { label: '服务', ids: ['schools', 'universities', 'offices'] },
   { label: '军事', ids: ['arsenals', 'barracks', 'forts', 'navalYards'] },
-  { label: '基建', ids: ['railroads', 'ports', 'canals', 'telegraphs', 'workshops'] },
+  { label: '基建', ids: [...INFRA_BUILDING_IDS, 'workshops'] },
 ]
 
 /** Groups the full roster so a new building type can never drop out of the list. */

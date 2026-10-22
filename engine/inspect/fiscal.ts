@@ -12,7 +12,7 @@ export function fiscalSection(world: WorldState, country: Country): string[] {
   const rates = country.econ.taxes
   const bases = ledger.income.taxBases
   return [
-    `财政收入 ${n(ledger.income.total)} = 税入 ${n(ledger.income.taxes)} + 港口 ${n(ledger.income.ports)} + 基金收益 ${n(ledger.income.sovereignIncome)} + 赔款 ${n(ledger.income.reparations)} + 其他 ${n(ledger.income.other)}`,
+    `财政收入 ${n(ledger.income.total)} = 税入 ${n(ledger.income.taxes)} + 基建 ${n(ledger.income.ports)} + 基金收益 ${n(ledger.income.sovereignIncome)} + 赔款 ${n(ledger.income.reparations)} + 其他 ${n(ledger.income.other)}`,
     `四税基（税额 = 税基量 × 税率 × 征收效率〔再乘逐基合规与债务削减〕；当前征收效率 ${pct(collectionEfficiency(country))}）：土地税 ${n(qty.land)} × ${n(rates.land, 0)}% = ${n(bases.land)}；企业所得税 ${n(qty.profit)} × ${n(rates.profit, 0)}% = ${n(bases.profit)}；消费税 ${n(qty.consumption)} × ${n(rates.consumption, 0)}% = ${n(bases.consumption)}；关税 ${n(qty.tariff)} × ${n(country.econ.tariff, 0)}% = ${n(bases.tariff)}`,
     `财政支出 ${n(ledger.expense.total)} = 陆军 ${n(ledger.expense.army)} + 海军 ${n(ledger.expense.navy)} + 行政 ${n(ledger.expense.administration)} + 教育 ${n(ledger.expense.education)} + 福利 ${n(ledger.expense.welfare)} + 债息 ${n(ledger.expense.debtInterest)} + 市场损耗 ${n(ledger.expense.marketLoss)} + 维护 ${n(ledger.expense.upkeep)} + 赔款 ${n(ledger.expense.reparations)} + 国有建设 ${n(ledger.expense.construction)} + 建设补贴 ${n(ledger.expense.constructionSubsidy)}`,
     `净额 ${signed(ledger.net)} 金/月；国库 ${signed(country.econ.treasury)}（${ledger.debt > 0 ? `国债 ${n(ledger.debt)}，月息 ${pct(ledger.debtRate, 2)}` : `主权基金 ${n(ledger.fund)}，月息 ${pct(ledger.fundRate, 2)}`}）`,

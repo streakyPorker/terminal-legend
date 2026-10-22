@@ -1,4 +1,5 @@
 import type { Country, TaxBaseId } from '../types'
+import { infrastructureCount } from './data'
 import { applyModifiers } from './modifiers'
 import {
   DEBT_PRESSURE_BLOCK,
@@ -134,7 +135,7 @@ export const sovereignFund = (country: Country): number =>
 export type IncomeParts = {
   /** Sum of the four real tax bases (ADR 0023); no longer a GDP share. */
   taxes: number
-  /** Port dues. */
+  /** Infrastructure dues (the old port tariff effect, plan 0014). */
   ports: number
   /** Interest earned by a positive net-assets balance. */
   sovereignIncome: number
@@ -294,7 +295,7 @@ export function incomeParts(
   const bases = taxBaseRevenues(country, tariffRevenue, context, quantities)
   return {
     taxes: bases.land + bases.profit + bases.consumption + bases.tariff,
-    ports: country.econ.buildings.ports * PORT_INCOME_PER_BUILDING * debtCut,
+    ports: infrastructureCount(country) * PORT_INCOME_PER_BUILDING * debtCut,
     sovereignIncome: sovereignFund(country) * fundRate(country, context),
     reparations: (country.econ.reparationsReceived ?? 0) * debtCut,
     // Construction-capacity rent is collected this month and booked as income

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import {
   BUILDING_IDS,
   BUILDINGS,
+  INFRA_BUILDING_IDS,
   INFRA_MULT_FLOOR,
   INFRA_SUPPLY,
   INFRA_UPKEEP,
@@ -18,9 +19,13 @@ import { computeProduction } from '../engine/economy'
 import { advance, inspectEconomy, newWorld } from '../engine/sim'
 import type { BuildingId, Country, WorldState } from '../types'
 
-// Plan 0011 F5 / ADR 0026: ONE unified national infrastructure pool. Providers
+// Plan 0011 F5 / ADR 0026: ONE unified national infrastructure pool. Plan 0014 /
+// ADR 0029 merged railroads/ports/telegraphs into the single `infrastructure`
+// building (canals deleted) behind the `INFRA_BUILDING_IDS` seam. Providers
 // supply, every building type draws (`infrastructureNeed`), a linear shortfall
 // debuff scales all output, and the network consumes materials + services.
+
+const PROVIDER: BuildingId = 'infrastructure'
 
 const countryOf = (world: WorldState, id: string): Country => {
   const country = world.countries[id]
@@ -46,7 +51,38 @@ const close = (actual: number, expected: number, eps = 1e-9): void => {
   expect(Math.abs(actual - expected)).toBeLessThan(eps)
 }
 
-describe('unified infrastructure pool (plan 0011 F5)', () => {
+// Pre-merge (World v11) 1836 infrastructure ratios, computed from the same seed
+// counts under the four-provider model (railroads 2.5 / ports 1.1 / canals 1.6 /
+// telegraphs 0.7 supply; need railroad 0.08 / port 0.12 / canal 0.05 /
+// telegraph 0.06). The merge must keep every country within 5% of these.
+const PRE_MERGE_RATIO: Record<string, number> = {
+  QING: 1.0973,
+  GBR: 2.3041,
+  FRA: 1.552,
+  PRU: 1.1485,
+  RUS: 1.1388,
+  AUS: 1.1981,
+  USA: 1.776,
+  JAP: 1.2717,
+  OTT: 1.2644,
+  SPA: 1.6944,
+}
+
+describe('unified infrastructure pool (plan 0011 F5 / plan 0014 merge)', () => {
+  test('the INFRA_BUILDING_IDS seam names the sole provider and every infra table covers it', () => {
+    expect(INFRA_BUILDING_IDS).toEqual(['infrastructure'])
+    for (const id of INFRA_BUILDING_IDS) {
+      expect(BUILDING_IDS, `${id} is a real building`).toContain(id)
+      expect(INFRA_SUPPLY[id], `${id} supply`).toBeGreaterThan(0)
+      expect(BUILDINGS[id].infrastructureNeed, `${id} need`).toBeGreaterThanOrEqual(0)
+    }
+    // The four pre-merge providers are gone entirely.
+    for (const gone of ['railroads', 'ports', 'canals', 'telegraphs']) {
+      expect(BUILDING_IDS as string[]).not.toContain(gone)
+    }
+    expect(BUILDING_IDS.length).toBe(19)
+  })
+
   test('every building type declares an infrastructureNeed', () => {
     for (const id of BUILDING_IDS) {
       expect(Number.isFinite(BUILDINGS[id].infrastructureNeed), `${id}`).toBe(true)
@@ -65,17 +101,10 @@ describe('unified infrastructure pool (plan 0011 F5)', () => {
   test('supply sums each provider building × its coefficient', () => {
     const world = newWorld(9200, 'QING')
     const c = blank(countryOf(world, 'QING'))
-    set(c, 'railroads', 2) // 2 × 3.0
-    set(c, 'ports', 4) // 4 × 1.5
-    set(c, 'canals', 3) // 3 × 2.0
-    set(c, 'telegraphs', 5) // 5 × 0.8
-    const expected =
-      2 * (INFRA_SUPPLY.railroads ?? 0) +
-      4 * (INFRA_SUPPLY.ports ?? 0) +
-      3 * (INFRA_SUPPLY.canals ?? 0) +
-      5 * (INFRA_SUPPLY.telegraphs ?? 0)
+    set(c, PROVIDER, 4)
+    const expected = 4 * (INFRA_SUPPLY[PROVIDER] ?? 0)
     close(infrastructureSupply(c), expected)
-    // Non-provider buildings add no supply.
+    // A non-provider building adds no supply.
     set(c, 'farms', 500)
     close(infrastructureSupply(c), expected)
   })
@@ -95,11 +124,11 @@ describe('unified infrastructure pool (plan 0011 F5)', () => {
     const world = newWorld(9202, 'QING')
     const base = countryOf(world, 'QING')
 
-    // 1 railroad (supply 3) against 40 coal mines, plus the railroad's own draw.
-    const half = set(set(blank(base), 'railroads', 1), 'coalMines', 40)
-    const supply = 1 * (INFRA_SUPPLY.railroads ?? 0)
+    // 1 infrastructure building against 40 coal mines, plus its own draw.
+    const half = set(set(blank(base), PROVIDER, 1), 'coalMines', 40)
+    const supply = 1 * (INFRA_SUPPLY[PROVIDER] ?? 0)
     const demand =
-      40 * BUILDINGS.coalMines.infrastructureNeed + 1 * BUILDINGS.railroads.infrastructureNeed
+      40 * BUILDINGS.coalMines.infrastructureNeed + 1 * BUILDINGS[PROVIDER].infrastructureNeed
     let stats = infrastructureStats(half)
     close(stats.supply, supply)
     close(stats.demand, demand)
@@ -116,7 +145,7 @@ describe('unified infrastructure pool (plan 0011 F5)', () => {
     close(stats.level, 0)
 
     // A large surplus → ratio > 1 → multiplier 1 (only-fail, no reward).
-    const rich = set(set(blank(base), 'railroads', 40), 'coalMines', 40)
+    const rich = set(set(blank(base), PROVIDER, 40), 'coalMines', 40)
     stats = infrastructureStats(rich)
     expect(stats.ratio).toBeGreaterThan(1)
     close(stats.multiplier, 1)
@@ -155,8 +184,8 @@ describe('unified infrastructure pool (plan 0011 F5)', () => {
 
   test('infrastructure upkeep consumes throughput materials and administrative services', () => {
     const world = newWorld(9204, 'GBR')
-    const c = set(blank(countryOf(world, 'GBR')), 'railroads', 10)
-    const supply = 10 * (INFRA_SUPPLY.railroads ?? 0)
+    const c = set(blank(countryOf(world, 'GBR')), PROVIDER, 10)
+    const supply = 10 * (INFRA_SUPPLY[PROVIDER] ?? 0)
     const upkeep = infrastructureUpkeep(c)
     close(upkeep.wood ?? 0, supply * (INFRA_UPKEEP.throughput.wood ?? 0))
     close(upkeep.coal ?? 0, supply * (INFRA_UPKEEP.throughput.coal ?? 0))
@@ -178,21 +207,21 @@ describe('unified infrastructure pool (plan 0011 F5)', () => {
     const qing = countryOf(world, 'QING')
     // At creation the field already equals the model's level.
     close(qing.econ.transportInfrastructure, infrastructureStats(qing).level)
-    // The old separate `infrastructure` field never existed and still does not.
+    // The old separate `infrastructure` scalar field never existed and still does not.
     expect('infrastructure' in qing.econ).toBe(false)
 
-    // A low-infrastructure country: completing a railroad raises supply and the
-    // derived level; removing it drops them back (no accumulation).
+    // A low-infrastructure country: completing infrastructure raises supply and
+    // the derived level; removing it drops them back (no accumulation).
     const low = blank(qing)
     set(low, 'coalMines', 40) // demand 6, supply 0 → level 0
     refreshInfrastructure(low)
     close(low.econ.transportInfrastructure, 0)
     const supplyBefore = infrastructureSupply(low)
     const levelBefore = low.econ.transportInfrastructure
-    completeBuilding(low, 'railroads', 1)
-    close(infrastructureSupply(low), supplyBefore + (INFRA_SUPPLY.railroads ?? 0))
+    completeBuilding(low, PROVIDER, 1)
+    close(infrastructureSupply(low), supplyBefore + (INFRA_SUPPLY[PROVIDER] ?? 0))
     expect(low.econ.transportInfrastructure).toBeGreaterThan(levelBefore)
-    completeBuilding(low, 'railroads', -1)
+    completeBuilding(low, PROVIDER, -1)
     close(infrastructureSupply(low), supplyBefore)
     close(low.econ.transportInfrastructure, levelBefore)
   })
@@ -214,6 +243,15 @@ describe('unified infrastructure pool (plan 0011 F5)', () => {
     for (const id of ['QING', 'GBR', 'FRA', 'PRU', 'USA']) {
       const stats = infrastructureStats(countryOf(world, id))
       expect(stats.multiplier, `${id} multiplier`).toBe(1)
+    }
+  })
+
+  test('the 1836 infra ratio stays within 5% of the pre-merge (v11) baseline', () => {
+    const world = newWorld(9100, 'QING')
+    for (const [id, before] of Object.entries(PRE_MERGE_RATIO)) {
+      const after = infrastructureStats(countryOf(world, id)).ratio
+      const delta = Math.abs(after - before) / before
+      expect(delta, `${id}: ${before} → ${after}`).toBeLessThan(0.05)
     }
   })
 })

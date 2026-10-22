@@ -90,7 +90,7 @@ describe('M2 construction queue and economy fixes', () => {
     expect(stateProject?.progress).toBe(0)
   })
 
-  test('railroads and offices feed different infrastructure values', async () => {
+  test('infrastructure and offices feed different infrastructure values', async () => {
     const world = newWorld(7, 'GBR')
     const gbr = world.countries.GBR
     expect(gbr).toBeDefined()
@@ -99,17 +99,17 @@ describe('M2 construction queue and economy fixes', () => {
     const supplyBefore = infrastructureSupply(gbr)
     const administrativeBefore = gbr.econ.administrativeCapacity
 
-    completeBuilding(gbr, 'railroads', 2)
-    // Plan 0011 F5: railroads no longer bump a scalar — they raise infrastructure
-    // SUPPLY, and the derived level tracks it. Offices only move admin capacity.
-    expect(infrastructureSupply(gbr)).toBe(supplyBefore + 2 * (INFRA_SUPPLY.railroads ?? 0))
+    completeBuilding(gbr, 'infrastructure', 2)
+    // Plan 0014: the single infrastructure building raises unified SUPPLY, and the
+    // derived level tracks it. Offices only move admin capacity.
+    expect(infrastructureSupply(gbr)).toBe(supplyBefore + 2 * (INFRA_SUPPLY.infrastructure ?? 0))
     expect(gbr.econ.administrativeCapacity).toBe(administrativeBefore)
     const productionAfterRail = inspectEconomy(gbr).production.grain
 
     completeBuilding(gbr, 'offices', 3)
     completeBuilding(gbr, 'universities', 2)
     expect(gbr.econ.administrativeCapacity).toBe(administrativeBefore + 3 + 1)
-    expect(infrastructureSupply(gbr)).toBe(supplyBefore + 2 * (INFRA_SUPPLY.railroads ?? 0))
+    expect(infrastructureSupply(gbr)).toBe(supplyBefore + 2 * (INFRA_SUPPLY.infrastructure ?? 0))
     expect(inspectEconomy(gbr).production.grain).toBe(productionAfterRail)
   })
 
@@ -308,12 +308,12 @@ describe('M6 destiny and ironman', () => {
     expect(applyCheat(world, { action: 'building', building: 'farms', count: 3 }).ok).toBe(true)
     expect(qing.econ.buildings.farms).toBe(farms + 3)
 
-    // Plan 0011 F5: cheat building edits go through `completeBuilding`, which
-    // now moves infrastructure SUPPLY (railroads no longer bump a scalar).
+    // Plan 0014: cheat building edits go through `completeBuilding`, which
+    // moves the unified infrastructure SUPPLY (single merged building).
     const supply = infrastructureSupply(qing)
-    expect(applyCheat(world, { action: 'building', building: 'railroads', count: 2 }).ok).toBe(true)
-    expect(infrastructureSupply(qing)).toBe(supply + 2 * (INFRA_SUPPLY.railroads ?? 0))
-    expect(applyCheat(world, { action: 'building', building: 'railroads', count: -2 }).ok).toBe(true)
+    expect(applyCheat(world, { action: 'building', building: 'infrastructure', count: 2 }).ok).toBe(true)
+    expect(infrastructureSupply(qing)).toBe(supply + 2 * (INFRA_SUPPLY.infrastructure ?? 0))
+    expect(applyCheat(world, { action: 'building', building: 'infrastructure', count: -2 }).ok).toBe(true)
     expect(infrastructureSupply(qing)).toBe(supply)
 
     expect(applyCheat(world, { action: 'date', year: 1840, month: 6 }).ok).toBe(true)

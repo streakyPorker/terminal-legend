@@ -90,10 +90,14 @@ export function investmentScore(
 function infrastructureScore(country: Country, building: BuildingId): number {
   const b = country.econ.buildings
   switch (building) {
-    case 'railroads':
-      return INFRA_SCORE_BASE + (1 - country.econ.transportInfrastructure / 100) * INFRA_SCORE_TRANSPORT
-    case 'ports':
-      return INFRA_SCORE_BASE + (1 - country.econ.marketAccess) * INFRA_SCORE_PORT
+    case 'infrastructure':
+      // Plan 0014: the merged provider keeps both renewal motives — the
+      // transport level (railroads) and market access (ports).
+      return (
+        INFRA_SCORE_BASE +
+        (1 - country.econ.transportInfrastructure / 100) * INFRA_SCORE_TRANSPORT +
+        (1 - country.econ.marketAccess) * INFRA_SCORE_PORT
+      )
     case 'universities':
       return INFRA_SCORE_BASE + (1 - country.pops.literacy) * INFRA_SCORE_LITERACY
     case 'offices': {

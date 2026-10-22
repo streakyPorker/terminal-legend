@@ -20,7 +20,7 @@ const MONTHS = 84
 // separately through the export/opium gates).
 const MAJORS = ['GBR', 'FRA', 'PRU', 'RUS', 'AUS', 'USA', 'JAP'] as const
 
-// Building types that actually produce a good. Railroads/ports/workshops have
+// Building types that actually produce a good. Infrastructure and workshops have
 // no tradeable output (infrastructure / construction points), so they are
 // expected to show no operating profit and are excluded from the "no permanently
 // unprofitable type" gate.
@@ -420,9 +420,9 @@ describe('F7 building calibration gates (plan 0011 §6/§7)', () => {
     expect(BUILDINGS.machineryWorks.cost).toBeGreaterThan(BUILDINGS.textileMills.cost)
     expect(BUILDINGS.textileMills.cost).toBeGreaterThan(BUILDINGS.coalMines.cost)
     expect(BUILDINGS.coalMines.cost).toBeGreaterThan(BUILDINGS.farms.cost)
-    // Railroads and canals are the longest, costliest, most capacity-hungry works.
-    expect(CAPACITY_COST.railroads).toBeGreaterThan(CAPACITY_COST.steelMills)
-    expect(CAPACITY_COST.canals).toBeGreaterThan(CAPACITY_COST.schools)
+    // Infrastructure is the costliest, most capacity-hungry public work.
+    expect(CAPACITY_COST.infrastructure).toBeGreaterThan(CAPACITY_COST.steelMills)
+    expect(CAPACITY_COST.infrastructure).toBeGreaterThan(CAPACITY_COST.schools)
     // Nothing is absurd: every type takes at least 2 months and at most 8.
     for (const id of BUILDING_IDS) {
       expect(BUILDINGS[id].cost, `${id} cost`).toBeGreaterThan(0)

@@ -2,6 +2,7 @@ import type { Country, GoodId, LogEntry, WorldState } from '../types'
 import {
   BUILDING_IDS,
   GOOD_IDS,
+  INFRA_BUILDING_IDS,
   deriveBureaucracy,
   deriveUnemployment,
   industrialBuildingCount,
@@ -267,7 +268,12 @@ export function simulateCountry(
   // (ADR 0022). Deterministic, no RNG; the count never goes below zero.
   for (const id of BUILDING_IDS) {
     const row = snap.buildingProfits[id]
-    const deepLoss = Math.max(0, -row.profitPerBuilding) / (row.revenue + 1)
+    // Infrastructure cost centres (plan 0014) earn no goods revenue by design, so
+    // a zero-output recipe input would otherwise read as a deep loss and scrape
+    // them at SHRINK_MAX. They wear out at the base rate only.
+    const deepLoss = INFRA_BUILDING_IDS.includes(id)
+      ? 0
+      : Math.max(0, -row.profitPerBuilding) / (row.revenue + 1)
     const extra = clamp(deepLoss, 0, SHRINK_MAX)
     country.econ.buildings[id] = Math.max(
       0,

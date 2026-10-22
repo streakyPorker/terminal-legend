@@ -249,7 +249,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
   }
 
   return {
-    version: 11,
+    version: 12,
     seed,
     date: { year: START_YEAR, month: START_MONTH },
     tick: 0,

@@ -134,7 +134,7 @@ describe('F6 building unlock gate', () => {
     expect(applied.ok).toBe(true)
   })
 
-  test('the world stays at version 11', () => {
-    expect(newWorld(9100, 'QING').version).toBe(11)
+  test('the world stays at version 12', () => {
+    expect(newWorld(9100, 'QING').version).toBe(12)
   })
 })

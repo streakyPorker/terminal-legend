@@ -5,6 +5,7 @@ import {
   BUILDING_IDS,
   BUILDING_RECIPES,
   INDUSTRIAL_BUILDING_IDS,
+  INFRA_BUILDING_IDS,
   INFRA_MULT_FLOOR,
   INFRA_SUPPLY,
   INFRA_UPKEEP,
@@ -22,15 +23,26 @@ export type InfrastructureStats = {
   level: number
 }
 
-/** Σ provider buildings × supply coefficient. */
+/** Σ provider buildings × supply coefficient, over the `INFRA_BUILDING_IDS` seam. */
 export function infrastructureSupply(country: Country): number {
   let supply = 0
-  for (const id of BUILDING_IDS) {
+  for (const id of INFRA_BUILDING_IDS) {
     const coefficient = INFRA_SUPPLY[id]
     if (coefficient === undefined) continue
     supply += (country.econ.buildings[id] ?? 0) * coefficient
   }
   return supply
+}
+
+/**
+ * Total infrastructure buildings in a country (plan 0014). The port-derived
+ * flows (tariff income, import/route capacity, prestige) read this instead of
+ * the deleted `ports` count, over the same `INFRA_BUILDING_IDS` seam.
+ */
+export function infrastructureCount(country: Country): number {
+  let total = 0
+  for (const id of INFRA_BUILDING_IDS) total += country.econ.buildings[id] ?? 0
+  return total
 }
 
 /** Σ all buildings × `infrastructureNeed`. */
@@ -198,12 +210,9 @@ export function deriveLabor(country: Country): LaborStats {
     b.arsenals * laborOf('arsenals') +
     b.luxuryWorks * laborOf('luxuryWorks') +
     b.schools * laborOf('schools') +
-    b.canals * laborOf('canals') +
-    b.telegraphs * laborOf('telegraphs') +
     b.forts * laborOf('forts') +
     b.navalYards * laborOf('navalYards') +
-    b.railroads * laborOf('railroads') +
-    b.ports * laborOf('ports') +
+    b.infrastructure * laborOf('infrastructure') +
     b.offices * laborOf('offices') +
     b.universities * laborOf('universities') +
     b.barracks * laborOf('barracks')

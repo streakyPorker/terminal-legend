@@ -4,6 +4,7 @@ import {
   BUILDING_IDS,
   BUILDING_OUTPUT,
   BUILDING_RECIPES,
+  INFRA_BUILDING_IDS,
   INFRA_SUPPLY,
   infrastructureSupply,
   INVESTMENT_DEMAND,
@@ -18,13 +19,14 @@ import {
 import { applyDecision, newWorld } from '../engine/sim'
 import type { BuildingId, Country, WorldState } from '../types'
 
-// Plan 0011 F4: five new buildings that complete the 22-type roster.
-// schools  = primary education (services output + literacy on completion)
-// canals   = infrastructure provider (transitional transport side effect; F5 supply)
-// telegraphs = infrastructure provider (transitional transport side effect; F5 supply)
-// forts    = military (small arms output)
-// navalYards = military (small machinery output)
-const NEW_BUILDINGS: BuildingId[] = ['schools', 'canals', 'telegraphs', 'forts', 'navalYards']
+// Plan 0011 F4 added five buildings; plan 0014 / ADR 0029 then deleted canals and
+// merged railroads/ports/telegraphs into the single `infrastructure` building.
+// This file now covers the three surviving F4 buildings plus the merge.
+//   schools    = primary education (services output + literacy on completion)
+//   forts      = military (small arms output)
+//   navalYards = military (small machinery output)
+//   infrastructure = the merged unified-infrastructure provider (cost centre)
+const NEW_BUILDINGS: BuildingId[] = ['schools', 'forts', 'navalYards']
 
 const countryOf = (world: WorldState, id: string): Country => {
   const country = world.countries[id]
@@ -36,9 +38,9 @@ const close = (actual: number, expected: number, eps = 1e-9): void => {
   expect(Math.abs(actual - expected)).toBeLessThan(eps)
 }
 
-describe('F4 building expansion: schools / canals / telegraphs / forts / navalYards', () => {
-  test('the five ids live in every BuildingId table', () => {
-    expect(BUILDING_IDS.length).toBe(22)
+describe('F4 building expansion (schools / forts / navalYards) + plan 0014 merge', () => {
+  test('the surviving F4 ids and the merged infrastructure id live in every BuildingId table', () => {
+    expect(BUILDING_IDS.length).toBe(19)
     const tables: Record<string, Record<string, unknown>> = {
       BUILDINGS: BUILDINGS as unknown as Record<string, unknown>,
       BUILDING_RECIPES: BUILDING_RECIPES as unknown as Record<string, unknown>,
@@ -49,48 +51,40 @@ describe('F4 building expansion: schools / canals / telegraphs / forts / navalYa
       BUILDING_COST_ADDEND: BUILDING_COST_ADDEND as unknown as Record<string, unknown>,
     }
     for (const [name, table] of Object.entries(tables)) {
-      for (const id of NEW_BUILDINGS) {
+      for (const id of [...NEW_BUILDINGS, ...INFRA_BUILDING_IDS]) {
         expect(table[id], `${name} is missing ${id}`).toBeDefined()
       }
     }
   })
 
-  test('metadata (name / cost / time / capacity) matches the plan table', () => {
+  test('metadata (name / cost / capacity) matches the plan table', () => {
     expect(BUILDINGS.schools.name).toBe('学校')
-    expect(BUILDINGS.canals.name).toBe('运河')
-    expect(BUILDINGS.telegraphs.name).toBe('电报')
     expect(BUILDINGS.forts.name).toBe('要塞')
     expect(BUILDINGS.navalYards.name).toBe('船坞')
+    expect(BUILDINGS.infrastructure.name).toBe('基础设施')
 
     expect(BUILDINGS.schools.cost).toBe(2)
-    expect(BUILDINGS.canals.cost).toBe(6)
-    expect(BUILDINGS.telegraphs.cost).toBe(4)
     expect(BUILDINGS.forts.cost).toBe(4)
     expect(BUILDINGS.navalYards.cost).toBe(5)
+    expect(BUILDINGS.infrastructure.cost).toBe(5)
 
     expect(CAPACITY_COST.schools).toBe(1)
-    expect(CAPACITY_COST.canals).toBe(3)
-    expect(CAPACITY_COST.telegraphs).toBe(1.5)
     expect(CAPACITY_COST.forts).toBe(2)
     expect(CAPACITY_COST.navalYards).toBe(2.5)
+    expect(CAPACITY_COST.infrastructure).toBe(3)
   })
 
-  test('recipes: schools supply services, canals/telegraphs are no-output cost centres, forts/navalYards are small military producers', () => {
+  test('recipes: schools supply services, forts/navalYards are small military producers, infrastructure is a no-output cost centre', () => {
     // schools — the one new service producer, market-access gated like farms.
     expect(BUILDING_RECIPES.schools.output).toEqual({ services: 0.1 })
     expect(BUILDING_RECIPES.schools.gates?.access).toBe(true)
 
-    // canals / telegraphs — no goods output (infrastructure cost centres).
-    expect(Object.keys(BUILDING_RECIPES.canals.output)).toEqual([])
-    expect(Object.keys(BUILDING_RECIPES.telegraphs.output)).toEqual([])
-    // …they still consume construction inputs.
-    expect(Object.keys(BUILDING_RECIPES.canals.input).length).toBeGreaterThan(0)
-    expect(Object.keys(BUILDING_RECIPES.telegraphs.input).length).toBeGreaterThan(0)
+    // infrastructure — no goods output (unified-infrastructure cost centre) but
+    // it still consumes construction inputs (steel + wood).
+    expect(Object.keys(BUILDING_RECIPES.infrastructure.output)).toEqual([])
+    expect(Object.keys(BUILDING_RECIPES.infrastructure.input).length).toBeGreaterThan(0)
 
-    // forts / navalYards — small military output. F7 calibrated both: forts'
-    // arms output (0.03 → 0.08) and navalYards' machinery output (0.1 → 0.14)
-    // now clear a positive operating margin instead of being value-destroying at
-    // the F4 draft coefficients (plan 0011 F7).
+    // forts / navalYards — small military output (F7 calibrated to a positive margin).
     expect(BUILDING_RECIPES.forts.output).toEqual({ arms: 0.08 })
     expect(BUILDING_RECIPES.navalYards.output).toEqual({ machinery: 0.14 })
     expect(BUILDING_RECIPES.forts.gates?.tech).toBe(true)
@@ -99,13 +93,13 @@ describe('F4 building expansion: schools / canals / telegraphs / forts / navalYa
     expect(BUILDING_RECIPES.navalYards.gates?.industrial).toBe(true)
   })
 
-  test('new buildings are public/military works: empty private-investment signal', () => {
-    for (const id of NEW_BUILDINGS) {
+  test('public/military/infrastructure works carry an empty private-investment signal', () => {
+    for (const id of [...NEW_BUILDINGS, ...INFRA_BUILDING_IDS]) {
       expect(Object.keys(BUILDING_OUTPUT[id]).length, `${id} output signal`).toBe(0)
     }
   })
 
-  test('completion side effects apply (schools literacy; canals/telegraphs supply + market access)', () => {
+  test('completion side effects apply (schools literacy; infrastructure supply + market access)', () => {
     const world = newWorld(9100, 'QING')
     const qing = countryOf(world, 'QING')
 
@@ -113,26 +107,18 @@ describe('F4 building expansion: schools / canals / telegraphs / forts / navalYa
     completeBuilding(qing, 'schools', 5)
     close(qing.pops.literacy, literacyBefore + 5 * 0.002)
 
-    // Plan 0011 F5: canals/telegraphs no longer bump a transport scalar; they
-    // supply the unified infrastructure pool, while keeping their market access.
+    // Plan 0014: the merged infrastructure building supplies the unified pool and
+    // keeps the providers' market-access side effect (single coefficient table).
     const accessBefore = qing.econ.marketAccess
     const supplyBefore = infrastructureSupply(qing)
-    completeBuilding(qing, 'canals', 3)
-    close(qing.econ.marketAccess, accessBefore + 3 * 0.01)
-    close(infrastructureSupply(qing), supplyBefore + 3 * (INFRA_SUPPLY.canals ?? 0))
-
-    const access2 = qing.econ.marketAccess
-    completeBuilding(qing, 'telegraphs', 4)
-    close(qing.econ.marketAccess, access2 + 4 * 0.005)
-    close(
-      infrastructureSupply(qing),
-      supplyBefore + 3 * (INFRA_SUPPLY.canals ?? 0) + 4 * (INFRA_SUPPLY.telegraphs ?? 0),
-    )
+    const infraBefore = qing.econ.buildings.infrastructure
+    completeBuilding(qing, 'infrastructure', 3)
+    close(qing.econ.marketAccess, accessBefore + 3 * 0.019)
+    close(infrastructureSupply(qing), supplyBefore + 3 * (INFRA_SUPPLY.infrastructure ?? 0))
 
     // Counts advanced too.
     expect(qing.econ.buildings.schools).toBe(5)
-    expect(qing.econ.buildings.canals).toBe(3)
-    expect(qing.econ.buildings.telegraphs).toBe(4)
+    expect(qing.econ.buildings.infrastructure).toBe(infraBefore + 3)
   })
 
   test('forts/navalYards have no completion side effect beyond their output', () => {
@@ -151,11 +137,12 @@ describe('F4 building expansion: schools / canals / telegraphs / forts / navalYa
     expect(qing.econ.buildings.navalYards).toBe(2)
   })
 
-  test('the build action accepts all five new types', () => {
+  test('the build action accepts the surviving types and the merged infrastructure', () => {
     const world = newWorld(9100, 'QING')
     const qing = countryOf(world, 'QING')
     qing.econ.treasury = 1000
-    for (const id of NEW_BUILDINGS) {
+    const buildable = [...NEW_BUILDINGS, ...INFRA_BUILDING_IDS]
+    for (const id of buildable) {
       const result = applyDecision(
         world,
         { countryId: 'QING', action: 'build', params: { building: id, count: 1 } },
@@ -164,11 +151,15 @@ describe('F4 building expansion: schools / canals / telegraphs / forts / navalYa
       expect(result.ok, `build ${id}`).toBe(true)
     }
     const stateSlots = qing.econ.constructionQueue.filter(one => one.owner === 'state')
-    expect(stateSlots.map(slot => slot.building).sort()).toEqual([...NEW_BUILDINGS].sort())
+    expect(stateSlots.map(slot => slot.building).sort()).toEqual([...buildable].sort())
   })
 
-  test('the world stays at version 11', () => {
+  test('the world carries the merged roster at version 12', () => {
     const world = newWorld(9100, 'QING')
-    expect(world.version).toBe(11)
+    expect(world.version).toBe(12)
+    expect(BUILDING_IDS.length).toBe(19)
+    for (const gone of ['railroads', 'ports', 'canals', 'telegraphs']) {
+      expect(BUILDING_IDS as string[]).not.toContain(gone)
+    }
   })
 })

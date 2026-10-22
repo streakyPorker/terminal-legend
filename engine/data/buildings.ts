@@ -63,18 +63,18 @@ export const INVESTMENT_DEMAND: Record<BuildingId, Partial<Record<GoodId, number
   steelMills: { steel: 0.15, machinery: 0.1 },
   arsenals: { steel: 0.2, machinery: 0.1 },
   luxuryWorks: { steel: 0.1, machinery: 0.1, fabric: 0.05 },
-  railroads: { steel: 0.5, machinery: 0.16, wood: 0.4 },
-  ports: { wood: 0.3, steel: 0.1 },
+  // Plan 0014: railroads/ports/canals/telegraphs folded into one infrastructure
+  // building. The basket is the old per-supply-weighted average of the merged
+  // projects (steel + wood + a little machinery), so the aggregate construction
+  // input of the infra stock is preserved.
+  infrastructure: { steel: 0.29, wood: 0.49, machinery: 0.06 },
   universities: { furniture: 0.12, wood: 0.05 },
   barracks: { wood: 0.1, furniture: 0.05 },
   offices: { furniture: 0.1, wood: 0.05 },
   workshops: { wood: 0.3, steel: 0.2, furniture: 0.05 },
-  // Plan 0011 F4: five new buildings. As after F1, every project buys the
-  // worked metal (`steel`), never raw ore — so telegraphs use `steel` even
-  // though the plan draft listed `iron`.
+  // Plan 0011 F4: new buildings. As after F1, every project buys the
+  // worked metal (`steel`), never raw ore.
   schools: { furniture: 0.1, wood: 0.05 },
-  canals: { wood: 0.2, steel: 0.15, machinery: 0.05 },
-  telegraphs: { steel: 0.1, wood: 0.15 },
   forts: { steel: 0.15, wood: 0.15 },
   navalYards: { wood: 0.3, steel: 0.2, machinery: 0.1 },
 }
@@ -100,8 +100,9 @@ export const BUILDING_OUTPUT: Record<BuildingId, Partial<Record<GoodId, number>>
   steelMills: { steel: 0.09 },
   arsenals: { arms: 0.07 },
   luxuryWorks: { luxury: 0.035 },
-  railroads: {},
-  ports: {},
+  // Plan 0014: no tradeable output — private investment never picks infrastructure
+  // (as railroads/ports before the merge).
+  infrastructure: {},
   universities: {},
   barracks: { arms: 0.05 },
   offices: {},
@@ -110,8 +111,6 @@ export const BUILDING_OUTPUT: Record<BuildingId, Partial<Record<GoodId, number>>
   // private investment never picks them (like universities/offices), so they are
   // only built by the state/AI and cannot perturb the goods calibration baseline.
   schools: {},
-  canals: {},
-  telegraphs: {},
   forts: {},
   navalYards: {},
 }
@@ -279,24 +278,25 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     outputModifier: 'factoryOutput',
   },
   // Plan 0011 F4. `schools` is the one new service producer (primary education);
-  // `canals`/`telegraphs` are no-output infrastructure cost centres (their
-  // transport side effect lands in `completeBuilding`; the unified infra supply
-  // is F5); `forts`/`navalYards` produce a small military good (arms / machinery).
+  // `forts`/`navalYards` produce a small military good (arms / machinery).
   schools: {
     output: { services: 0.1 },
     input: {},
     labor: 0.15,
     gates: { access: true },
   },
-  canals: {
+  // Plan 0014: no tradeable output — a cost centre whose return is the unified
+  // infrastructure flow (`INFRA_SUPPLY`), market access (on completion) and the
+  // port tariff effect. The only merged provider that consumed goods was the
+  // railroad (steel 0.5 / wood 0.4 per building over 60 buildings); folding that
+  // draw across the 172 infrastructure buildings gives ≈0.175 steel. It is set to
+  // 0.20 so the merge stays reference-point-neutral (the exact fold leaves the
+  // small port-only economies just short of the private-investment-continuity
+  // gate). Its running upkeep is the shared `INFRA_UPKEEP`, not this input.
+  infrastructure: {
     output: {},
-    input: { wood: 0.05 },
-    labor: 0.3,
-  },
-  telegraphs: {
-    output: {},
-    input: { wood: 0.02, iron: 0.02 },
-    labor: 0.2,
+    input: { steel: 0.2, wood: 0.16 },
+    labor: 0.54,
   },
   forts: {
     output: { arms: 0.08 },
@@ -309,16 +309,6 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     input: { steel: 0.08, wood: 0.08 },
     labor: 0.8,
     gates: { tech: true, industrial: true },
-  },
-  railroads: {
-    output: {},
-    input: { steel: 0.5, wood: 0.4 },
-    labor: 0.2,
-  },
-  ports: {
-    output: {},
-    input: {},
-    labor: 0.4,
   },
   universities: {
     output: { services: 0.2 },
@@ -392,7 +382,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   // QING seed carries ~3000 farms, so even a small per-farm need would swamp the
   // national pool — the plan's draft 0.4 produced a 0.016 ratio). All values are
   // the F5 calibration; F7 re-tunes.
-  // Plan 0011 F6: `unlock` is the forward-compat tech gate; all 22 buildings
+  // Plan 0011 F6: `unlock` is the forward-compat tech gate; all 19 buildings
   // leave it absent (always buildable) so this slice stays behaviour-preserving.
   farms: { name: '农场', cost: 1.5, note: '粮食与原料，吸纳农业人口', infrastructureNeed: 0 },
   coalMines: { name: '煤矿', cost: 2.5, note: '煤炭，工业与钢铁的燃料', infrastructureNeed: 0.15 },
@@ -406,12 +396,9 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   arsenals: { name: '兵工厂', cost: 4.5, note: '军械，钢铁与机械的军工', infrastructureNeed: 0.15 },
   luxuryWorks: { name: '奢侈品厂', cost: 5, note: '奢侈品，布料与煤的高端制造', infrastructureNeed: 0.09 },
   schools: { name: '学校', cost: 2, note: '初等教育，产出服务并在建成时提升识字率', infrastructureNeed: 0.03 },
-  canals: { name: '运河', cost: 6, note: '内河航运，供给统一基础设施与市场接入', infrastructureNeed: 0.05 },
-  telegraphs: { name: '电报', cost: 4, note: '电报通信，供给统一基础设施与市场接入', infrastructureNeed: 0.06 },
+  infrastructure: { name: '基础设施', cost: 5, note: '统一基础设施：铁路/港口/电报合一，供给基础设施池、市场接入与关税收入', infrastructureNeed: 0.165 },
   forts: { name: '要塞', cost: 4, note: '国防工事，产少量军械', infrastructureNeed: 0.05 },
   navalYards: { name: '船坞', cost: 5, note: '造舰产能，产少量机械', infrastructureNeed: 0.15 },
-  railroads: { name: '铁路', cost: 7, note: '统一基础设施的主要供给与市场接入', infrastructureNeed: 0.08 },
-  ports: { name: '港口', cost: 3, note: '统一基础设施供给、市场接入与关税收入', infrastructureNeed: 0.12 },
   universities: { name: '大学', cost: 5, note: '科技点数、识字率与行政能力', infrastructureNeed: 0.05 },
   barracks: { name: '兵营', cost: 2.5, note: '军械产出', infrastructureNeed: 0.09 },
   offices: { name: '官署', cost: 3, note: '行政能力与官僚效能上限', infrastructureNeed: 0.08 },
@@ -431,12 +418,29 @@ export function buildOf(id: string): BuildingId | undefined {
 // 0, 100)`, recomputed from building counts. The derived readers live in
 // `./derivations.ts`; these are the declarative coefficients they read.
 
-/** Infrastructure each provider building adds per month (plan §4.1). */
+/**
+ * Plan 0014 / ADR 0029: the single source of truth for "which buildings supply
+ * the unified infrastructure pool". Today it holds only the merged
+ * `infrastructure` building, but every infra consumer (supply summation, upkeep,
+ * market access, panel grouping, "is this infra?" checks, the port tariff
+ * effect) iterates THIS list and reads per-building coefficient tables, never a
+ * hardcoded id — so re-splitting the merge later is a data-only change.
+ */
+export const INFRA_BUILDING_IDS: BuildingId[] = ['infrastructure']
+
+/**
+ * Infrastructure each provider building adds per month. Chosen by a
+ * supply-equivalence fold of the pre-merge providers:
+ *
+ *   legacy supply weights: railroads 2.5 / ports 1.1 / canals 1.6 / telegraphs 0.7
+ *   legacy market access:  railroad 0.02 / port 0.01 / canal 0.01 / telegraph 0.005
+ *
+ * 2.16 + the 0.165 `infrastructureNeed` keep the 1836 ten-country infra `ratio`
+ * within 2.7% of the pre-merge baseline (the hidden offset needed because the
+ * merged building also replaces the providers' own demand).
+ */
 export const INFRA_SUPPLY: Partial<Record<BuildingId, number>> = {
-  railroads: 2.5,
-  ports: 1.1,
-  canals: 1.6,
-  telegraphs: 0.7,
+  infrastructure: 2.16,
 }
 
 /** Shortfall-multiplier floor: a linear debuff cannot bite harder than this. */

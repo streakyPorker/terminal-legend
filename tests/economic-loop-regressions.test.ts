@@ -62,7 +62,7 @@ describe('Round 1 regressions', () => {
     for (let index = 0; index < 8; index += 1) {
       qing.econ.constructionQueue.push({
         id: `phantom-${index}`,
-        building: 'railroads',
+        building: 'infrastructure',
         count: 20,
         owner: 'state',
         monthsLeft: 8,
@@ -72,6 +72,7 @@ describe('Round 1 regressions', () => {
         startedAt: { ...queued.date },
       })
     }
+    const infrastructureBefore = qing.econ.buildings.infrastructure
     advance(plain, 1, [], makeRngForWorld(plain))
     advance(queued, 1, [], makeRngForWorld(queued))
     const a = plain.countries.QING
@@ -81,7 +82,8 @@ describe('Round 1 regressions', () => {
     if (a === undefined || b === undefined) return
     expect(Math.abs(a.econ.gdp - b.econ.gdp)).toBeLessThan(0.01)
     expect(b.econ.gdpComponents.i).toBe(0)
-    expect(b.econ.buildings.railroads).toBe(0)
+    // The unfunded phantoms never complete: the count only base-decays.
+    expect(b.econ.buildings.infrastructure).toBeLessThan(infrastructureBefore + 1)
   })
 
   test('the state build queue accepts unlimited orders', async () => {
@@ -463,12 +465,9 @@ describe('Round 3 regressions', () => {
     qing.politicalEconomy.savingsRate = 0
     advance(world, 60, [], makeRngForWorld(world))
     expect(qing.econ.marketAccess).toBeLessThan(0.95)
-    // Plan 0011 F5: the unified infrastructure level is derived from the provider
-    // stock, so it no longer decays on its own — it tracks the (decaying) stock.
-    // Removing the ports that carry it collapses the level.
+    // Plan 0014: removing the single infrastructure building collapses the level.
     const standing = qing.econ.transportInfrastructure
-    qing.econ.buildings.ports = 0
-    qing.econ.buildings.railroads = 0
+    qing.econ.buildings.infrastructure = 0
     refreshInfrastructure(qing)
     expect(qing.econ.transportInfrastructure).toBeLessThan(standing)
   })

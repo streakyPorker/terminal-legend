@@ -99,7 +99,7 @@ export function EconomyPanel(props: {
           ['企业税', ledger.income.taxBases.profit],
           ['消费税', ledger.income.taxBases.consumption],
           ['关税', ledger.income.taxBases.tariff],
-          ['港口', ledger.income.ports],
+          ['基建', ledger.income.ports],
           ['基金收益', ledger.income.sovereignIncome],
           ['赔款收入', ledger.income.reparations],
           ['其他（建造力出租）', ledger.income.other],
@@ -146,7 +146,7 @@ export function EconomyPanel(props: {
         <Text dimColor>
           私人部门贸易逆差 {fmtMoney(ledger.tradeGap)}（由私人资本/私人外债 {fmtMoney(ledger.privateDebt)} 承担，不影响国库）；净资产实际变动 {fmtSigned(ledger.net)} 金/月
         </Text>
-        <Text dimColor>GDP {fmtGdp(ledger.gdp)} 是产出（基期价），不是国库收支；国库只经手四税基税入、港口、基金收益与赔款。</Text>
+        <Text dimColor>GDP {fmtGdp(ledger.gdp)} 是产出（基期价），不是国库收支；国库只经手四税基税入、基建、基金收益与赔款。</Text>
         {(props.world.indemnities ?? [])
           .filter(
             schedule =>

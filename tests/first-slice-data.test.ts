@@ -15,16 +15,17 @@ describe('M1 types, data and migration', () => {
     expect(qing).toBeDefined()
     if (qing === undefined) return
 
-    expect(world.version).toBe(11)
+    expect(world.version).toBe(12)
     expect(world.ironman).toBe(false)
     expect(world.secretary.delegation).toEqual({
       internal: false,
       diplomacy: false,
       months: 1,
     })
-    // Plan 0011 F5: the field is now the DERIVED unified infrastructure level
-    // (clamp(100 × supply/demand, 0, 100)), not a seed scalar. QING's seed supply
-    // (21, from 14 ports) exceeds its demand (15.8), so it starts at full level.
+    // Plan 0014: the field is still the DERIVED unified infrastructure level
+    // (clamp(100 × supply/demand, 0, 100)). QING's folded seed supply (17.28,
+    // from 8 infrastructure buildings) exceeds its demand (15.44), so it starts
+    // at full level.
     expect(qing.econ.transportInfrastructure).toBe(100)
     expect(qing.econ.administrativeCapacity).toBe(20 + 0.12 * 40 + 4 * 2)
     expect(qing.econ.buildings.offices).toBe(4)
@@ -89,6 +90,6 @@ describe('M1 types, data and migration', () => {
   test('a corrupt save is rejected', async () => {
     expect(parseWorld({})).toBeUndefined()
     expect(parseWorld('nope')).toBeUndefined()
-    expect(parseWorld({ version: 11, tick: 0, date: {}, countries: {} })).toBeUndefined()
+    expect(parseWorld({ version: 12, tick: 0, date: {}, countries: {} })).toBeUndefined()
   })
 })

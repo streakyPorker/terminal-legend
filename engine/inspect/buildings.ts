@@ -31,7 +31,7 @@ export function buildingsSection(country: Country): string[] {
     }
   }
   lines.push(
-    '说明：本版 22 类建筑均开局解锁（`unlock.techLevel` 为 plan 0005 科技树的前瞻门槛，当前无建筑设阈值，F6 已接入 `build` 校验）；`infrastructureNeed`（F5）已落地并计入统一基础设施需求。',
+    '说明：本版 19 类建筑均开局解锁（`unlock.techLevel` 为 plan 0005 科技树的前瞻门槛，当前无建筑设阈值，F6 已接入 `build` 校验）；`infrastructureNeed`（F5）已落地并计入统一基础设施需求；plan 0014 把铁路/港口/电报合并为「基础设施」、删除运河。',
   )
   return lines
 }

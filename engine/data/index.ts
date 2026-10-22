@@ -40,6 +40,7 @@ export {
   INFRA_SUPPLY,
   INFRA_MULT_FLOOR,
   INFRA_UPKEEP,
+  INFRA_BUILDING_IDS,
   INDUSTRIAL_BUILDING_IDS,
 } from './buildings'
 export type {
@@ -79,6 +80,7 @@ export {
   refreshInfrastructure,
   infrastructureUpkeep,
   industrialBuildingCount,
+  infrastructureCount,
 } from './derivations'
 export type { LaborStats, InfrastructureStats } from './derivations'
 

@@ -168,17 +168,17 @@ export type BuildingId =
   | 'steelMills'
   | 'arsenals'
   | 'luxuryWorks'
-  // Plan 0011 F4: five new buildings. `schools` is primary education (services /
-  // literacy); `canals`/`telegraphs` are infrastructure providers (transitional
-  // transport side effects in F4, unified infra supply in F5); `forts`/`navalYards`
-  // are military (small arms / machinery output).
+  // Plan 0011 F4: `schools` is primary education (services / literacy);
+  // `forts`/`navalYards` are military (small arms / machinery output).
   | 'schools'
-  | 'canals'
-  | 'telegraphs'
   | 'forts'
   | 'navalYards'
-  | 'railroads'
-  | 'ports'
+  // Plan 0014 / ADR 0029: `railroads` + `ports` + `telegraphs` merged into one
+  // `infrastructure` building (canals deleted). It supplies the unified
+  // infrastructure pool, market access and the port tariff effect. Which
+  // buildings feed the pool is `INFRA_BUILDING_IDS` (currently just this one),
+  // kept as a seam so the merge can be re-split as a data-only change.
+  | 'infrastructure'
   | 'universities'
   | 'barracks'
   | 'offices'
@@ -529,10 +529,11 @@ export type Economy = {
   /**
    * 0..100 unified infrastructure level (plan 0011 F5). DERIVED, not accumulated:
    * it stores `clamp(100 × supply/demand, 0, 100)` where supply is the
-   * railroads/ports/canals/telegraphs pool and demand is Σ `infrastructureNeed`.
+   * `INFRA_BUILDING_IDS` pool (plan 0014: the single `infrastructure` building)
+   * and demand is Σ `infrastructureNeed`.
    * Production reads it (one-month lag) for the shortfall debuff; trade reads it
    * for transport cost. The field name is kept from the old "transport" scalar to
-   * avoid a save-shape break (World stays v11).
+   * avoid a save-shape break.
    */
   transportInfrastructure: number
   /** 0..100 administrative conditions; feeds the bureaucracy score. */

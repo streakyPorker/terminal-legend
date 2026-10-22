@@ -9,6 +9,7 @@ import type {
 import {
   BUILDINGS,
   BUILDING_RECIPES,
+  INFRA_BUILDING_IDS,
   INVESTMENT_DEMAND,
   deriveBureaucracy,
   effectiveCount,
@@ -28,20 +29,17 @@ import {
   ADMIN_CAPACITY_MAX,
   BUILDING_COST_ADDEND,
   BUILDING_COST_MULTIPLIER,
-  CANAL_MARKET_ACCESS,
   CAPACITY_COST,
   CONSTRUCTION_ACCESS_BASE,
   CONSTRUCTION_ACCESS_SLOPE,
   CONSTRUCTION_COST_PER_POINT,
   CONSTRUCTION_RENT_PER_POINT,
   CONSTRUCTION_SCHEDULE_MONTHS,
+  INFRA_MARKET_ACCESS,
   MAX_BUILDINGS_PER_SLOT,
   OFFICE_ADMIN_CAPACITY,
-  PORT_MARKET_ACCESS,
   PRIVATE_OWN_CAPACITY_SHARE,
-  RAILROAD_MARKET_ACCESS,
   SCHOOL_LITERACY_GAIN,
-  TELEGRAPH_MARKET_ACCESS,
   UNIVERSITY_ADMIN_CAPACITY,
   WORKLOAD_MULTIPLIER,
   WORKSHOP_CAPACITY_OUTPUT,
@@ -334,26 +332,22 @@ export function completeBuilding(country: Country, building: BuildingId, count: 
     0,
     (country.econ.buildings[building] ?? 0) + count,
   )
-  if (building === 'railroads') {
-    country.econ.marketAccess = clamp(country.econ.marketAccess + count * RAILROAD_MARKET_ACCESS, 0, 1)
-  }
-  if (building === 'ports') {
-    country.econ.marketAccess = clamp(country.econ.marketAccess + count * PORT_MARKET_ACCESS, 0, 1)
+  // Plan 0014 / ADR 0029: the merged infrastructure building keeps the providers'
+  // market-access completion side effect; iterate `INFRA_BUILDING_IDS` and read
+  // the per-building coefficient table so a future re-split stays data-only.
+  for (const id of INFRA_BUILDING_IDS) {
+    const access = INFRA_MARKET_ACCESS[id]
+    if (access === undefined) continue
+    if (building === id) {
+      country.econ.marketAccess = clamp(country.econ.marketAccess + count * access, 0, 1)
+    }
   }
   // Plan 0011 F4/F5. schools resolves the plan's §10 待定 ("建成时加识字率"): a
-  // completed primary school raises literacy on the spot. canals/telegraphs keep
-  // their market-access side effect, but their transport side effect retires:
-  // infrastructure is now the unified supply/demand pool (railroads/ports/canals/
-  // telegraphs supply it), refreshed below from the building counts. forts/
-  // navalYards have no completion side effect beyond their small output.
+  // completed primary school raises literacy on the spot. Infrastructure supply
+  // is derived from the building counts and refreshed below; universities and
+  // offices raise administrative capacity.
   if (building === 'schools') {
     country.pops.literacy = clamp(country.pops.literacy + count * SCHOOL_LITERACY_GAIN, 0, 1)
-  }
-  if (building === 'canals') {
-    country.econ.marketAccess = clamp(country.econ.marketAccess + count * CANAL_MARKET_ACCESS, 0, 1)
-  }
-  if (building === 'telegraphs') {
-    country.econ.marketAccess = clamp(country.econ.marketAccess + count * TELEGRAPH_MARKET_ACCESS, 0, 1)
   }
   if (building === 'universities') {
     country.econ.administrativeCapacity = clamp(

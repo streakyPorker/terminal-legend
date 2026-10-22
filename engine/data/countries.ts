@@ -32,9 +32,10 @@ export const GOVERNMENT_TYPES = [
 ]
 
 const buildings = (counts: Partial<Record<BuildingId, number>>): Record<BuildingId, number> => {
-  // Any id a seed omits starts at 0. The F4 buildings (schools/canals/telegraphs/
-  // forts/navalYards) are deliberately seeded at 0: they grow only when built, so
+  // Any id a seed omits starts at 0. The F4 buildings (schools/forts/
+  // navalYards) are deliberately seeded at 0: they grow only when built, so
   // the 1836 baseline and the goods calibration are untouched (F7 re-calibrates).
+  // Plan 0014 folded railroads/ports into the single `infrastructure` count.
   const out = {} as Record<BuildingId, number>
   for (const id of BUILDING_IDS) out[id] = counts[id] ?? 0
   return out
@@ -148,7 +149,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 13,
     tariff: 8,
     spending: spending(6, 0.8, 4, 1, 0.5, 1.5),
-    buildings: buildings({ farms: 3000, coalMines: 18, ironMines: 15, lumberMills: 2, textileMills: 9, furnitureWorks: 2, distilleries: 1, machineryWorks: 4, steelMills: 1, arsenals: 2, luxuryWorks: 1, railroads: 0, ports: 16, universities: 4, barracks: 40, offices: 4, workshops: 12 }),
+    buildings: buildings({ farms: 3000, coalMines: 18, ironMines: 15, lumberMills: 2, textileMills: 9, furnitureWorks: 2, distilleries: 1, machineryWorks: 4, steelMills: 1, arsenals: 2, luxuryWorks: 1, infrastructure: 8, universities: 4, barracks: 40, offices: 4, workshops: 12 }),
     marketAccess: 0.45,
     unemployment: 6,
     resources: resources(85, 60, 65, 40),
@@ -203,7 +204,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 12,
     tariff: 5,
     spending: spending(4, 6, 2.5, 1.2, 1.5, 2),
-    buildings: buildings({ farms: 110, coalMines: 47, ironMines: 40, lumberMills: 3, textileMills: 67, furnitureWorks: 17, distilleries: 12, machineryWorks: 35, steelMills: 6, arsenals: 12, luxuryWorks: 11, railroads: 25, ports: 60, universities: 18, barracks: 20, offices: 14, workshops: 24 }),
+    buildings: buildings({ farms: 110, coalMines: 47, ironMines: 40, lumberMills: 3, textileMills: 67, furnitureWorks: 17, distilleries: 12, machineryWorks: 35, steelMills: 6, arsenals: 12, luxuryWorks: 11, infrastructure: 59, universities: 18, barracks: 20, offices: 14, workshops: 24 }),
     marketAccess: 0.9,
     unemployment: 8,
     resources: resources(45, 25, 100, 95),
@@ -258,7 +259,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: -2,
     tariff: 12,
     spending: spending(5, 3, 2.5, 1, 1.2, 1.8),
-    buildings: buildings({ farms: 260, coalMines: 29, ironMines: 24, lumberMills: 2, textileMills: 39, furnitureWorks: 10, distilleries: 7, machineryWorks: 21, steelMills: 4, arsenals: 7, luxuryWorks: 7, railroads: 8, ports: 30, universities: 12, barracks: 30, offices: 10, workshops: 16 }),
+    buildings: buildings({ farms: 260, coalMines: 29, ironMines: 24, lumberMills: 2, textileMills: 39, furnitureWorks: 10, distilleries: 7, machineryWorks: 21, steelMills: 4, arsenals: 7, luxuryWorks: 7, infrastructure: 25, universities: 12, barracks: 30, offices: 10, workshops: 16 }),
     marketAccess: 0.75,
     unemployment: 7,
     resources: resources(70, 55, 55, 60),
@@ -313,7 +314,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 4,
     tariff: 8,
     spending: spending(4.5, 0.5, 1.8, 1.1, 0.8, 1.5),
-    buildings: buildings({ farms: 180, coalMines: 36, ironMines: 31, lumberMills: 3, textileMills: 26, furnitureWorks: 6, distilleries: 4, machineryWorks: 13, steelMills: 2, arsenals: 5, luxuryWorks: 4, railroads: 7, ports: 12, universities: 11, barracks: 22, offices: 8, workshops: 10 }),
+    buildings: buildings({ farms: 180, coalMines: 36, ironMines: 31, lumberMills: 3, textileMills: 26, furnitureWorks: 6, distilleries: 4, machineryWorks: 13, steelMills: 2, arsenals: 5, luxuryWorks: 4, infrastructure: 14, universities: 11, barracks: 22, offices: 8, workshops: 10 }),
     marketAccess: 0.7,
     unemployment: 5,
     resources: resources(60, 45, 80, 70),
@@ -368,7 +369,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 6,
     tariff: 15,
     spending: spending(6, 1.2, 3, 0.3, 0.4, 1),
-    buildings: buildings({ farms: 900, coalMines: 36, ironMines: 31, lumberMills: 3, textileMills: 14, furnitureWorks: 4, distilleries: 3, machineryWorks: 8, steelMills: 1, arsenals: 3, luxuryWorks: 2, railroads: 5, ports: 14, universities: 6, barracks: 50, offices: 6, workshops: 8 }),
+    buildings: buildings({ farms: 900, coalMines: 36, ironMines: 31, lumberMills: 3, textileMills: 14, furnitureWorks: 4, distilleries: 3, machineryWorks: 8, steelMills: 1, arsenals: 3, luxuryWorks: 2, infrastructure: 13, universities: 6, barracks: 50, offices: 6, workshops: 8 }),
     marketAccess: 0.5,
     unemployment: 4,
     resources: resources(80, 90, 40, 55),
@@ -423,7 +424,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: -5,
     tariff: 10,
     spending: spending(4, 0.6, 2.2, 0.6, 0.7, 1),
-    buildings: buildings({ farms: 420, coalMines: 31, ironMines: 26, lumberMills: 3, textileMills: 18, furnitureWorks: 5, distilleries: 3, machineryWorks: 10, steelMills: 2, arsenals: 4, luxuryWorks: 3, railroads: 7, ports: 9, universities: 8, barracks: 30, offices: 7, workshops: 10 }),
+    buildings: buildings({ farms: 420, coalMines: 31, ironMines: 26, lumberMills: 3, textileMills: 18, furnitureWorks: 5, distilleries: 3, machineryWorks: 10, steelMills: 2, arsenals: 4, luxuryWorks: 3, infrastructure: 13, universities: 8, barracks: 30, offices: 7, workshops: 10 }),
     marketAccess: 0.65,
     unemployment: 6,
     resources: resources(65, 65, 50, 45),
@@ -478,7 +479,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 14,
     tariff: 20,
     spending: spending(1.5, 1.2, 1.2, 0.8, 0.5, 1.5),
-    buildings: buildings({ farms: 300, coalMines: 29, ironMines: 24, lumberMills: 2, textileMills: 23, furnitureWorks: 6, distilleries: 4, machineryWorks: 12, steelMills: 2, arsenals: 4, luxuryWorks: 4, railroads: 6, ports: 25, universities: 10, barracks: 12, offices: 8, workshops: 8 }),
+    buildings: buildings({ farms: 300, coalMines: 29, ironMines: 24, lumberMills: 2, textileMills: 23, furnitureWorks: 6, distilleries: 4, machineryWorks: 12, steelMills: 2, arsenals: 4, luxuryWorks: 4, infrastructure: 20, universities: 10, barracks: 12, offices: 8, workshops: 8 }),
     marketAccess: 0.7,
     unemployment: 5,
     resources: resources(90, 85, 75, 70),
@@ -533,7 +534,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: 3,
     tariff: 5,
     spending: spending(2.5, 0.6, 1.5, 0.5, 0.3, 0.8),
-    buildings: buildings({ farms: 380, coalMines: 11, ironMines: 10, lumberMills: 1, textileMills: 5, furnitureWorks: 1, distilleries: 1, machineryWorks: 3, steelMills: 0, arsenals: 1, luxuryWorks: 1, railroads: 0, ports: 10, universities: 4, barracks: 15, offices: 4, workshops: 3 }),
+    buildings: buildings({ farms: 380, coalMines: 11, ironMines: 10, lumberMills: 1, textileMills: 5, furnitureWorks: 1, distilleries: 1, machineryWorks: 3, steelMills: 0, arsenals: 1, luxuryWorks: 1, infrastructure: 5, universities: 4, barracks: 15, offices: 4, workshops: 3 }),
     marketAccess: 0.4,
     unemployment: 3,
     resources: resources(45, 55, 20, 15),
@@ -588,7 +589,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: -7,
     tariff: 12,
     spending: spending(3, 0.8, 2, 0.3, 0.3, 0.6),
-    buildings: buildings({ farms: 420, coalMines: 13, ironMines: 11, lumberMills: 1, textileMills: 6, furnitureWorks: 1, distilleries: 1, machineryWorks: 3, steelMills: 1, arsenals: 1, luxuryWorks: 1, railroads: 0, ports: 12, universities: 3, barracks: 22, offices: 4, workshops: 4 }),
+    buildings: buildings({ farms: 420, coalMines: 13, ironMines: 11, lumberMills: 1, textileMills: 6, furnitureWorks: 1, distilleries: 1, machineryWorks: 3, steelMills: 1, arsenals: 1, luxuryWorks: 1, infrastructure: 6, universities: 3, barracks: 22, offices: 4, workshops: 4 }),
     marketAccess: 0.45,
     unemployment: 8,
     resources: resources(55, 45, 35, 30),
@@ -643,7 +644,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     treasury: -11,
     tariff: 12,
     spending: spending(2, 0.8, 1.5, 0.4, 0.4, 0.6),
-    buildings: buildings({ farms: 220, coalMines: 16, ironMines: 13, lumberMills: 1, textileMills: 9, furnitureWorks: 2, distilleries: 1, machineryWorks: 4, steelMills: 1, arsenals: 2, luxuryWorks: 1, railroads: 2, ports: 14, universities: 6, barracks: 14, offices: 4, workshops: 4 }),
+    buildings: buildings({ farms: 220, coalMines: 16, ironMines: 13, lumberMills: 1, textileMills: 9, furnitureWorks: 2, distilleries: 1, machineryWorks: 4, steelMills: 1, arsenals: 2, luxuryWorks: 1, infrastructure: 9, universities: 6, barracks: 14, offices: 4, workshops: 4 }),
     marketAccess: 0.55,
     unemployment: 10,
     resources: resources(55, 40, 35, 45),

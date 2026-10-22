@@ -75,8 +75,8 @@ describe('steel good and the iron-ore rename (plan 0011 F1)', () => {
       expect(building.iron).toBeUndefined()
     }
     expect(Object.values(INVESTMENT_DEMAND).some(basket => (basket.steel ?? 0) > 0)).toBe(true)
-    expect(BUILDING_RECIPES.railroads.input.steel).toBeGreaterThan(0)
-    expect(BUILDING_RECIPES.railroads.input.iron).toBeUndefined()
+    expect(BUILDING_RECIPES.infrastructure.input.steel).toBeGreaterThan(0)
+    expect(BUILDING_RECIPES.infrastructure.input.iron).toBeUndefined()
   })
 
   test('the ore→steel chain: steel mills consume ore + coal and produce steel', async () => {

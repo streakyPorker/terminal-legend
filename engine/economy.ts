@@ -22,6 +22,7 @@ import {
   WAGE_ALLOCATION,
   deriveLabor,
   effectiveCount,
+  infrastructureCount,
   infrastructureMultiplier,
   infrastructureStats,
   infrastructureUpkeep,
@@ -677,7 +678,7 @@ function computePrestige(country: Country): number {
         country.military.army * PRESTIGE_ARMY +
         country.military.navy * PRESTIGE_NAVY +
         country.tech.level * PRESTIGE_TECH +
-        country.econ.buildings.ports * PRESTIGE_PORT,
+        infrastructureCount(country) * PRESTIGE_PORT,
     ),
     0,
     PRESTIGE_MAX,

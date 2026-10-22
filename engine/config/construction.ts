@@ -23,12 +23,9 @@ export const CAPACITY_COST: Record<BuildingId, number> = {
   arsenals: 2,
   luxuryWorks: 2,
   schools: 1,
-  canals: 3,
-  telegraphs: 1.5,
+  infrastructure: 3,
   forts: 2,
   navalYards: 2.5,
-  railroads: 4,
-  ports: 1.5,
   universities: 2,
   barracks: 1,
   offices: 1,
@@ -59,12 +56,9 @@ export const BUILDING_COST_MULTIPLIER: Record<BuildingId, number> = {
   arsenals: 1,
   luxuryWorks: 1,
   schools: 1,
-  canals: 1,
-  telegraphs: 1,
+  infrastructure: 1,
   forts: 1,
   navalYards: 1,
-  railroads: 1,
-  ports: 1,
   universities: 1,
   barracks: 1,
   offices: 1,
@@ -84,12 +78,9 @@ export const BUILDING_COST_ADDEND: Record<BuildingId, number> = {
   arsenals: 0,
   luxuryWorks: 0,
   schools: 0,
-  canals: 0,
-  telegraphs: 0,
+  infrastructure: 0,
   forts: 0,
   navalYards: 0,
-  railroads: 0,
-  ports: 0,
   universities: 0,
   barracks: 0,
   offices: 0,
@@ -103,11 +94,17 @@ export const CONSTRUCTION_ACCESS_SLOPE = 0.9
 export const CONSTRUCTION_SCHEDULE_MONTHS = 60
 
 /** Completion side effects. */
-export const RAILROAD_MARKET_ACCESS = 0.02
-export const PORT_MARKET_ACCESS = 0.01
+/**
+ * Market access each infrastructure building adds on completion (plan 0014).
+ * Keyed by `INFRA_BUILDING_IDS` member so a future re-split stays data-only. The
+ * value preserves the pre-merge market-access total over the folded infra stock
+ * (old per-building weights: railroad 0.02 / port 0.01 / canal 0.01 / telegraph
+ * 0.005).
+ */
+export const INFRA_MARKET_ACCESS: Partial<Record<BuildingId, number>> = {
+  infrastructure: 0.019,
+}
 export const SCHOOL_LITERACY_GAIN = 0.002
-export const CANAL_MARKET_ACCESS = 0.01
-export const TELEGRAPH_MARKET_ACCESS = 0.005
 export const UNIVERSITY_ADMIN_CAPACITY = 0.5
 export const OFFICE_ADMIN_CAPACITY = 1
 /** Ceiling on administrative capacity the completion side effects clamp to. */

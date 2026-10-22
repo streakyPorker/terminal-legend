@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { GOODS, GOOD_IDS, makeRngForWorld } from '../engine/data'
+import { GOODS, GOOD_IDS, makeRngForWorld, infrastructureCount } from '../engine/data'
 import { advance, clone, computeEconomy, inspectEconomy, newWorld } from '../engine/sim'
 import { nationalDebt } from '../engine/fiscal'
 import {
@@ -210,12 +210,12 @@ describe('T1b gold settlement (plan §2.4)', () => {
 })
 
 describe('T1b soft import capacity (plan §2.3)', () => {
-  test('the capacity formula matches ports, access and transport', async () => {
+  test('the capacity formula matches infrastructure, access and transport', async () => {
     const world = newWorld(7005, 'QING')
     const qing = countryOf(world, 'QING')
     const expected =
       50 +
-      qing.econ.buildings.ports * 8 +
+      infrastructureCount(qing) * 8 +
       qing.econ.marketAccess * 200 +
       qing.econ.transportInfrastructure * 1
     expect(Math.abs(importCapacity(qing, 1) - expected)).toBeLessThan(1e-9)

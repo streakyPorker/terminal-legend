@@ -6,7 +6,7 @@ import type {
   TradeFlow,
   TradeRoute,
 } from '../types'
-import { GOODS, GOOD_IDS, REGION_COST } from './data'
+import { GOODS, GOOD_IDS, REGION_COST, infrastructureCount } from './data'
 import { RESOURCE_IMPORT_GOOD } from './endowment'
 import {
   ACCESS_FACTOR_BASE,
@@ -159,7 +159,7 @@ export function routeCapacityFactor(from: Country, to: Country): number {
     1 +
     (from.econ.transportInfrastructure + to.econ.transportInfrastructure) /
       ROUTE_CAPACITY_TRANSPORT_DIVISOR +
-    to.econ.buildings.ports * ROUTE_CAPACITY_PORT_COEF
+    infrastructureCount(to) * ROUTE_CAPACITY_PORT_COEF
   )
 }
 
@@ -426,7 +426,7 @@ export function clearTrade(
 export function importCapacity(country: Country, tick: number): number {
   const base =
     IMPORT_CAPACITY_BASE +
-    country.econ.buildings.ports * IMPORT_CAPACITY_PORT +
+    infrastructureCount(country) * IMPORT_CAPACITY_PORT +
     country.econ.marketAccess * IMPORT_CAPACITY_ACCESS +
     country.econ.transportInfrastructure * IMPORT_CAPACITY_TRANSPORT
   return tick <= country.econ.restructuredUntilTick
