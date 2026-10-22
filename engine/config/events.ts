@@ -17,6 +17,14 @@ export const EVENT_RELATION_BACK_FACTOR = 0.6
 
 /** Live-event parse caps (plan 0010 §4). */
 export const LIVE_MAX_EVENTS = 2
+/**
+ * Multi-subject generation caps (plan 0010 E5/§7): how many major powers may
+ * contribute events in one turn, and the hard ceiling on `$.model.complete`
+ * calls the generator may issue to bound cost/latency. One call per subject, so
+ * the call cap is an independent guard against a mis-sized subject list.
+ */
+export const LIVE_MAX_SUBJECTS = 2
+export const LIVE_MAX_MODEL_CALLS = 2
 export const LIVE_MAX_OPTIONS = 4
 export const LIVE_MAX_MODIFIERS = 8
 export const LIVE_MODIFIER_VALUE_CAP = 500

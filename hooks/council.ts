@@ -17,13 +17,7 @@ import { saveGame } from '../engine/save'
 import { fiscalLedger } from '../engine/fiscal'
 import { monthlyBriefing } from '../engine/secretary'
 import { settleDueSituations } from '../engine/situations'
-import {
-  buildLiveEventPrompt,
-  parseLiveEventResponse,
-  salientTopics,
-  type LiveEventCandidate,
-} from '../engine/liveEvents'
-import { LIVE_MAX_EVENTS } from '../engine/config/events'
+import { generateLiveEvents } from '../engine/liveEvents'
 import { EVENTS_MAX } from '../engine/config/balance'
 import { fmtDate, fmtNumber, fmtSigned } from '../view/format'
 import {
@@ -102,37 +96,17 @@ function liveEventCompleter(
 }
 
 /**
- * The post-`advance` seam (ADR 0025 §1): scan salient topics, one blocking
- * generation call, strict parse/validate, then wrap accepted candidates as
- * self-contained `GameEvent`s for `world.events`. Returns [] on any failure so
- * the caller never has to branch; never throws.
+ * The post-`advance` seam (ADR 0025 §1): the engine scans each major power from
+ * its own perspective and drives one bounded model call per subject through
+ * `generateLiveEvents`, which returns validated `GameEvent`s for
+ * `world.events`. Returns [] on any failure so the caller never has to branch;
+ * never throws.
  */
 async function generateTurnEvents(
   $: EngineInterface,
   world: WorldState,
 ): Promise<GameEvent[]> {
-  const country = world.countries[world.playerId]
-  if (country === undefined) return []
-  const topics = salientTopics(world, country)
-  if (topics.length === 0) return []
-  const prompt = buildLiveEventPrompt(world, country, topics)
-  const text = await liveEventCompleter($, world)(prompt)
-  if (text === '') return []
-  const countryIds = Object.keys(world.countries)
-  const candidates: LiveEventCandidate[] = parseLiveEventResponse(text, {
-    countryIds,
-    maxEvents: LIVE_MAX_EVENTS,
-  })
-  return candidates.map((candidate, index) => ({
-    id: `live-${world.tick}-${world.playerId}-${index}`,
-    date: { ...world.date },
-    kind: candidate.kind,
-    title: candidate.title,
-    text: candidate.text,
-    countryId: world.playerId,
-    options: candidate.options,
-    isResolved: false,
-  }))
+  return generateLiveEvents(world, liveEventCompleter($, world))
 }
 
 function summarize(report: AdvanceReport, months: number): string {
@@ -211,13 +185,12 @@ export async function advanceGame(
           if (world.events.length > EVENTS_MAX) {
             world.events.splice(0, world.events.length - EVENTS_MAX)
           }
-          const player = world.countries[world.playerId]
           for (const event of generated) {
             world.log.push({
               date: { ...world.date },
               kind: 'event',
-              countryId: world.playerId,
-              text: `[${player?.flag ?? ''}] 新事件：${event.title} — ${event.text}`,
+              countryId: event.countryId,
+              text: `[${world.countries[event.countryId]?.flag ?? ''}] 新事件：${event.title} — ${event.text}`,
             })
           }
           if (world.log.length > 400) world.log.splice(0, world.log.length - 400)

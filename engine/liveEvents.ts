@@ -1,6 +1,7 @@
 import type {
   Country,
   EventOption,
+  GameEvent,
   ModifierStack,
   ModifierStat,
   WorldState,
@@ -21,8 +22,10 @@ import {
   LIVE_LEGITIMACY_STRESS_MIN,
   LIVE_LITERACY_TARGET,
   LIVE_MAX_EVENTS,
+  LIVE_MAX_MODEL_CALLS,
   LIVE_MAX_MODIFIERS,
   LIVE_MAX_OPTIONS,
+  LIVE_MAX_SUBJECTS,
   LIVE_MAX_TOPICS,
   LIVE_MODIFIER_LABEL_MAX,
   LIVE_MODIFIER_MONTHS_MAX as MODIFIER_MONTHS_MAX,
@@ -613,4 +616,110 @@ export function parseLiveEventResponse(
     candidates.push({ kind, title, text: body, options: eventOptions })
   }
   return candidates
+}
+
+// ---------------------------------------------------------------- subjects
+
+/** One generation subject: a power and the topics it is written from. */
+export type LiveSubject = {
+  country: Country
+  topics: SalientTopic[]
+}
+
+/**
+ * Chooses the subjects for one turn (plan 0010 E5): the player first, then the
+ * largest economies by GDP (id tie-break). A topic already claimed by an earlier
+ * subject is dropped from later ones — the cross-subject de-duplication rule
+ * left 待定 in plan §10 — and a subject left with no topics is skipped. Pure and
+ * deterministic in the world state alone.
+ */
+export function planLiveSubjects(
+  world: WorldState,
+  maxSubjects = LIVE_MAX_SUBJECTS,
+  maxTopics = LIVE_MAX_TOPICS,
+): LiveSubject[] {
+  const limit = clamp(Math.floor(maxSubjects), 1, LIVE_MAX_SUBJECTS)
+  const rows = Object.values(world.countries)
+    .map(country => ({
+      country,
+      topics: salientTopics(world, country, maxTopics),
+      gdp: country.econ.gdp,
+    }))
+    .filter(row => row.topics.length > 0)
+  rows.sort((a, b) => {
+    if (a.country.isPlayer !== b.country.isPlayer) return a.country.isPlayer ? -1 : 1
+    if (b.gdp !== a.gdp) return b.gdp - a.gdp
+    return a.country.id < b.country.id ? -1 : 1
+  })
+  const subjects: LiveSubject[] = []
+  const claimed = new Set<string>()
+  for (const row of rows) {
+    if (subjects.length >= limit) break
+    const topics = row.topics.filter(topic => !claimed.has(topic.key))
+    if (topics.length === 0) continue
+    for (const topic of topics) claimed.add(topic.key)
+    subjects.push({ country: row.country, topics })
+  }
+  return subjects
+}
+
+// ---------------------------------------------------------------- generation
+
+export type LiveEventGenerationOptions = {
+  /** Max subjects to scan; clamped to LIVE_MAX_SUBJECTS. Default the cap. */
+  maxSubjects?: number
+  /** Hard cap on model calls this turn. Default LIVE_MAX_MODEL_CALLS. */
+  maxCalls?: number
+  /** Known country ids for relationTarget validation. Default all countries. */
+  countryIds?: readonly string[]
+}
+
+/**
+ * The per-turn generation loop (plan 0010 §2/§7): one prompt per subject, one
+ * model call per subject, strict parse, candidates wrapped as `GameEvent`s
+ * attributed to their subject. Never throws; a failed or timed-out call yields
+ * nothing for that subject so the caller degrades silently. Live events for the
+ * turn are capped at LIVE_MAX_EVENTS whatever the subject count, and calls never
+ * exceed `maxCalls` (the cost/latency guard of plan §7).
+ */
+export async function generateLiveEvents(
+  world: WorldState,
+  complete: (prompt: string) => Promise<string>,
+  options: LiveEventGenerationOptions = {},
+): Promise<GameEvent[]> {
+  const maxCalls = Math.max(1, Math.floor(options.maxCalls ?? LIVE_MAX_MODEL_CALLS))
+  const subjects = planLiveSubjects(world, options.maxSubjects ?? LIVE_MAX_SUBJECTS)
+  const countryIds = options.countryIds ?? Object.keys(world.countries)
+  const events: GameEvent[] = []
+  let calls = 0
+  for (const subject of subjects) {
+    if (calls >= maxCalls) break
+    if (events.length >= LIVE_MAX_EVENTS) break
+    calls += 1
+    let text = ''
+    try {
+      text = await complete(buildLiveEventPrompt(world, subject.country, subject.topics))
+    } catch {
+      text = ''
+    }
+    if (text === '') continue
+    const candidates = parseLiveEventResponse(text, {
+      countryIds,
+      maxEvents: LIVE_MAX_EVENTS,
+    })
+    candidates.forEach((candidate, index) => {
+      if (events.length >= LIVE_MAX_EVENTS) return
+      events.push({
+        id: `live-${world.tick}-${subject.country.id}-${index}`,
+        date: { ...world.date },
+        kind: candidate.kind,
+        title: candidate.title,
+        text: candidate.text,
+        countryId: subject.country.id,
+        options: candidate.options,
+        isResolved: false,
+      })
+    })
+  }
+  return events
 }
