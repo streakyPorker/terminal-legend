@@ -186,7 +186,7 @@ export const TOOL_SPECS: {
   {
     name: 'v3_action',
     description:
-      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count；可选 position=head/tail/before/after，默认 tail，before 为 before/after 的锚点项目 id）、cancel（取消国有项目，需 projectId 或 index（1-based 队列序号））、reorder（调整建造队列顺位，需 projectId 或 index，配 position/before）、tax（调整某一税基的税率，需 base（land=土地/profit=企业所得税/consumption=消费税/tariff=关税）与 rate；缺省 base 返回税菜单）、tariff（关税：rate 为进口税率，可选 exportRate 单独设出口税率；省略则进出口同率）、spending（支出，需 category/amount）、research（研究方向，需 tech）、conscript（征兵，需 amount）、law（法案，需 name）、route（贸易路线：op 取 open/raise/lower/close，需 good 与 partner）。',
+      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count；可选 position=head/tail/before/after，默认 tail，before 为 before/after 的锚点项目 id）、cancel（取消国有项目，需 projectId 或 index（1-based 队列序号））、reorder（调整建造队列顺位，需 projectId 或 index，配 position/before）、tax（调整某一税基的税率，需 base（land=土地/profit=企业所得税/consumption=消费税/tariff=关税）与 rate；缺省 base 返回税菜单）、tariff（关税：rate 为进口税率，可选 exportRate 单独设出口税率；省略则进出口同率）、spending（支出，需 category/amount）、research（选择科技节点，需 tech=节点 id，如 industry-1；需前置与时代门槛满足）、conscript（征兵，需 amount）、law（法案，需 name）、route（贸易路线：op 取 open/raise/lower/close，需 good 与 partner）。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -263,7 +263,7 @@ export const TOOL_SPECS: {
           enum: ['army', 'navy', 'bureaucracy', 'education', 'welfare', 'construction'],
         },
         amount: { type: 'number', minimum: 0, maximum: 50 },
-        tech: { type: 'string' },
+        tech: { type: 'string', description: 'research 时的科技节点 id（如 general-1850、industry-1）。' },
         op: {
           type: 'string',
           enum: ['open', 'raise', 'lower', 'close'],

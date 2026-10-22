@@ -23,6 +23,14 @@ const build = (
     makeRngForWorld(world),
   )
 
+// Drives the derived tech tier (plan 0005 K0) to an exact value for gate tests:
+// techTier = 1 + era×1.5 + unlocked×0.05, held at era 1 with a padded unlock list.
+const setTier = (country: Country, tier: number): void => {
+  country.tech.era = 1
+  const count = Math.max(0, Math.round((tier - 2.5) / 0.05))
+  country.tech.unlocked = Array.from({ length: count }, (_, i) => `tier-node-${i}`)
+}
+
 // Plan 0011 F6: forward-compatible building unlock. A building is gated while
 // `unlock.techLevel` exceeds the country's level; no building sets one today, so
 // every build stays bit-for-bit buildable.
@@ -32,7 +40,7 @@ describe('F6 building unlock gate', () => {
     const qing = countryOf(world, 'QING')
     qing.econ.treasury = 1000
     for (const level of [0, 5, 10]) {
-      qing.tech.level = level
+      setTier(qing, level)
       const before = qing.econ.constructionQueue.length
       const result = build(world, 'QING', 'farms')
       expect(result.ok, `tech level ${level}`).toBe(true)
@@ -44,7 +52,7 @@ describe('F6 building unlock gate', () => {
     const world = newWorld(9100, 'QING')
     const qing = countryOf(world, 'QING')
     qing.econ.treasury = 1000
-    qing.tech.level = 2
+    setTier(qing, 2)
     const saved = BUILDINGS.farms.unlock
     try {
       BUILDINGS.farms.unlock = { techLevel: 3 }
@@ -66,9 +74,9 @@ describe('F6 building unlock gate', () => {
     const saved = BUILDINGS.farms.unlock
     try {
       BUILDINGS.farms.unlock = { techLevel: 3 }
-      qing.tech.level = 3
+      setTier(qing, 3)
       expect(build(world, 'QING', 'farms').ok).toBe(true)
-      qing.tech.level = 5
+      setTier(qing, 5)
       expect(build(world, 'QING', 'farms').ok).toBe(true)
     } finally {
       if (saved === undefined) delete BUILDINGS.farms.unlock
@@ -80,7 +88,7 @@ describe('F6 building unlock gate', () => {
     const world = newWorld(9100, 'QING')
     const qing = countryOf(world, 'QING')
     qing.econ.treasury = 1000
-    qing.tech.level = 0
+    setTier(qing, 0)
     const saved = BUILDINGS.farms.unlock
     try {
       BUILDINGS.farms.unlock = {}
@@ -105,7 +113,7 @@ describe('F6 building unlock gate', () => {
     const world = newWorld(9100, 'QING')
     const qing = countryOf(world, 'QING')
     qing.econ.treasury = 10000
-    qing.tech.level = 0
+    setTier(qing, 0)
     for (const id of BUILDING_IDS) {
       expect(build(world, 'QING', id).ok, `build ${id}`).toBe(true)
     }
@@ -134,7 +142,7 @@ describe('F6 building unlock gate', () => {
     expect(applied.ok).toBe(true)
   })
 
-  test('the world stays at version 12', () => {
-    expect(newWorld(9100, 'QING').version).toBe(12)
+  test('the world stays at version 13', () => {
+    expect(newWorld(9100, 'QING').version).toBe(13)
   })
 })
