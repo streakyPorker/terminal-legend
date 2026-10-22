@@ -24,6 +24,7 @@ import {
   type LiveEventCandidate,
 } from '../engine/liveEvents'
 import { LIVE_MAX_EVENTS } from '../engine/config/events'
+import { EVENTS_MAX } from '../engine/config/balance'
 import { fmtDate, fmtNumber, fmtSigned } from '../view/format'
 import {
   LIVE_EVENT_TIMEOUT_MS,
@@ -207,7 +208,9 @@ export async function advanceGame(
         const generated = await generateTurnEvents($, world)
         if (generated.length > 0) {
           world.events.push(...generated)
-          if (world.events.length > 80) world.events.splice(0, world.events.length - 80)
+          if (world.events.length > EVENTS_MAX) {
+            world.events.splice(0, world.events.length - EVENTS_MAX)
+          }
           const player = world.countries[world.playerId]
           for (const event of generated) {
             world.log.push({
