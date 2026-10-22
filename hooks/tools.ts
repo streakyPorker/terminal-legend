@@ -67,7 +67,7 @@ export const TOOL_SPECS: {
   {
     name: 'v3_inspect',
     description:
-      '终末传奇：只读明细查询。section 取 economy（GDP 分解/物价/缺口）、market（商品市场供需与对外贸易/伙伴）、fiscal（收支/债务/税率）、labor（失业分解/工资）、trade（分商品进出口/伙伴）、routes（贸易路线：商品/起止/等级/运量/利差）、buildings（建筑类型配方/造价/工程量/建造点与逐建筑经营利润/存量）、construction（建造力/队列/租金）、military（军力/战争）、pops（人口阶级结构/识字/生活水平/激进忠诚）、diplomacy（关系/盟友/对手/禁运/贸易张力/局势）、tech（科技等级/点数/研究率分解）、modifiers（生效修正：来源/stat/栈/值/到期）、rankings（列强五维排名数据）、log（最近编年史，可用 kind/country/limit 过滤）、history（近 12 个月序列）。遇到“为什么变了”先用它，不要读存档或源码。',
+      '终末传奇：只读明细查询。section 取 economy（GDP 分解/物价/缺口）、market（商品市场供需与对外贸易/伙伴）、fiscal（收支/债务/税率）、labor（失业分解/工资）、trade（分商品进出口/伙伴）、routes（贸易路线：商品/起止/等级/运量/利差）、buildings（建筑类型配方/造价/工程量/建造点与逐建筑经营利润/存量）、construction（建造力/队列/租金）、military（军力/战争）、pops（人口阶级结构/识字/生活水平/激进忠诚）、diplomacy（关系/盟友/对手/禁运/贸易张力/局势）、tech（科技等级/点数/研究率分解）、modifiers（生效修正：来源/stat/栈/值/到期）、rankings（列强五维排名数据；默认只给五维，可按需用 metrics 追加列）、log（最近编年史，可用 kind/country/limit 过滤）、history（近 12 个月序列）。遇到“为什么变了”先用它，不要读存档或源码。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -89,6 +89,23 @@ export const TOOL_SPECS: {
           minimum: 1,
           maximum: 100,
           description: '仅 log 分区：返回的最近条数，缺省 20。',
+        },
+        metrics: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: [
+              'construction',
+              'privateCapital',
+              'infrastructure',
+              'loyalty',
+              'quality',
+              'manpower',
+              'techPoints',
+            ],
+          },
+          description:
+            '仅 rankings 分区：按需追加的列（construction 建造力 / privateCapital 私人资本 / infrastructure 基建 / loyalty 忠诚 / quality 军队质量 / manpower 人力 / techPoints 科技点）。',
         },
       },
       additionalProperties: false,
@@ -518,6 +535,7 @@ export const handleV3Inspect = async ($: EngineInterface, e: any) => {
     if (typeof args.kind === 'string') options.kind = args.kind
     if (typeof args.country === 'string') options.country = args.country.toUpperCase()
     if (typeof args.limit === 'number') options.limit = args.limit
+    if (Array.isArray(args.metrics)) options.metrics = args.metrics.map(String)
     return toolOk(inspectWorld(current.world, section, options))
   } catch (error) {
     return toolFail(`明细查询失败：${String(error)}`)

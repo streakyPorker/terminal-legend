@@ -89,6 +89,14 @@ describe('v3_inspect (plan 0006)', () => {
     for (const dimension of ['经济', '人口与社会', '军事', '科技与行政', '外交与威望']) {
       expect(rankings).toContain(dimension)
     }
+    // Default rankings stay at the five dimensions; extra parameters are on demand.
+    expect(rankings).not.toContain('建造力')
+    const extended = inspectWorld(world, 'rankings', {
+      metrics: ['construction', 'privateCapital', 'infrastructure', 'loyalty', 'quality', 'manpower', 'techPoints'],
+    })
+    for (const column of ['建造力', '私人资本', '基建', '忠诚', '质量', '人力', '科技点']) {
+      expect(extended).toContain(column)
+    }
   })
 
   test('de-duplication: facts live in exactly one section', async () => {

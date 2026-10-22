@@ -1010,3 +1010,23 @@
   - `v3_cheat` 的 treasury/techPoints/building/finishProjects/event/leader/modifier
     同步支持 `country`（补上跨国资产转移的叙事通道）。
 - 状态：**fixed（496408b）**
+
+
+### PT-051 `v3_inspect rankings` 缺少建造力等跨国关键参数
+
+- 日期：2026-10-22
+- 游戏内日期：1837.01
+- 现象：玩家问「全世界的建造力和 GDP」，`rankings` 只有 GDP/净资产/收入/国债、
+  人口/识字/生活水平/失业/激进、陆军/海军/士气/战力、科技/官僚/合法性/权威、威望/恶名；
+  **建造力、私人资本、基建水平、忠诚、军队质量与人力、科技点全部缺失**。
+  唯一能查到建造力的只有玩家国的 `v3_inspect construction`。
+- 判断：跨国比较的常用维度不全，GM 无法判断“别国工业扩张有多快 / 我们的建造力排第几”。
+- 建议：**默认仍只给五维**，其余参数按需追加，避免每次排名都输出一大堆用不上的列。
+- 关联：`engine/inspect/rankings.ts`、`engine/sim.ts`（`constructionLoad`）
+- 优先级：**P2**
+- 修复：
+  - `v3_inspect rankings` 新增可选 `metrics`：`construction`（建造力，`constructionLoad().capacity`）、
+    `privateCapital`、`infrastructure`、`loyalty`、`quality`、`manpower`、`techPoints`；
+  - 默认输出**保持五维不变**，请求时才在对应维度追加列，并在标题下注明「附加列（按需）」；
+  - `tests/inspect.test.ts` 断言：默认不含「建造力」，传 `metrics` 后七列齐备。
+- 状态：**fixed（本次提交）**

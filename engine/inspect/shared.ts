@@ -10,6 +10,11 @@ export type InspectOptions = {
   country?: string
   /** `log`: how many trailing entries to return (default 20, clamped 1..100). */
   limit?: number
+  /**
+   * `rankings`: optional extra columns. The five default dimensions stay lean;
+   * anything else is requested on demand (construction, privateCapital, ...).
+   */
+  metrics?: string[]
 }
 
 export const n = (value: number, digits = 1): string => {

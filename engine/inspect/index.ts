@@ -106,7 +106,7 @@ export function inspectWorld(
       body = modifiersSection(world)
       break
     case 'rankings':
-      body = rankingsSection(world)
+      body = rankingsSection(world, options)
       break
     case 'log':
       body = logSection(world, options)
