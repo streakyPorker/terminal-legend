@@ -27,8 +27,8 @@ export async function renderPane($: EngineInterface, e: any) {
       onTab={tab => {
         void patchUi($, { tab })
       }}
-      onControl={control => {
-        void controlGame($, control)
+      onControl={(control, payload) => {
+        void controlGame($, control, payload)
       }}
       onEvent={(eventId, optionId) => {
         void resolveEvent($, eventId, optionId)
@@ -51,8 +51,8 @@ export async function renderAbovePrompt($: EngineInterface, e: any, next: any) {
       world={current.world}
       width={e.props.bodyColumns}
       maxRows={e.props.maxRows}
-      onControl={control => {
-        void controlGame($, control)
+      onControl={(control, payload) => {
+        void controlGame($, control, payload)
       }}
       council={current.ui.council}
       onCouncil={(action, value) => {

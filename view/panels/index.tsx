@@ -4,6 +4,7 @@
 export type {
   UiKit,
   ControlAction,
+  ControlPayload,
   CouncilAction,
   CouncilHandlers,
   PanelProps,
@@ -14,4 +15,6 @@ export { PanePlaceholder, helpText } from './shared'
 export { Panel } from './panel'
 export { Band } from './band'
 export { Report } from './report'
+export { ConstructionPanel } from './construction'
+export type { ConstructionPanelProps } from './construction'
 export { eventSummary, clampText } from '../format'

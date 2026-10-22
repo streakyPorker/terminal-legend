@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { makeRngForWorld, spawnEvent } from '../engine/data'
+import { BUILDINGS, BUILDING_IDS, makeRngForWorld, spawnEvent } from '../engine/data'
 import { advance, applyDecision, applyEventOption, newWorld } from '../engine/sim'
 import { Band, Panel, Report, type UiKit } from '../view/panels'
-import type { TabId } from '../types'
+import type { ControlAction, ControlPayload, TabId } from '../types'
 
 describe('terminal-legend engine', () => {
   test('a new world starts in 1836 with ten countries', async () => {
@@ -393,6 +393,73 @@ describe('terminal-legend drawing', () => {
       } as unknown as never,
     })
     expect(await ui.find({ type: 'Text', text: /英国|GDP|国库/ })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('the construction panel lists every building and forwards control payloads', async ($, on) => {
+    const world = newWorld(3, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.econ.constructionQueue = [
+      {
+        id: 'proj-abc',
+        building: 'farms',
+        count: 2,
+        owner: 'state',
+        monthsLeft: 1,
+        monthlyCost: 0.5,
+        lastSpend: 0.5,
+        progress: 0.25,
+        startedAt: { ...world.date },
+      },
+    ]
+    const calls: { control: ControlAction; payload?: ControlPayload }[] = []
+    on('ui.render', { component: 'Pane', requestId: 'build-pane' }, async ($hang, e) => {
+      const kit = ($hang as unknown as { ui: { resolve: (x: unknown) => UiKit } }).ui.resolve(e)
+      return (
+        <Panel
+          ui={kit}
+          world={world}
+          width={e.props.bodyColumns}
+          tab="council"
+          notice=""
+          onTab={() => undefined}
+          onControl={(control, payload) => {
+            calls.push({ control, payload })
+          }}
+          onEvent={() => undefined}
+          council={{ isOpen: true, report: '', secretaryReport: '', isRunning: false }}
+          onCouncil={() => undefined}
+        />
+      )
+    })
+    const ui = await $.ui.mount({
+      plugin: 'terminal-legend',
+      surface: 'terminal',
+      component: 'Pane',
+      requestId: 'build-pane',
+      props: {
+        title: '终末传奇',
+        isFocused: true,
+        isPlaced: true,
+        bodyColumns: 110,
+        placement: 'dock',
+        scroll: { offset: 0, bodyRows: 400 },
+        view: {},
+      } as unknown as never,
+    })
+    expect(await ui.find({ type: 'Text', text: /可建建筑/ })).toBeDefined()
+    for (const id of BUILDING_IDS) {
+      expect(await ui.find({ type: 'Text', text: new RegExp(BUILDINGS[id].name) })).toBeDefined()
+    }
+    expect(await ui.find({ type: 'Text', text: /id:proj-abc/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /农场×2/ })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'o:farms:1x1' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'o:farms:5x1' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'cancel:proj-abc' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'head:proj-abc' })).toBeDefined()
+    expect(calls).toHaveLength(0)
     await ui.unmount()
   })
 })

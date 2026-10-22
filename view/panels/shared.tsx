@@ -1,5 +1,14 @@
 import type { Elements } from 'claude-code'
-import type { Country, CouncilState, GameEvent, TabId, WorldState } from '../../types'
+import type {
+  ControlAction,
+  ControlPayload,
+  CouncilAction,
+  Country,
+  CouncilState,
+  GameEvent,
+  TabId,
+  WorldState,
+} from '../../types'
 import {
   OPIUM_CRISIS_TITLE,
   SITUATION_TIMEOUT_MONTHS,
@@ -13,15 +22,8 @@ export type UiKit = Pick<
   'Box' | 'Text' | 'Button' | 'Link' | 'Code' | 'Markdown'
 >
 
-export type ControlAction = 'next' | 'save' | 'council'
-
-export type CouncilAction =
-  | 'approve'
-  | 'run'
-  | 'recompose'
-  | 'delegate-internal'
-  | 'delegate-diplomacy'
-  | 'months'
+// Re-exported (not redefined) so existing importers keep resolving these names.
+export type { ControlAction, ControlPayload, CouncilAction }
 
 export type CouncilHandlers = {
   council: CouncilState
@@ -35,7 +37,7 @@ export type PanelProps = {
   tab: TabId
   notice: string
   onTab: (tab: TabId) => void
-  onControl: (control: ControlAction) => void
+  onControl: (control: ControlAction, payload?: ControlPayload) => void
   onEvent: (eventId: string, optionId: string) => void
 } & CouncilHandlers
 
@@ -44,7 +46,7 @@ export type BandProps = {
   world: WorldState
   width: number
   maxRows: number
-  onControl: (control: ControlAction) => void
+  onControl: (control: ControlAction, payload?: ControlPayload) => void
 } & CouncilHandlers
 
 export type ReportProps = {
@@ -186,11 +188,13 @@ export function helpText(): string {
     '/v3 status            查看当前状态',
     '/v3 next              批准并推进一月',
     '/v3 run [月数]        后台托管 N 月，遇事件/战争/越权即中断',
+    '/v3 stop              停止托管（本月推进结束后停下）',
     '/v3 council           打开御前议事',
     '/v3 rankings          查看列强经济/人口/军事/科技/外交排名',
     '/v3 secretary         让秘书拟旨（报告稍后呈上）',
     '/v3 delegate internal|diplomacy on|off  切换委托',
     '/v3 panel             打开完整面板',
+    '　建造面板：x*y 下单（每槽座数 × 槽位数）、取消、插队/重排',
     '/v3 events            查看待决事件',
     '/v3 resolve <事件> <选项>  处理事件',
     '/v3 play <国家>       切换扮演国家',

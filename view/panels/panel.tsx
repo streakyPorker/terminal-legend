@@ -51,6 +51,7 @@ export function Panel(props: PanelProps): any {
           council={props.council}
           onEvent={props.onEvent}
           onCouncil={props.onCouncil}
+          onControl={props.onControl}
         />
       )
       break
@@ -61,7 +62,7 @@ export function Panel(props: PanelProps): any {
       body = <MarketPanel ui={props.ui} world={props.world} width={props.width} />
       break
     case 'economy':
-      body = <EconomyPanel ui={props.ui} world={props.world} width={props.width} />
+      body = <EconomyPanel ui={props.ui} world={props.world} width={props.width} onControl={props.onControl} />
       break
     case 'pops':
       body = <PopsPanel ui={props.ui} world={props.world} />
