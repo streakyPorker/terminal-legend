@@ -34,6 +34,14 @@
   战争目标决定胜利条款（赔款/开放市场/势力范围/威望羞辱）。
 - **事件**：随机事件有多个选项，效果覆盖国库、激进、合法性、威望、军队、人口、科技点与
   双边关系；另有 E1 逐回合实时事件（ADR 0025，题材扫描 → LLM 生成 0–2 个 → 效果信封 → 持久化）。
+- **局势/事件树（plan 0002，World v13）**：`WorldState.situations` 由数据驱动注册表
+  `engine/situations/registry.ts` 的 `SITUATIONS` 填充——每个定义声明
+  `triggers`（条件 + 可选世界级谓词）、`participants`、`context(world)`（引擎生成历史上下文）、
+  `envelope`（允许的 stat / 最大效果数 / 月数区间）、`order`（simultaneous/sequential）与
+  `resolve`（`engine` 确定性结算 / `arbiter-agent` 仲裁）。`tickSituations` 每月按触发开启，
+  `settleDueSituations` 结算：`engine` 型复用 `applyPolicy` 的校验把提案效果落成
+  `situation:<id>` 修正（本国全量、对他国按军力杠杆加权），`arbiter-agent` 型（鸦片危机）仍由
+  仲裁从预置结果包中择一。鸦片危机是**结构不变量**，由测试锁定，行为逐位不变。
 - **蒙地卡洛之外的确定性**：全部模拟是 seeded RNG 的纯 TypeScript 函数，同一个种子
   得到同一个世界；60/120 月基线是确定性的。
 - **存档与版本**：存档是项目目录下的 `.terminal-legend/save.json`（纯 JSON），命名存档为
