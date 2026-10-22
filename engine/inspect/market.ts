@@ -1,11 +1,17 @@
 import type { Country } from '../../types'
 import { GOODS, GOOD_IDS } from '../data'
 import { inspectEconomy } from '../sim'
-import { n, signed } from './shared'
+import { effectiveSupplyFor, n, signed, tradeFlows } from './shared'
 
 export function marketSection(country: Country): string[] {
   const snap = inspectEconomy(country)
-  const lines: string[] = ['商品市场（价格 / 基准，↑ 短缺 ↓ 过剩）：']
+  const flows = tradeFlows(country)
+  // The price engine prices on effective supply (output + imports − exports), so
+  // the "short/surplus" tag must be judged on it too, not domestic output alone.
+  const effective = effectiveSupplyFor(snap.production, country)
+  const lines: string[] = [
+    '商品市场（本月结算快照；有效供给 = 国内产出 + 进口 − 出口；价格随有效供给变动，↑ 短缺 ↓ 过剩）：',
+  ]
   for (const id of GOOD_IDS) {
     const price = country.econ.prices[id] ?? GOODS[id].basePrice
     const base = GOODS[id].basePrice
@@ -13,10 +19,13 @@ export function marketSection(country: Country): string[] {
     const mark = ratio > 1.05 ? '↑' : ratio < 0.95 ? '↓' : '·'
     const production = snap.production[id] ?? 0
     const demand = snap.demand[id] ?? 0
-    const balance = demand <= 0 ? 2 : production / demand
+    const imports = flows.imports[id] ?? 0
+    const exports = flows.exports[id] ?? 0
+    const supply = effective[id] ?? 0
+    const balance = demand <= 0 ? 2 : supply / demand
     const state = balance >= 1.15 ? '盈余' : balance >= 0.9 ? '平衡' : '短缺'
     lines.push(
-      `- ${GOODS[id].name} 价格 ${n(price, 2)} / ${n(base, 2)} ${mark} 产出 ${n(production)} 需求 ${n(demand)} 状态 ${state}`,
+      `- ${GOODS[id].name} 价格 ${n(price, 2)} / ${n(base, 2)} ${mark} 产出 ${n(production)} 需求 ${n(demand)} 进口 ${n(imports)} 出口 ${n(exports)} 有效供给 ${n(supply)} 状态 ${state}`,
     )
   }
   const trade = country.trade

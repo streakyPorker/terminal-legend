@@ -67,7 +67,7 @@ export function inspectWorld(
   let body: string[]
   switch (key) {
     case 'economy':
-      body = economySection(world, country)
+      body = economySection(country)
       break
     case 'market':
       body = marketSection(country)

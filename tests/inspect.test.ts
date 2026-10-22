@@ -157,4 +157,69 @@ describe('v3_inspect (plan 0006)', () => {
       expect(text).toContain(section)
     }
   })
+
+  test('market lines expose trade flows and judge status on effective supply (PT-040)', async () => {
+    const world = newWorld(9110, 'QING')
+    advance(world, 6, [], makeRngForWorld(world))
+    const text = inspectWorld(world, 'market')
+    expect(text).toContain('有效供给 = 国内产出 + 进口 − 出口')
+    const lines = text.split('\n').filter(line => line.startsWith('- '))
+    expect(lines.length).toBeGreaterThan(0)
+    for (const line of lines) {
+      expect(line).toContain('进口')
+      expect(line).toContain('出口')
+      expect(line).toContain('有效供给')
+      expect(line).toContain('状态')
+    }
+    const imported = lines
+      .map(line => ({
+        line,
+        imports: Number(/进口 ([\d.]+)/.exec(line)?.[1] ?? 0),
+        exports: Number(/出口 ([\d.]+)/.exec(line)?.[1] ?? 0),
+      }))
+      .filter(row => row.imports - row.exports >= 1)
+      .sort((a, b) => b.imports - a.imports)[0]
+    expect(imported).toBeDefined()
+    if (imported === undefined) return
+    const production = Number(/产出 ([\d.]+)/.exec(imported.line)![1])
+    const effective = Number(/有效供给 ([\d.]+)/.exec(imported.line)![1])
+    expect(imported.imports).toBeGreaterThan(imported.exports)
+    expect(effective).toBeGreaterThan(production)
+  })
+
+  test('economy GDP line reads the stored settlement snapshot (PT-041)', async () => {
+    const world = newWorld(9111, 'QING')
+    advance(world, 3, [], makeRngForWorld(world))
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    const text = inspectWorld(world, 'economy')
+    const gdpLine = text.split('\n').find(line => line.startsWith('GDP '))
+    expect(gdpLine).toBeDefined()
+    if (gdpLine === undefined) return
+    expect(gdpLine).toContain('净出口')
+    const numbers = [...gdpLine.matchAll(/[-+]?\d+(?:\.\d+)?/g)].map(match => Number(match[0]))
+    const [gdp, c, i, g, nx] = numbers
+    expect(numbers.length).toBe(5)
+    // The line is printed at 1-decimal precision; allow for that rounding.
+    expect(Math.abs(c + i + g + nx - gdp)).toBeLessThan(0.5)
+    // The stored snapshot satisfies the identity exactly.
+    const comp = qing.econ.gdpComponents
+    expect(Math.abs(comp.c + comp.i + comp.g + comp.nx - qing.econ.gdp)).toBeLessThan(1e-6)
+    // The headline equals the stored GDP (to display precision).
+    expect(gdp).toBe(Number(qing.econ.gdp.toFixed(1)))
+  })
+
+  test('fiscal four-tax-base line makes collection efficiency explicit (PT-042)', async () => {
+    const world = newWorld(9112, 'QING')
+    advance(world, 1, [], makeRngForWorld(world))
+    const text = inspectWorld(world, 'fiscal')
+    const taxLine = text.split('\n').find(line => line.startsWith('四税基'))
+    expect(taxLine).toBeDefined()
+    if (taxLine === undefined) return
+    expect(taxLine).toContain('征收效率')
+    for (const base of ['土地税', '企业所得税', '消费税', '关税']) {
+      expect(taxLine).toContain(base)
+    }
+  })
 })
