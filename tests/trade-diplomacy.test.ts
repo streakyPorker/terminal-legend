@@ -431,7 +431,8 @@ describe('T2 calibration: opium-crisis relation bar (plan §2.7/§4.1)', () => {
     }
     expect(windowed.length).toBe(48)
     for (const relation of windowed) expect(relation).toBeLessThanOrEqual(-10)
-    // Measured with SENSITIVE_DRAG = 7 and TRADE_RELATION_FLOOR = -45 (plan §11.2).
+    // Measured with SENSITIVE_DRAG = 20 and TRADE_RELATION_FLOOR = -45 (plan §11.2;
+    // retuned from 15 in PT-052 when cost-centre workshops stopped shrinking).
     expect(Math.max(...windowed)).toBeLessThanOrEqual(-12)
     expect(Math.min(...windowed)).toBeGreaterThanOrEqual(TRADE_RELATION_FLOOR)
   })

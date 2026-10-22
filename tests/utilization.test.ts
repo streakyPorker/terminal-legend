@@ -174,6 +174,20 @@ describe('utilization feedback (ADR 0022 B3)', () => {
     }
   })
 
+  test('(d2) workshops are a cost centre: no deep shrink, utilization pinned (PT-052)', async () => {
+    const world = newWorld(206, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    const start = qing.econ.buildings.workshops
+    expect(start).toBeGreaterThan(0)
+    // They earn no goods revenue by design, so their profit row reads negative;
+    // without the cost-centre exemption they would lose ~2% a month and idle.
+    advance(world, 1, [], makeRngForWorld(world))
+    expect(qing.econ.buildings.workshops).toBeGreaterThan(start * 0.995)
+    expect(qing.econ.buildingProfits.workshops.utilization).toBe(1)
+  })
+
   test('(e) 60 and 120-month determinism still holds with utilization feedback', async () => {
     for (const months of [60, 120]) {
       const left = newWorld(205, 'QING')

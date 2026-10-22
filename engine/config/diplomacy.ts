@@ -11,7 +11,7 @@ export const SENSITIVE_GOODS: GoodId[] = ['opium', 'arms', 'grain']
 /** Monthly warmth a full trade share earns ("最多 +2"). */
 export const TRADE_WARMTH_MAX = 2
 /** Monthly relation drag per unit of sensitive-import share. */
-export const SENSITIVE_DRAG = 15
+export const SENSITIVE_DRAG = 20
 /** Clamp on the per-pair-per-month trade relation delta (±). */
 export const TRADE_RELATION_ENVELOPE = 10
 /** Floor for the automatic trade effects, below the hard trade cut. */

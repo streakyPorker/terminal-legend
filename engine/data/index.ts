@@ -40,6 +40,8 @@ export {
   INFRA_MULT_FLOOR,
   INFRA_UPKEEP,
   INFRA_BUILDING_IDS,
+  COST_CENTRE_BUILDING_IDS,
+  isCostCentre,
   INDUSTRIAL_BUILDING_IDS,
 } from './buildings'
 export type {

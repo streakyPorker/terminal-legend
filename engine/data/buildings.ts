@@ -431,6 +431,18 @@ export function buildOf(id: string): BuildingId | undefined {
 export const INFRA_BUILDING_IDS: BuildingId[] = ['infrastructure']
 
 /**
+ * Public cost centres: they exist to supply something the goods market cannot
+ * price (infrastructure, construction points), so their `buildingProfits` row
+ * always reads as a deep loss. Profit-driven mechanisms — idling toward
+ * `UTIL_IDLE_FLOOR` and the extra deep-loss wear — must skip them (PT-052).
+ */
+export const COST_CENTRE_BUILDING_IDS: BuildingId[] = [...INFRA_BUILDING_IDS, 'workshops']
+
+export function isCostCentre(id: BuildingId): boolean {
+  return COST_CENTRE_BUILDING_IDS.includes(id)
+}
+
+/**
  * Infrastructure each provider building adds per month. Chosen by a
  * supply-equivalence fold of the pre-merge providers:
  *

@@ -18,6 +18,7 @@ import {
   GOOD_IDS,
   GOVERNMENT_DEMAND,
   INCOME_ELASTICITY,
+  isCostCentre,
   SUBSISTENCE,
   WAGE_ALLOCATION,
   deriveLabor,
@@ -608,7 +609,10 @@ export function computeEconomy(
     const typeWages = wages * wageWeight
     const profit = row.revenue - row.inputCost - typeWages
     const profitPerBuilding = profit / Math.max(1, row.count)
-    const target = profitPerBuilding > 0 ? 1 : UTIL_IDLE_FLOOR
+    // Cost centres have no sellable output, so their accounting loss must not
+    // idle them: a building site is either working at full capacity or not at
+    // all (PT-052).
+    const target = isCostCentre(row.id) || profitPerBuilding > 0 ? 1 : UTIL_IDLE_FLOOR
     const prevUtil = storedUtilization(country, row.id)
     buildingProfits[row.id] = {
       revenue: row.revenue,

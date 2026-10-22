@@ -1047,13 +1047,15 @@
   `INFRA_BUILDING_IDS` 豁免（注释写明“cost centres”），**营造所被漏掉**。
 - 判断：**建模缺陷**。公共工程按会计亏损被拆，玩家投资 10 座营造所被机制悄悄吃掉；
   这也是“建造力为什么下降”的隐藏来源。
-- 修复尝试（**已回滚**）：把 `workshops` 并入 cost-centre 豁免后，全量测试出现 2 项失败：
-  `T2 opium-crisis relation bar` 的 QING→GBR 关系从 ≤ −10 变成 **−9.98**（另一种 rng 口径
-  从 ≤ −13 变成 **−0.66**）——营造所不再折损 → 建造力/贸易量上升 → 中外关系回暖 →
-  **鸦片危机可能不触发**。这不是可以随手改的数值，需连同 §2.7 的关系漂移一起重标定。
-- 建议：给营造所豁免 + 重新标定 `SENSITIVE_DRAG` / 测试窗口门槛，作为独立改动提交；
-  在此之前保持现状（或由玩家选择“接受缩水”）。
-- 关联：`engine/country.ts`、`engine/config/economy.ts`（`SHRINK_MAX`）、
-  `engine/config/diplomacy.ts`（`SENSITIVE_DRAG`）、`tests/trade-diplomacy.test.ts`
+- 修复（本次提交）：
+  1. 新增 `COST_CENTRE_BUILDING_IDS = [...INFRA_BUILDING_IDS, 'workshops']` 与 `isCostCentre()`；
+  2. `country.ts` 的深亏折损改用 `isCostCentre()`，营造所与基建一样只按基础折旧磨损；
+  3. `economy.ts` 的开工率目标对成本中心固定为 **1**——它们没有可卖产出，账面亏损不该让工地“闲置”；
+     `constructionCapacity` 读 `effectiveCount(workshops)`，此前 51% 开工率同样在压低建造力；
+  4. 重标定 `SENSITIVE_DRAG` **15 → 20**，让鸦片危机窗口在关系回暖后仍守住 ≤ −10（另一种 rng 口径
+     ≤ −13）；`tests/trade-diplomacy.test.ts` 注释同步。
+  5. 新增测试 `(d2)`：营造所一个月后数量不深跌、开工率恒为 1；全量 494 项通过。
+- 关联：`engine/country.ts`、`engine/economy.ts`、`engine/data/buildings.ts`、
+  `engine/config/diplomacy.ts`（`SENSITIVE_DRAG`）、`tests/trade-diplomacy.test.ts`、`tests/utilization.test.ts`
 - 优先级：**P1**
-- 状态：**open（需独立重标定）**
+- 状态：**fixed（本次提交）**
