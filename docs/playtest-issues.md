@@ -1002,4 +1002,11 @@
   （或 `v3_diplomacy { move: 'extort' }`：一次性转移 + 关系惩罚），并在编年史记录双边变动。
 - 关联：`v3_cheat` 工具规格、手册 §8 事件效果信封、ADR 0025
 - 优先级：**P2**
-- 状态：**open**
+- 修复（`496408b`）：把「任意国家」提升为**常规工具参数**，而不是只藏在 missing 的天命里：
+  - `v3_action` 新增可选 `country`（缺省玩家国），作用于 build/tax/tariff/spending/
+    research/conscript/law/route；
+  - `v3_policy` 新增可选 `country`，可给任意国家提交政策；
+  - `v3_diplomacy` 新增可选 `country` 作为**行动发起国**，`target` 仍为对方；
+  - `v3_cheat` 的 treasury/techPoints/building/finishProjects/event/leader/modifier
+    同步支持 `country`（补上跨国资产转移的叙事通道）。
+- 状态：**fixed（496408b）**
