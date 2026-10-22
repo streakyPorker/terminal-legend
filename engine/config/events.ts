@@ -76,3 +76,11 @@ export const LIVE_PROMPT_RECENT_LOG = 4
  * carries no new world fields and no structural output change.
  */
 export const LIVE_NARRATIVE_PERSPECTIVES = ['史官', '市井', '列国舆论'] as const
+
+/**
+ * Calendar cadence of routine scenes (plan 0010 E7): a scene month is any
+ * month index divisible by this value, so a year holds 12 / 6 = 2 scenes.
+ * Routine scenes are flavour — every option is effect-free — so skipping one is
+ * a no-op and never stalls the turn.
+ */
+export const LIVE_ROUTINE_INTERVAL_MONTHS = 6

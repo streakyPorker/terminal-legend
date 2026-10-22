@@ -17,7 +17,7 @@ import { saveGame } from '../engine/save'
 import { fiscalLedger } from '../engine/fiscal'
 import { monthlyBriefing } from '../engine/secretary'
 import { settleDueSituations } from '../engine/situations'
-import { generateLiveEvents } from '../engine/liveEvents'
+import { buildRoutineScene, generateLiveEvents } from '../engine/liveEvents'
 import { EVENTS_MAX } from '../engine/config/balance'
 import { fmtDate, fmtNumber, fmtSigned } from '../view/format'
 import {
@@ -106,7 +106,11 @@ async function generateTurnEvents(
   $: EngineInterface,
   world: WorldState,
 ): Promise<GameEvent[]> {
-  return generateLiveEvents(world, liveEventCompleter($, world))
+  const events: GameEvent[] = []
+  const routine = buildRoutineScene(world)
+  if (routine !== undefined) events.push(routine)
+  events.push(...(await generateLiveEvents(world, liveEventCompleter($, world))))
+  return events
 }
 
 function summarize(report: AdvanceReport, months: number): string {

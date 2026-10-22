@@ -37,6 +37,7 @@ import {
   LIVE_PROMPT_RECENT_LOG,
   LIVE_PROMPT_RELATIONS_MAX,
   LIVE_RADICALS_MIN,
+  LIVE_ROUTINE_INTERVAL_MONTHS,
   LIVE_SALIENCE_SCALE,
   LIVE_SOL_LOW,
   LIVE_TEXT_MAX,
@@ -735,4 +736,72 @@ export async function generateLiveEvents(
     })
   }
   return events
+}
+
+// ---------------------------------------------------------------- routine scenes
+
+/** A deterministic, effect-free calendar scene template (plan 0010 E7). */
+export type RoutineSceneTemplate = {
+  key: string
+  title: string
+  text: string
+  options: EventOption[]
+}
+
+/**
+ * The routine-scene catalogue. Every option is deliberately effect-free: these
+ * are flavour beats, so engaging or skipping one never moves a stat and can
+ * never disturb the economy or balance.
+ */
+export const ROUTINE_SCENES: readonly RoutineSceneTemplate[] = [
+  {
+    key: 'audience',
+    title: '岁首朝会',
+    text: '岁首例行的朝会如常举行，百官依班进贺，报章照例铺陈天朝威仪。',
+    options: [
+      { id: 'attend', label: '亲临朝会', result: '朝会依礼而成，朝野安堵。', effects: {} },
+      { id: 'skip', label: '略过不问', result: '朝会循例代行，波澜不惊。', effects: {} },
+    ],
+  },
+  {
+    key: 'census',
+    title: '编户清册',
+    text: '地方照例递上编户清册，数目琐碎，无关大局，却是一年一度的仪式。',
+    options: [
+      { id: 'review', label: '亲自过目', result: '清册归档，吏治如常。', effects: {} },
+      { id: 'skip', label: '交有司处置', result: '清册循例归档，无人置意。', effects: {} },
+    ],
+  },
+]
+
+/** The scene month index: consecutive months since year 0, January = 0. */
+function routineMonthIndex(world: WorldState): number {
+  return world.date.year * 12 + (world.date.month - 1)
+}
+
+/** True when this month is on the routine cadence (plan 0010 E7). */
+export function routineSceneDue(world: WorldState): boolean {
+  return routineMonthIndex(world) % LIVE_ROUTINE_INTERVAL_MONTHS === 0
+}
+
+/**
+ * The routine scene for this month, or undefined off-cadence (plan 0010 E7).
+ * Deterministic in the world state; the catalogue alternates by cadence slot so
+ * consecutive scenes differ. Never touches `world.events` and never blocks.
+ */
+export function buildRoutineScene(world: WorldState): GameEvent | undefined {
+  if (!routineSceneDue(world)) return undefined
+  const slot = routineMonthIndex(world) / LIVE_ROUTINE_INTERVAL_MONTHS
+  const template = ROUTINE_SCENES[slot % ROUTINE_SCENES.length]
+  if (template === undefined) return undefined
+  return {
+    id: `routine-${world.tick}-${template.key}`,
+    date: { ...world.date },
+    kind: `routine:${template.key}`,
+    title: template.title,
+    text: template.text,
+    countryId: world.playerId,
+    options: template.options.map(option => ({ ...option, effects: { ...option.effects } })),
+    isResolved: false,
+  }
 }
