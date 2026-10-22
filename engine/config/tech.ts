@@ -72,7 +72,7 @@ export const TECH_DIFFUSION_MAX = 0.5
  * `cost` derives from its era via `techNodeCost`. K4 tuned this so a 120-month
  * baseline advances roughly one node every 2–4 years (docs/adr/0030-tech-tree.md).
  */
-export const TECH_ERA_COSTS: readonly [number, number, number, number] = [80, 180, 360, 640]
+export const TECH_ERA_COSTS: readonly [number, number, number, number] = [160, 360, 720, 1280]
 
 /** The configured cost of a node's era, clamped to the modelled 1–4 range. */
 export function techNodeCost(era: number): number {

@@ -198,8 +198,11 @@ describe('cross-branch overflow (plan 0005 K2 §2.3)', () => {
     expect(spill).toBeGreaterThanOrEqual(0.15)
     expect(spill).toBeLessThanOrEqual(0.25)
     const each = (qing.tech.pointsPerMonth * spill) / targets.length
-    close(qing.tech.nodes['admin-1'] ?? 0, each / 80)
-    close(qing.tech.nodes['military-1'] ?? 0, each / 80)
+    const admin1 = techNode('admin-1')
+    const military1 = techNode('military-1')
+    if (admin1 === undefined || military1 === undefined) return
+    close(qing.tech.nodes['admin-1'] ?? 0, each / admin1.cost)
+    close(qing.tech.nodes['military-1'] ?? 0, each / military1.cost)
   })
 
   test('flowTechOverflow completes a node and installs its effects once', () => {
