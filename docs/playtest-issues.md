@@ -953,4 +953,10 @@
   3. 补单测：新增一座营造所必须使 `labor.demand` 上升。
 - 关联：PT-047、手册 §4.3/§7、`engine/data/buildings.ts`、`engine/data/derivations.ts`
 - 优先级：**P1**
-- 状态：**open**
+- 修复（`925aff1`）：
+  1. `BUILDING_RECIPES.workshops.labor` 0 → **0.8**（20 座 ≈ 16 个用工单位）；
+  2. 新增 `unemploymentIndustryCount()` = 工业建筑数 + 营造所数，供 `deriveUnemployment` 使用；
+     **未**把营造所加入 `INDUSTRIAL_BUILDING_IDS`，以免连带改变私人投资/科技 AI/事件阈值；
+  3. 新增两条测试：一座营造所必须提高 `deriveLabor().demand`；20 座必须降低 `deriveUnemployment`。
+  全量 492 项测试通过。
+- 状态：**fixed（925aff1）**
