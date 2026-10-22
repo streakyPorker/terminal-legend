@@ -25,9 +25,15 @@ export function constructionSection(country: Country): string[] {
       `- [#${queueIndex.get(project.id) ?? 0}] 国有 ${BUILDINGS[project.building].name}×${project.count}：剩余 ${n(projectWorkload(project) * (1 - project.progress))}/${n(projectWorkload(project))} 点，进度 ${n(project.progress * 100, 0)}%，本月 ${n(load.byProject[project.id] ?? 0)} 点，预计 ${schedule[project.id]?.turns ?? '—'} 回合  id=${project.id}`,
     )
   }
+  // Private projects cannot be cancelled or reordered, so they carry no
+  // actionable index; listing them in their own block keeps the state queue's
+  // numbering from looking out of order (PT-049).
+  if (state.length > 0) {
+    lines.push('（国有队列的 `#N` 是完整队列位置，私人项目也占位；私人项目不可取消/重排）')
+  }
   for (const project of privateProjects.slice(0, 8)) {
     lines.push(
-      `- [#${queueIndex.get(project.id) ?? 0}] 私人 ${BUILDINGS[project.building].name}×${project.count}：进度 ${n(project.progress * 100, 0)}%，自有 ${n(load.privateByProject[project.id]?.own ?? 0)} / 租用 ${n(load.privateByProject[project.id]?.rented ?? 0)} 点  id=${project.id}`,
+      `- 私人 ${BUILDINGS[project.building].name}×${project.count}：进度 ${n(project.progress * 100, 0)}%，自有 ${n(load.privateByProject[project.id]?.own ?? 0)} / 租用 ${n(load.privateByProject[project.id]?.rented ?? 0)} 点  id=${project.id}`,
     )
   }
   if (state.length + privateProjects.length === 0) lines.push('- 队列：空')

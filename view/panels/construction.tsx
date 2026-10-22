@@ -55,6 +55,7 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
   const schedule = constructionSchedule(player)
   const queue = econ.constructionQueue
   const stateQueue = queue.filter(project => (project.owner ?? 'state') !== 'private')
+  const privateQueue = queue.filter(project => (project.owner ?? 'state') === 'private')
 
   return (
     <Box flexDirection="column">
@@ -75,40 +76,64 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
         <Text dimColor>
           新单默认入队尾，「⇤1×1」插入队首；私人项目可见、不可取消 · 私人流转建造力 自有 {fmtNumber(load.privateOwn)} · 租用国有 {fmtNumber(load.privateRented)} · 市场 {fmtNumber(load.privateMarket)} 点/月 · 租金 {fmtMoney((load.privateRented + load.privateMarket) * CONSTRUCTION_RENT_PER_POINT)}
         </Text>
-        {queue.length === 0 ? (
-          <Text dimColor>没有在建项目。用下方「可建建筑」下令；项目按队列顺序消耗建造点。</Text>
+        {stateQueue.length === 0 ? (
+          <Text dimColor>没有在建的国有项目。用下方「可建建筑」下令；项目按队列顺序消耗建造点。</Text>
         ) : (
-          queue.map((project, position) => {
-            const isPrivate = (project.owner ?? 'state') === 'private'
-            const prev = queue[position - 1]
-            const next = queue[position + 1]
+          stateQueue.map((project, position) => {
+            const prev = stateQueue[position - 1]
+            const next = stateQueue[position + 1]
             const workload = projectWorkload(project)
             return (
               <Box flexDirection="row" columnGap={1} key={`queue:${project.id}`}>
                 <Text wrap="truncate">{padEnd(`#${position + 1}`, 4)}</Text>
-                {isPrivate ? <Text color="magenta">{padEnd('私人', 4)}</Text> : null}
                 <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
                 <Text dimColor wrap="truncate">{padEnd(`id:${project.id}`, 14)}</Text>
                 <Text color="cyan">{padEnd(bar(project.progress, 1, 8), 9)}</Text>
                 <Text dimColor>
                   剩余 {fmtNumber(workload * (1 - project.progress))}/{fmtNumber(workload)} 点 · 进度 {Math.round(project.progress * 100)}% · 本月投入 {fmtNumber(load.byProject[project.id] ?? 0)} 点 · 预计 {schedule[project.id]?.turns ?? '—'} 回合 · 造价 {constructionTotalCost(project).toFixed(1)} 金
                 </Text>
-                {isPrivate ? null : (
-                  <Box flexDirection="row" columnGap={1}>
-                    <Button key={`cancel:${project.id}`} label="取消" onPress={() => props.onControl('cancel', { projectId: project.id })} />
-                    {prev !== undefined ? (
-                      <Button key={`up:${project.id}`} label="↑" onPress={() => props.onControl('reorder', { projectId: project.id, position: 'before', before: prev.id })} />
-                    ) : null}
-                    {next !== undefined ? (
-                      <Button key={`down:${project.id}`} label="↓" onPress={() => props.onControl('reorder', { projectId: project.id, position: 'after', before: next.id })} />
-                    ) : null}
-                    <Button key={`head:${project.id}`} label="置顶" onPress={() => props.onControl('reorder', { projectId: project.id, position: 'head' })} />
-                  </Box>
-                )}
+                <Box flexDirection="row" columnGap={1}>
+                  <Button key={`cancel:${project.id}`} label="取消" onPress={() => props.onControl('cancel', { projectId: project.id })} />
+                  {prev !== undefined ? (
+                    <Button key={`up:${project.id}`} label="↑" onPress={() => props.onControl('reorder', { projectId: project.id, position: 'before', before: prev.id })} />
+                  ) : null}
+                  {next !== undefined ? (
+                    <Button key={`down:${project.id}`} label="↓" onPress={() => props.onControl('reorder', { projectId: project.id, position: 'after', before: next.id })} />
+                  ) : null}
+                  <Button key={`head:${project.id}`} label="置顶" onPress={() => props.onControl('reorder', { projectId: project.id, position: 'head' })} />
+                </Box>
               </Box>
             )
           })
         )}
+        <Box flexDirection="column" marginTop={1}>
+          <Heading
+            ui={props.ui}
+            text="私人建造队列"
+            hint={
+              privateQueue.length === 0
+                ? '（无）'
+                : `${privateQueue.length} 个项目 · 自有 ${fmtNumber(load.privateOwn)} 点/月 · 租用国有 ${fmtNumber(load.privateRented)} 点/月 · 不可取消`
+            }
+          />
+          {privateQueue.length === 0 ? null : (
+            privateQueue.map(project => {
+              const workload = projectWorkload(project)
+              const byProject = load.privateByProject[project.id]
+              return (
+                <Box flexDirection="row" columnGap={1} key={`private:${project.id}`}>
+                  <Text color="magenta">{padEnd('私人', 4)}</Text>
+                  <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
+                  <Text dimColor wrap="truncate">{padEnd(`id:${project.id}`, 14)}</Text>
+                  <Text color="cyan">{padEnd(bar(project.progress, 1, 8), 9)}</Text>
+                  <Text dimColor>
+                    剩余 {fmtNumber(workload * (1 - project.progress))}/{fmtNumber(workload)} 点 · 进度 {Math.round(project.progress * 100)}% · 本月自有 {fmtNumber(byProject?.own ?? 0)} / 租用 {fmtNumber(byProject?.rented ?? 0)} 点 · 预计 {schedule[project.id]?.turns ?? '—'} 回合
+                  </Text>
+                </Box>
+              )
+            })
+          )}
+        </Box>
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
