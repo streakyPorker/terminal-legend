@@ -641,3 +641,44 @@
   `engine/config/events.ts` 的显著性阈值（plan 0010 §10 待定）。
 - 关联：0010、ADR 0025
 - 状态：open（待试玩）
+
+
+### PT-036 天命「完成全部建造」后日期自行推进一月
+
+- 日期：2026-10-22
+- 游戏内日期：1836.01 → 1836.02
+- 世界：World v11
+- 存档：新开 QING（`/v3 new QING`）
+- 现象：停在 1836.01 御前会议，**未调用 `v3_advance`**，仅调用
+  `v3_cheat { action: "finishProjects" }` 完成 5 座营造所；此后 `v3_inspect construction`
+  与 `v3_status` 的日期已变为 **1836.02**，`v3_inspect log` 也出现各国 1836.02 的
+  月度领袖决策与 AI 私人投建记录——相当于**未经玩家批准推进了一整月**。
+- 数据：cheat 前 `v3_status` = 1836年1月（国库 13.0、税入 16.4）；cheat 返回
+  「国有建造队列全部完成：营造所×5」；随后 status = 1836年2月（国库 23.0、税入 44.1、
+  建造力 66.9），log 含 AUS/USA/OTT 的 1836.02 私人投建与七国 leader 决策条目。
+- 判断：与手册 §2「只有玩家可推进时间、每月停在御前会议」冲突。若为设计
+  （完成建造后强制重算并结算一月），应在工具返回文案与手册中明示；若非设计，
+  则 `finishProjects` 误触发了月度结算。
+- 关联：0006（GM 引擎接口）、`hooks/tools.ts` 的 `v3_cheat`、手册 §2
+- 补充（同日复测）：再次调用 `v3_cheat { action: "finishProjects" }` 完成第二批营造所×5，
+  **日期停在 1836.02 未再跳月**。同一动作两次结果不同，跳月原因仍不明（可能与该次
+  cheat 前的一串 `v3_action` 有关），需引擎侧确认。
+- 状态：open（待确认）
+
+
+### PT-037 国有建造队列不暴露 projectId，无法取消
+
+- 日期：2026-10-22
+- 游戏内日期：1836.02
+- 世界：World v11
+- 存档：新开 QING（`/v3 new QING`）
+- 现象：`v3_action build { building: "workshops", count: 5 }` 之后，`v3_inspect construction`
+  只显示「国有 营造所×5：剩余 225/225 点，进度 0%，本月 66.9 点，预计 4 回合」，
+  **不含项目 id**；而 `v3_action cancel` 的必填参数正是 `projectId`。玩家因此无法
+  取消或调整已下的国有订单（例如把「一槽五座」改为「五槽各一座」）。
+- 数据：`v3_inspect construction` 输出无 id 字段；`v3_action cancel { projectId: "1" }`
+  返回「没有找到项目 1」，未提示合法 id 格式。
+- 判断：GM 接口缺口。`construction` 分区应显示 `projectId`，或 `cancel` 应支持按
+  队列序号 / 建筑类型取消，并在错误信息里给出可用 id。
+- 关联：0006（GM 引擎接口）、`engine/inspect/construction.ts`、`engine/actions` 的 cancel
+- 状态：open
