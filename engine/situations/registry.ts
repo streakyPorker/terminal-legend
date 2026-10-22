@@ -10,6 +10,7 @@ import {
   SITUATION_STANCES,
   opiumCrisisDue,
 } from './opium'
+import { SAMPLE_LINES } from './lines'
 
 /** The historical context the opium-crisis definition hands to an agent. */
 function opiumContext(world: WorldState): string {
@@ -53,6 +54,7 @@ export const SITUATIONS: SituationDefinition[] = [
     outcomeNames: SITUATION_RESULT_NAMES,
     openText: '局势「鸦片危机」爆发：中英两国因鸦片贸易剑拔弩张',
   },
+  ...SAMPLE_LINES,
 ]
 
 const BY_ID = new Map<string, SituationDefinition>(
