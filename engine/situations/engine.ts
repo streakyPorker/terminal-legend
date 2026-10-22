@@ -15,6 +15,7 @@ import { SITUATION_NARRATIVE_MAX, SITUATION_TIMEOUT_MONTHS } from '../config/sit
 import type { Rng } from '../rng'
 import type { SituationDefinition, SituationTrigger } from './types'
 import { resolveSituation } from './opium'
+import { pressureShare } from './conflict'
 import {
   SITUATIONS,
   situationById,
@@ -307,11 +308,12 @@ function resolutionText(definition: SituationDefinition | undefined, outcome: st
 }
 
 /**
- * Resolves an `engine` situation deterministically (plan 0002 §2): every
- * participant's validated `effects` land on itself, and the outcome is the
- * stance holding the most aggregate leverage. No RNG, no arbiter — a save
- * reproduces it exactly. Proposals that failed validation fall back to the
- * definition's default proposal.
+ * Resolves an `engine` situation deterministically (plan 0002 §2/§3): every
+ * participant's validated `effects` land on itself, every `pressure` entry lands
+ * on each other participant scaled by leverage (`stronger side presses harder`,
+ * ties split evenly), and the outcome is the stance holding the most aggregate
+ * leverage. No RNG, no arbiter — a save reproduces it exactly. Proposals that
+ * failed validation fall back to the definition's default proposal.
  */
 export function resolveEngineSituation(
   world: WorldState,
@@ -340,6 +342,21 @@ export function resolveEngineSituation(
       1,
       definition?.title ?? situation.id,
     )
+    for (const other of participants) {
+      if (other.id === participant.id) continue
+      const mine = leverage(world, participant.id)
+      const theirs = leverage(world, other.id)
+      const share = pressureShare(mine, theirs)
+      installProposalModifiers(
+        world,
+        other.id,
+        situation.id,
+        `${participant.id}:pressure:${other.id}`,
+        participant.pressure,
+        share,
+        definition?.title ?? situation.id,
+      )
+    }
   }
 
   const outcome = winningStance(world, participants) ?? 'resolved'

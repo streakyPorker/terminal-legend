@@ -7,6 +7,7 @@
 export * from './opium'
 export * from './registry'
 export * from './engine'
+export * from './conflict'
 export type {
   SituationDefinition,
   SituationDefaultProposal,
