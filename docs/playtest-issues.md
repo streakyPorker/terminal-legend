@@ -982,6 +982,6 @@
   inspect 的私人行去掉 `#N`，并注明国有 `#N` 是完整队列位置。
 - 关联：`view/panels/construction.tsx`、`engine/inspect/construction.ts`、plan 0013
 - 优先级：**P2**
-- 修复（本次提交）：UI 拆为两个区块（私人单独一段、显示自有/租用点、不可取消提示）；
+- 修复（`844ddca`）：UI 拆为两个区块（私人单独一段、显示自有/租用点、不可取消提示）；
   inspect 的私人行去掉 `#N`，国有块加一行口径说明。
-- 状态：**fixed**
+- 状态：**fixed（844ddca）**
