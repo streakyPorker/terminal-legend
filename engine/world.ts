@@ -9,7 +9,7 @@ import type {
   WarIndemnity,
   WorldState,
 } from '../types'
-import { createWorld } from './data'
+import { createWorld, deriveLabor } from './data'
 import { nationalDebt } from './fiscal'
 import {
   RELATION_CUTOFF,
@@ -85,10 +85,15 @@ export function calibrateWorld(world: WorldState): void {
     country.econ.profits = snap.profits
     country.econ.taxBaseQty = snap.taxBaseQty
     country.econ.buildingProfits = snap.buildingProfits
-    country.econ.laborDemand = snap.labor.demand
-    country.econ.laborForce = snap.labor.force
-    country.econ.laborUtilization = snap.labor.utilization
-    country.econ.laborRawUtilization = snap.labor.raw
+    // E8: labour demand is utilisation-weighted, so re-derive it after adopting
+    // the pass-2 buildingProfits; the stored snapshot must read the same stored
+    // utilisation the first settlement will (ADR 0022 one-month lag). The
+    // pass-2 `snap.labor` above still saw the all-full seed utilisation.
+    const labor = deriveLabor(country)
+    country.econ.laborDemand = labor.demand
+    country.econ.laborForce = labor.force
+    country.econ.laborUtilization = labor.utilization
+    country.econ.laborRawUtilization = labor.raw
     const rawIncomeTotal = sumParts(snap.revenue)
     const rawExpenseTotal = sumParts(snap.outlay)
     country.econ.lastFundIncome = appliedPart(

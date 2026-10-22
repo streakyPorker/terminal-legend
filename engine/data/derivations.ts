@@ -179,7 +179,7 @@ export function deriveUnemployment(country: Country): number {
 }
 
 export type LaborStats = {
-  /** Ten-thousands of workers the building stock wants. */
+  /** Ten-thousands of workers the building stock wants, weighted by utilisation. */
   demand: number
   /** Ten-thousands of available workers. */
   force: number
@@ -190,32 +190,32 @@ export type LaborStats = {
 }
 
 /**
- * Labour demand from the building stock and the available labour force.
- * Utilisation is clamped at 0.5 so an agrarian economy with a vast peasantry
- * does not read as 95% idle; the floor is the plan's stability bound.
+ * Last month's stored operating rate for a building type (ADR 0022). Labour
+ * demand reads this, so an idle/loss-making sector sheds workers with the same
+ * one-month lag the production gate uses. A missing or corrupt value falls back
+ * to full utilisation. Mirrors `storedUtilization` in `engine/economy.ts`.
+ */
+function storedUtilization(country: Country, id: BuildingId): number {
+  const value = country.econ.buildingProfits?.[id]?.utilization
+  return Number.isFinite(value) ? clampValue(value, 0, 1) : 1
+}
+
+/**
+ * Labour demand from the building stock and the available labour force (0007
+ * E8). Each type contributes `labor × count × utilization`, where `utilization`
+ * is *last month's* stored operating rate — the same field and lag the
+ * production gate reads (ADR 0022). Profit therefore reaches employment: an
+ * idle or losing sector releases labour, giving unemployment a sectoral source.
+ * With every type at full utilisation this collapses to the pre-E8
+ * `Σ(labor × count)`. Utilisation is clamped at 0.5 so an agrarian economy with
+ * a vast peasantry does not read as 95% idle; the floor is the plan's bound.
  */
 export function deriveLabor(country: Country): LaborStats {
   const b = country.econ.buildings
-  const laborOf = (id: BuildingId): number => BUILDING_RECIPES[id].labor
-  const demand =
-    b.farms * laborOf('farms') +
-    b.coalMines * laborOf('coalMines') +
-    b.ironMines * laborOf('ironMines') +
-    b.lumberMills * laborOf('lumberMills') +
-    b.textileMills * laborOf('textileMills') +
-    b.furnitureWorks * laborOf('furnitureWorks') +
-    b.distilleries * laborOf('distilleries') +
-    b.machineryWorks * laborOf('machineryWorks') +
-    b.steelMills * laborOf('steelMills') +
-    b.arsenals * laborOf('arsenals') +
-    b.luxuryWorks * laborOf('luxuryWorks') +
-    b.schools * laborOf('schools') +
-    b.forts * laborOf('forts') +
-    b.navalYards * laborOf('navalYards') +
-    b.infrastructure * laborOf('infrastructure') +
-    b.offices * laborOf('offices') +
-    b.universities * laborOf('universities') +
-    b.barracks * laborOf('barracks')
+  let demand = 0
+  for (const id of BUILDING_IDS) {
+    demand += BUILDING_RECIPES[id].labor * (b[id] ?? 0) * storedUtilization(country, id)
+  }
   const force = country.pops.peasants * 0.6 + country.pops.workers + country.pops.artisans
   const raw = demand / Math.max(1, force)
   const utilization = clampValue(raw, 0.5, 1)
