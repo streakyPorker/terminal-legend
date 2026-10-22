@@ -91,6 +91,7 @@ export {
   refreshInfrastructure,
   infrastructureUpkeep,
   industrialBuildingCount,
+  unemploymentIndustryCount,
   infrastructureCount,
 } from './derivations'
 export type { LaborStats, InfrastructureStats } from './derivations'

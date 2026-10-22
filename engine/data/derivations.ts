@@ -165,12 +165,22 @@ export function deriveBureaucracy(country: Country, smooth: boolean): Bureaucrac
   }
 }
 
+/**
+ * Industry that absorbs labour for the unemployment curve. Workshops are not
+ * factories (they produce construction points, not goods), so they stay out of
+ * `INDUSTRIAL_BUILDING_IDS`; but a building site does employ people, so count
+ * them here as a construction-sector absorber (PT-048).
+ */
+export function unemploymentIndustryCount(country: Country): number {
+  return industrialBuildingCount(country) + (country.econ.buildings.workshops ?? 0)
+}
+
 /** Unemployment follows industry, literacy and unrest (plan §7.4). */
 export function deriveUnemployment(country: Country): number {
   const popFactor = Math.max(0.1, country.pops.total / 1000)
   return clampValue(
     4 +
-      (1 - industrialBuildingCount(country) / Math.max(1, popFactor * 3)) * 30 +
+      (1 - unemploymentIndustryCount(country) / Math.max(1, popFactor * 3)) * 30 +
       country.pops.radicals * 0.15 -
       country.pops.literacy * 10,
     0,

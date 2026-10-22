@@ -328,7 +328,9 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
   workshops: {
     output: {},
     input: { wood: 1, grain: 0.6, iron: 0.3 },
-    labor: 0,
+    // Construction is labour-intensive: 0.8 makes 20 workshops a real employer
+    // (~16 units of labour demand) instead of a zero-labour special case.
+    labor: 0.8,
   },
 }
 

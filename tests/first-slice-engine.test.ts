@@ -147,6 +147,17 @@ describe('M2 construction queue and economy fixes', () => {
     expect(deriveUnemployment(qing)).toBeGreaterThan(base)
   })
 
+  test('workshops count as construction-sector absorption (PT-048)', async () => {
+    const world = newWorld(11, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+
+    const base = deriveUnemployment(qing)
+    qing.econ.buildings.workshops += 20
+    expect(deriveUnemployment(qing)).toBeLessThan(base)
+  })
+
   test('laws spend authority and fail when authority is gone', async () => {
     const world = newWorld(10, 'AUS')
     const aus = world.countries.AUS

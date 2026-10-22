@@ -39,6 +39,19 @@ describe('labour demand × utilisation (0007 E8)', () => {
     expect(deriveLabor(qing).demand).toBe(fullCapacityDemand(qing))
   })
 
+  test('(workshops) a workshop site hires labour like any other building (PT-048)', async () => {
+    const world = newWorld(304, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    pinAllFull(qing)
+    const before = deriveLabor(qing).demand
+    qing.econ.buildings.workshops += 5
+    const gained = deriveLabor(qing).demand - before
+    expect(Math.abs(gained - 5 * BUILDING_RECIPES.workshops.labor)).toBeLessThan(1e-9)
+    expect(gained).toBeGreaterThan(0)
+  })
+
   test('(halving) a type at half utilisation contributes half its labour', async () => {
     const world = newWorld(302, 'GBR')
     const gbr = world.countries.GBR
