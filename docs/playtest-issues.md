@@ -1030,3 +1030,30 @@
   - 默认输出**保持五维不变**，请求时才在对应维度追加列，并在标题下注明「附加列（按需）」；
   - `tests/inspect.test.ts` 断言：默认不含「建造力」，传 `metrics` 后七列齐备。
 - 状态：**fixed（431d3b5）**
+
+
+### PT-052 营造所因“账面亏损”被每月额外折损 ~2%，20 座会缩水到 18 座
+
+- 日期：2026-10-22
+- 游戏内日期：1836.10 → 1837.01
+- 现象：1836.10 营造所已建成 **20 座**，1837.01 `buildings` 与 `construction` 只剩 **18 座**
+  （建造力 86.6 → 80.8）；同期农场 2964 → 2946、兵营 40 → 39（仅基础折旧）。
+  编年史没有任何建筑减少记录。
+- 根因（`engine/country.ts:276-289`）：
+  `deepLoss = max(0, -profitPerBuilding) / (revenue + 1)`，`extra = clamp(deepLoss, 0, SHRINK_MAX)`
+  （`SHRINK_MAX = 0.02`），每月按 `count × (1 - 0.0015 - extra)` 折损。
+  营造所 `output: {}`（产出建造点、无货值收入）→ `revenue = 0`、`profitPerBuilding = -1.66`
+  → `extra = 0.02`，即每月 **-2.15%**，约 4 个月 20 → 18。基础设施已有
+  `INFRA_BUILDING_IDS` 豁免（注释写明“cost centres”），**营造所被漏掉**。
+- 判断：**建模缺陷**。公共工程按会计亏损被拆，玩家投资 10 座营造所被机制悄悄吃掉；
+  这也是“建造力为什么下降”的隐藏来源。
+- 修复尝试（**已回滚**）：把 `workshops` 并入 cost-centre 豁免后，全量测试出现 2 项失败：
+  `T2 opium-crisis relation bar` 的 QING→GBR 关系从 ≤ −10 变成 **−9.98**（另一种 rng 口径
+  从 ≤ −13 变成 **−0.66**）——营造所不再折损 → 建造力/贸易量上升 → 中外关系回暖 →
+  **鸦片危机可能不触发**。这不是可以随手改的数值，需连同 §2.7 的关系漂移一起重标定。
+- 建议：给营造所豁免 + 重新标定 `SENSITIVE_DRAG` / 测试窗口门槛，作为独立改动提交；
+  在此之前保持现状（或由玩家选择“接受缩水”）。
+- 关联：`engine/country.ts`、`engine/config/economy.ts`（`SHRINK_MAX`）、
+  `engine/config/diplomacy.ts`（`SENSITIVE_DRAG`）、`tests/trade-diplomacy.test.ts`
+- 优先级：**P1**
+- 状态：**open（需独立重标定）**
