@@ -6,7 +6,7 @@
 >
 > 当前世界版本 **v13**（**19 类建筑**、建筑配方与利用率/利润驱动投资、四税基、铁矿石/钢铁拆分、
 > 统一基础设施（铁路/港口/电报合并为单一「基础设施」、运河删除，plan 0014/ADR 0029）、建筑 `unlock` 前向字段、
-> **4 时代 / 16 节点科技树**（plan 0005 K0–K1，替代 1–10 级线性科技，派生 `techTier` 代理））。数值口径以 `v3_inspect` 分区输出为准，本文只解释**为什么**。
+> **4 时代 / 16 节点科技树**（plan 0005 K0–K4，替代 1–10 级线性科技，派生 `techTier` 代理，含 AI 选择与树形 UI，docs/adr/0030-tech-tree.md））。数值口径以 `v3_inspect` 分区输出为准，本文只解释**为什么**。
 
 ## 目录
 
@@ -43,14 +43,18 @@
   提示里带领袖人格、特质、议程、GDP 构成、资源与私人资本；模型失败时自动退回确定性政策，
   世界不会停摆。
 
-- **科技（plan 0005 K0–K1）**：`Country.tech` 是 4 时代 / 16 节点树的 `TechState`
+- **科技（plan 0005 K0–K4，World v13）**：`Country.tech` 是 4 时代 / 16 节点树的 `TechState`
   （`era`、`unlocked` 节点 id、`researching`、`points`）；旧 1–10 级线性科技已删除。所有旧公式改读派生代理
   `techTier = 1 + era×1.5 + unlocked.length×0.05`（范围约 2.5–7.8），仍走不变的 `1 + tier×0.07` 生产/建造门控。
-  `v3_action research` 按节点 id 选择（校验**前置 + 时代门槛**）；节点成本来自 `TECH_NODES` 表（时代 1/2/3/4 = 80/180/360/640），
-  完成后加入 `unlocked`，通用线节点推进 `era`。节点**效果**（修正/一次性）K1 只存储、K2 接入；建筑
-  `unlock.techLevel` 现按 `techTier` 判定（当前无建筑设阈值）。旧 v12 存档按 ADR 0005 拒绝。
+  `v3_action research` 按节点 id 选择（校验**前置 + 时代门槛**）；节点造价单一真源在 `TECH_ERA_COSTS`
+  （时代 1/2/3/4 = 160/360/720/1280，K4 调平），由 `techNodeCost(era)` 派生；完成后加入 `unlocked`，
+  通用线节点推进 `era`。节点**效果**（永久修正 `tech:<id>` 或一次性存量）K2 接入；**跨分支溢出**（15–25%）
+  与**国际扩散**（落后国研究速度最高 +50%）见 `engine/tech.ts`。**AI 选择**（K3）按时代门槛 + 领袖特质 + 国情
+  加权，同权重按节点 id 字典序兜底，无 RNG（`selectAiResearchNode`）。建筑 `unlock.techLevel` 现按 `techTier`
+  判定（当前无建筑设阈值）。旧 v12 存档按 ADR 0005 拒绝。
 
-来源：`engine/world.ts`、`engine/ai.ts`、`engine/save.ts`、`types/index.d.ts`、`engine/data/tech.ts`、ADR 0005、plan 0005 K0–K1。
+来源：`engine/world.ts`、`engine/ai.ts`、`engine/tech.ts`、`engine/country.ts`、`engine/save.ts`、
+`types/index.d.ts`、`engine/data/tech.ts`、`engine/config/tech.ts`、ADR 0005/0030、plan 0005 K0–K4。
 
 ## 2. 支出法经济循环（C+I+G+NX）
 
@@ -317,7 +321,7 @@ types/index.d.ts             PluginState 契约与世界模型类型（world v13
 engine/data/index.ts         桶：原样再导出全部公共符号，`./data` 导入路径不变
 engine/data/goods.ts         商品/资源禀赋/区域运输成本/消费需求参数
 engine/data/buildings.ts     建筑定义/配方/建造时长/基础设施系数/工业建筑清单
-engine/data/tech.ts          科技树 TECH_NODES（4 时代 / 16 节点）、techTier 代理、选择/前置/时代门槛助手
+engine/data/tech.ts          科技树 TECH_NODES（4 时代 / 16 节点，造价由 techNodeCost 派生）、techTier 代理、选择/前置/时代门槛助手
 engine/data/leaders.ts       领袖构造函数与继承序列（successorFor）
 engine/data/countries.ts     十国种子、支出分类与政府类型
 engine/data/events.ts        事件模板、随机抽取与对手选择
@@ -327,7 +331,7 @@ engine/config/balance.ts     全局平衡常数（上下限、历史长度、运
 engine/config/economy.ts     价格形成、Stone-Geary 需求、利用率反馈、私人投资门槛等经济常数
 engine/config/society.ts     人口/城市化/sol/识字/失业/激进/合法性/政府类型等社会常数
 engine/config/military.ts    人力、士气、领袖年龄、战争结算常数
-engine/config/tech.ts        研究速率公式常数
+engine/config/tech.ts        研究速率公式常数、TECH_ERA_COSTS 造价表、AI 选择权重、溢出/扩散常数
 engine/config/diplomacy.ts   关系漂移、恶名、外交动作幅度、战争目标结算常数
 engine/config/trade.ts       贸易候选数、航线系数、到岸价系数、支付能力常数
 engine/config/tax.ts         土地系数、建设补贴、自由贸易下限、征收效率/合规
@@ -345,6 +349,7 @@ engine/investment.ts         私人资本投资评分、资本门槛与私人项
 engine/diplomacy.ts          关系漂移、贸易冷暖/敏感拖累、禁运到期、宣战/停战与战争目标
 engine/events.ts             事件选项结算与月度事件抽取（AI 自动抉择 / 玩家待决）
 engine/country.ts            单国月度结算：人口/就业/生活水平/合法性/科技/军力
+engine/tech.ts               科技树行为：节点效果安装、跨分支溢出、国际扩散、AI 确定性选择（selectAiResearchNode）
 engine/actions/index.ts      桶：原样再导出旧 engine/actions.ts 的 6 个公共符号，`./actions` 导入路径不变
 engine/actions/decision.ts   applyDecision 调度器：未知国家守卫 + 未知行动兜底，按 action 分发到各处理器
 engine/actions/types.ts      处理器共享的 ActionResult / ActionParams 类型
@@ -404,7 +409,7 @@ view/panels/economy.tsx      经济面板（含 ConstructionPanel）
 view/panels/pops.tsx         人口面板
 view/panels/diplomacy.tsx    外交面板
 view/panels/military.tsx     军事面板
-view/panels/tech.tsx         科技面板
+view/panels/tech.tsx         科技树面板（时代/点数/研究/溢出/扩散 + 通用线 + 三分支，窄屏单列，点节点经 onControl('research') 切换研究）
 view/panels/events.tsx       事件面板
 view/panels/log.tsx          日志面板
 view/panels/rankings.tsx     排名面板

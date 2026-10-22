@@ -119,7 +119,7 @@ Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplo
 | plan 0013 建造面板 + 队列编排（ADR 0027）、v3_control 停止托管（ADR 0028） | ✅ 已实现（`5f78f77` 引擎 / `f390a14` 面板 / `175d9de` 控制） |
 | 0006 GM ⇄ 引擎接口（全走 MCP，禁止读存档） | ✅ 已实现（v3_inspect 16 分区 + v3_forecast + v3_manual） |
 | 0007 经济打磨（贸易校准、可见化、建造队列、GDP/科技/劳动力） | ✅ E1–E8 已完成（E6/E7 提前完成；E8 劳动需求×利用率 `d346b12`）；PT-040/041/042 显示口径已收敛（`58e3e7b`）；待下一轮试玩校准 |
-| plan 0005 / ADR 0005 科技树 K0–K1（4 时代 / 16 节点 + `techTier` 代理，World v13） | ✅ 已实现（K2 节点效果/溢出/扩散、K3 AI 选择与树形 UI、K4 调平 待做） |
+| plan 0005 / ADR 0005 / ADR 0030 科技树 K0–K4（4 时代 / 16 节点 + `techTier` 代理，World v13） | ✅ 已实现（K2 效果/溢出/扩散、K3 AI 确定性选择 + 树形 UI、K4 调平 + 回归测试） |
 | 0002 事件树 S1–S4（局势/提案/多国交互） | ⏸ 暂缓（先打磨经济） |
 | 0008/0011 经济 remake 与建筑扩张后的试玩验证（PT-033/034/035） | 🔬 待试玩 |
 
@@ -129,7 +129,7 @@ Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplo
 | --- | --- |
 | [`docs/architecture.md`](docs/architecture.md) | **模拟如何运转的单一真源**：世界模型、经济循环、建筑配方/利润、建造能力、贸易、财政、四税基、修正、文件树 |
 | [`docs/plans/`](docs/plans/) | 工作包与路线（0001–0014） |
-| [`docs/adr/`](docs/adr/) | 架构决策记录（0001–0029） |
+| [`docs/adr/`](docs/adr/) | 架构决策记录（0001–0030） |
 | [`docs/gm-handbook.md`](docs/gm-handbook.md) | GM 机制手册（工具、经济、贸易、财政、口径 FAQ） |
 | [`docs/playtest-issues.md`](docs/playtest-issues.md) | 试玩问题记录 |
 | [`GLOSSARY.md`](GLOSSARY.md) | 术语表 |
