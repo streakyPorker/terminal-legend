@@ -56,6 +56,13 @@
 | PT-033 | 统一基础设施的短缺 debuff 手感未试玩 | 0011 F5/F7 / ADR 0026 | open（待试玩） |
 | PT-034 | 22 类建筑的整体平衡与可读性未试玩 | 0011 F1–F7 / ADR 0026 | open（待试玩） |
 | PT-035 | 实时事件（E1）的文本质量与题材相关度未试玩 | 0010 / ADR 0025 | open（待试玩） |
+| PT-036 | 天命「完成全部建造」后日期自行推进一月 | 0006 | invalid（非缺陷，玩家 UI 推进） |
+| PT-037 | 国有建造队列不暴露 projectId，无法取消 | 0006 / UI / ADR 0027 | fixed（5f78f77 引擎 + f390a14 面板） |
+| PT-038 | 时间再次未经 v3_advance 自行推进 | PT-036 / 0006 | invalid（非缺陷，玩家 UI 推进） |
+| PT-039 | 托管启动后没有手动停止入口 | 0006 / ADR 0028 | fixed（175d9de） |
+| PT-040 | `v3_inspect market` 产出/需求未计入进出口 | 0007-E2 | fixed（58e3e7b） |
+| PT-041 | `v3_inspect economy` GDP 未扣净出口（NX 显示 +0） | 0007-E2 | fixed（58e3e7b） |
+| PT-042 | status 与 inspect 分区时点/口径未注明 | 0007-E2 / 手册 §4.7 | fixed（58e3e7b） |
 
 ---
 
@@ -682,8 +689,13 @@
   返回「没有找到项目 1」，未提示合法 id 格式。
 - 判断：GM 接口缺口。`construction` 分区应显示 `projectId`，或 `cancel` 应支持按
   队列序号 / 建筑类型取消，并在错误信息里给出可用 id。
-- 关联：0006（GM 引擎接口）、`engine/inspect/construction.ts`、`engine/actions` 的 cancel
-- 状态：open
+- 关联：0006（GM 引擎接口）、`engine/inspect/construction.ts`、`engine/actions` 的 cancel、ADR 0027
+- 修复（`5f78f77` 引擎 + `f390a14` 面板）：`v3_inspect construction` 每行现在带 **`#index`** 与
+  **`id=<projectId>`**；`v3_action cancel` 接受 **`projectId` 或 1-based `index`**，未命中时错误信息
+  列出「可用项目」（`1=proj-…（营造所×5）、…`）；`v3_action build` 新增 **`position`+`before`** 插队，
+  并新增 **`v3_action reorder`**（保留已投入进度）。UI 侧共享建造面板把队列里的 `取消`/`↑`/`↓`/`置顶`
+  按钮接上，误下的大单可一键撤销（ADR 0027 / plan 0013）。
+- 状态：**fixed（5f78f77 引擎 + f390a14 面板）**
 
 
 ### PT-038 时间再次未经 v3_advance 自行推进（1836.02 → 1836.03）
@@ -721,8 +733,12 @@
   只能等它跑完或被事件截住。
 - 建议：给 `v3_advance` 增加 `stop`/`interrupt` 动作，或新增 `v3_control` 工具；
   命令层（`/v3`）也应提供 `stop`，并在托管启动时提示如何中断。
-- 关联：0006、`hooks/council.ts`（`startDelegated`/`runDelegated`）
-- 状态：open
+- 关联：0006、`hooks/council.ts`（`startDelegated`/`runDelegated`）、ADR 0028
+- 修复（`175d9de`）：新增 **`v3_control { action: "stop" }`** 工具与 **`/v3 stop`** 命令。停止是
+  **协作式标志**，由托管运行循环在每个月开始前与推进后轮询，**当前月结束后**以「手动停止」中断
+  （世界永不半结算）；托管启动文案改为主动提示 `/v3 stop`。`v3_control` **不发给秘书**，
+  越权调用会被 `auditOverreach` 记为「控制托管」。ADR 0028。
+- 状态：**fixed（175d9de）**
 
 
 ### PT-040 `v3_inspect market` 的产出/需求未计入进出口，状态标记与价格矛盾
@@ -744,7 +760,10 @@
   状态标记改用有效供给；或在文本中注明"此为国内口径，价格按有效供给计算"。
 - 关联：手册 §4.2 / §5、`engine/trade.ts`、`engine/inspect/market.ts`、0006
 - 优先级：**P0**（2026-10-22 玩家确认「很关键」；已排入 `0007-economy-polish.md` E2 待办）
-- 状态：open（**显示口径 bug**；价格引擎无误）
+- 修复（`58e3e7b`）：`v3_inspect market` 每行改为显示 **产出 / 进口 / 出口 / 有效供给** 四列，
+  状态标记改用**有效供给（产出 + 进口 − 出口）**判定；价格公式未动。分区标题注明为**结算快照**。
+  煤/铁矿石不再「产出 < 需求却标短缺且价格接近基准」。
+- 状态：**fixed（58e3e7b）**（显示口径 bug 已修；价格引擎本就无误）
 
 
 ### PT-041 `v3_inspect economy` 的 GDP 未扣净出口（NX 显示 +0）
@@ -762,7 +781,10 @@
 - 建议：economy 的 `净出口` 接入贸易结算；分区标题注明是「结算快照」还是「实时」。
 - 关联：PT-040、手册 §4.1、`engine/inspect/economy.ts`
 - 优先级：**P0**
-- 状态：open
+- 修复（`58e3e7b`）：`v3_inspect economy` 改读**存储的结算快照**（`country.econ.gdp` /
+  `gdpComponents`），其 `净出口` 已接入贸易结算，`C+I+G+NX = GDP`，**与 `v3_status` 的 GDP 一致**
+  （同样 646.9 级数字，不再虚高约 48）；`v3_status` 的 GDP 分解行也补上了「净出口」。
+- 状态：**fixed（58e3e7b）**
 
 
 ### PT-042 status 与 inspect 分区的时点/口径未注明
@@ -782,4 +804,7 @@
   `税基量 × 税率 × 征收效率 = 税额`；status 的 GDP 行补上 NX。
 - 关联：PT-040、PT-041、手册 §4.7
 - 优先级：**P1**
-- 状态：open（待确认）
+- 修复（`58e3e7b`）：`economy`/`market`/`fiscal` 分区改读**结算快照**并在标题注明口径；
+  `fiscal` 税基行改为显示 **`税基量 × 税率 × 征收效率 = 税额`**（暴露此前隐藏的征收效率，
+  收敛「340 × 4% = 8.2」的困惑）；`v3_status` 的 GDP 分解行补上「净出口」，与 `economy` 对齐。
+- 状态：**fixed（58e3e7b）**
