@@ -26,7 +26,10 @@ import {
   LIVE_MAX_TOPICS,
   LIVE_MODIFIER_MONTHS_MAX as MODIFIER_MONTHS_MAX,
   LIVE_MODIFIER_VALUE_CAP as MODIFIER_VALUE_CAP,
+  LIVE_PROMPT_RECENT_LOG,
+  LIVE_PROMPT_RELATIONS_MAX,
   LIVE_RADICALS_MIN,
+  LIVE_SALIENCE_SCALE,
   LIVE_SOL_LOW,
   LIVE_UNEMPLOYMENT_MIN,
   LIVE_WAR_SALIENCE,
@@ -131,9 +134,9 @@ function dimensionSignal(
         const base = GOODS.grain.basePrice
         const price = country.econ.prices.grain ?? base
         keep({
-          salience: grainDev * 100,
+          salience: grainDev * LIVE_SALIENCE_SCALE,
           key: 'economy:grain',
-          note: `粮价 ${price.toFixed(2)}（基准 ${base.toFixed(2)}，偏离 ${Math.round(grainDev * 100)}%）`,
+          note: `粮价 ${price.toFixed(2)}（基准 ${base.toFixed(2)}，偏离 ${Math.round(grainDev * LIVE_SALIENCE_SCALE)}%）`,
         })
       }
       const series = country.econ.history.gdp
@@ -143,9 +146,9 @@ function dimensionSignal(
         const change = Math.abs(last - prev) / prev
         if (change > LIVE_GDP_CHANGE_MIN) {
           keep({
-            salience: change * 100,
+            salience: change * LIVE_SALIENCE_SCALE,
             key: 'economy:gdp',
-            note: `GDP 环比${last >= prev ? '增长' : '下降'} ${Math.round(change * 100)}%`,
+            note: `GDP 环比${last >= prev ? '增长' : '下降'} ${Math.round(change * LIVE_SALIENCE_SCALE)}%`,
           })
         }
       }
@@ -179,9 +182,9 @@ function dimensionSignal(
       const debtRatio = debt / gdp
       if (debtRatio > LIVE_DEBT_RATIO_MIN) {
         keep({
-          salience: (debtRatio - LIVE_DEBT_RATIO_MIN) * 100,
+          salience: (debtRatio - LIVE_DEBT_RATIO_MIN) * LIVE_SALIENCE_SCALE,
           key: 'politics:debt',
-          note: `债务/GDP ${Math.round(debtRatio * 100)}%`,
+          note: `债务/GDP ${Math.round(debtRatio * LIVE_SALIENCE_SCALE)}%`,
         })
       }
       break
@@ -214,7 +217,8 @@ function dimensionSignal(
           note: `生活水平 ${Math.round(country.pops.sol)}`,
         })
       }
-      const literacyLow = Math.max(0, LIVE_LITERACY_TARGET - country.pops.literacy) * 100
+      const literacyLow =
+        Math.max(0, LIVE_LITERACY_TARGET - country.pops.literacy) * LIVE_SALIENCE_SCALE
       if (literacyLow > 0) {
         keep({
           salience: literacyLow,
@@ -283,7 +287,7 @@ function topRelations(country: Country, world: WorldState): string {
     }))
   rows.sort((a, b) => Math.abs(b.value) - Math.abs(a.value) || (a.id < b.id ? -1 : 1))
   return rows
-    .slice(0, 5)
+    .slice(0, LIVE_PROMPT_RELATIONS_MAX)
     .map(row => `${row.id}${row.value >= 0 ? '+' : ''}${row.value}`)
     .join(' ')
 }
@@ -323,7 +327,7 @@ export function buildLiveEventPrompt(
   )
   lines.push(`战争：${war === undefined ? '无' : `「${war.name}」分数 ${Math.round(war.warScore)}`}`)
   lines.push(`主要关系：${topRelations(country, world)}`)
-  const recent = world.log.slice(-4)
+  const recent = world.log.slice(-LIVE_PROMPT_RECENT_LOG)
   if (recent.length > 0) {
     lines.push('近事：')
     for (const entry of recent) {

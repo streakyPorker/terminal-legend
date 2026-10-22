@@ -48,3 +48,9 @@ export const LIVE_FAMINE_SOL = 45
 export const LIVE_FAMINE_GRAIN = 0.05
 export const LIVE_WAR_SALIENCE = 80
 export const LIVE_FAMINE_SALIENCE = 60
+/** Ratio (0–1 deviation) → salience scale: a full deviation maps to this. */
+export const LIVE_SALIENCE_SCALE = 100
+
+/** Prompt-shaping caps (plan 0010 §3): how much state the topic seed carries. */
+export const LIVE_PROMPT_RELATIONS_MAX = 5
+export const LIVE_PROMPT_RECENT_LOG = 4
