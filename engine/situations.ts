@@ -21,12 +21,23 @@ import { inspectEconomy } from './economy'
 import { clamp } from './internal'
 import type { Rng } from './rng'
 import {
+  OPIUM_CRACKDOWN_AUTHORITY,
+  OPIUM_CRACKDOWN_GBR_PRESTIGE,
+  OPIUM_CRACKDOWN_LEGITIMACY,
+  OPIUM_CRACKDOWN_PRESTIGE,
+  OPIUM_CRACKDOWN_RELATION,
+  OPIUM_COMPROMISE_LEGITIMACY,
+  OPIUM_COMPROMISE_RADICALS,
+  OPIUM_COMPROMISE_RELATION,
+  OPIUM_COMPROMISE_TARIFF_CUT,
   OPIUM_CRISIS_EMBARGO_MONTHS,
   OPIUM_TRIGGER_IMPORT_SHARE,
   OPIUM_TRIGGER_IMPORT_UNITS,
   OPIUM_TRIGGER_RELATION_MAX,
+  OPIUM_WAR_RELATION,
   OPIUM_WINDOW_END_YEAR,
   OPIUM_WINDOW_START_YEAR,
+  SITUATION_NARRATIVE_MAX,
   SITUATION_TIMEOUT_MONTHS,
 } from './config/situations'
 
@@ -200,7 +211,7 @@ export function recordSituationProposal(
     return { ok: false, text: `${countryId} 不是「${OPIUM_CRISIS_TITLE}」的参与方。` }
   }
   if (!isStance(stance)) return { ok: false, text: `无效的立场 ${stance}。` }
-  const text = narrative.trim().slice(0, 160)
+  const text = narrative.trim().slice(0, SITUATION_NARRATIVE_MAX)
   if (text === '') return { ok: false, text: '提案需要一句叙事。' }
   const proposal: SituationProposal = { countryId, stance, narrative: text }
   const existing = situation.proposals.find(one => one.countryId === countryId)
@@ -338,9 +349,9 @@ export function applySituationResult(
   switch (resultId) {
     case 'qing-crackdown': {
       if (qing !== undefined) {
-        qing.government.legitimacy = clamp(qing.government.legitimacy + 6, 0, 100)
-        qing.government.authority = clamp(qing.government.authority + 8, 0, 100)
-        qing.diplo.prestige = clamp(qing.diplo.prestige + 8, 0, 240)
+        qing.government.legitimacy = clamp(qing.government.legitimacy + OPIUM_CRACKDOWN_LEGITIMACY, 0, 100)
+        qing.government.authority = clamp(qing.government.authority + OPIUM_CRACKDOWN_AUTHORITY, 0, 100)
+        qing.diplo.prestige = clamp(qing.diplo.prestige + OPIUM_CRACKDOWN_PRESTIGE, 0, 240)
         // A real embargo on QING's side, not a flag (plan §4.3).
         qing.embargoes.push({
           target: 'GBR',
@@ -350,8 +361,8 @@ export function applySituationResult(
           reason: OPIUM_CRISIS_TITLE,
         })
       }
-      if (gbr !== undefined) gbr.diplo.prestige = clamp(gbr.diplo.prestige - 5, 0, 240)
-      relation(-15)
+      if (gbr !== undefined) gbr.diplo.prestige = clamp(gbr.diplo.prestige - OPIUM_CRACKDOWN_GBR_PRESTIGE, 0, 240)
+      relation(OPIUM_CRACKDOWN_RELATION)
       break
     }
     case 'compromise': {
@@ -359,16 +370,16 @@ export function applySituationResult(
         // `ModifierStat` has no `tariff`, so this lands immediately rather than
         // as a 24-month timed change (plan §4.3 reading).
         const exportRate = qing.econ.exportTariff ?? qing.econ.tariff
-        qing.econ.tariff = clamp(qing.econ.tariff - 8, 0, 60)
-        qing.econ.exportTariff = clamp(exportRate - 8, 0, 60)
+        qing.econ.tariff = clamp(qing.econ.tariff - OPIUM_COMPROMISE_TARIFF_CUT, 0, 60)
+        qing.econ.exportTariff = clamp(exportRate - OPIUM_COMPROMISE_TARIFF_CUT, 0, 60)
         installSituationResultModifiers(qing, OPIUM_CRISIS_ID, 'compromise')
-        qing.government.legitimacy = clamp(qing.government.legitimacy - 4, 0, 100)
-        qing.pops.radicals = clamp(qing.pops.radicals + 5, 0, 100)
+        qing.government.legitimacy = clamp(qing.government.legitimacy - OPIUM_COMPROMISE_LEGITIMACY, 0, 100)
+        qing.pops.radicals = clamp(qing.pops.radicals + OPIUM_COMPROMISE_RADICALS, 0, 100)
       }
       if (gbr !== undefined) {
         installSituationResultModifiers(gbr, OPIUM_CRISIS_ID, 'compromise')
       }
-      relation(10)
+      relation(OPIUM_COMPROMISE_RELATION)
       break
     }
     case 'war-open-market':
@@ -376,7 +387,7 @@ export function applySituationResult(
       const goal = resultId === 'war-open-market' ? 'openMarket' : 'reparations'
       // Same War construction path as the diplomacy war move (plan §4.3/§5).
       declareWar(world, 'GBR', 'QING', goal, OPIUM_CRISIS_TITLE)
-      relation(-40)
+      relation(OPIUM_WAR_RELATION)
       break
     }
   }

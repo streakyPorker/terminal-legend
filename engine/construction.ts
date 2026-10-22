@@ -25,6 +25,7 @@ import { clamp, ensureConstructionFields, techMultiplier } from './internal'
 import type { Rng } from './rng'
 
 import {
+  ADMIN_CAPACITY_MAX,
   BUILDING_COST_ADDEND,
   BUILDING_COST_MULTIPLIER,
   CANAL_MARKET_ACCESS,
@@ -358,14 +359,14 @@ export function completeBuilding(country: Country, building: BuildingId, count: 
     country.econ.administrativeCapacity = clamp(
       country.econ.administrativeCapacity + count * UNIVERSITY_ADMIN_CAPACITY,
       0,
-      100,
+      ADMIN_CAPACITY_MAX,
     )
   }
   if (building === 'offices') {
     country.econ.administrativeCapacity = clamp(
       country.econ.administrativeCapacity + count * OFFICE_ADMIN_CAPACITY,
       0,
-      100,
+      ADMIN_CAPACITY_MAX,
     )
   }
   country.bureaucracy = deriveBureaucracy(country, true)

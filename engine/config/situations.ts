@@ -15,3 +15,21 @@ export const OPIUM_TRIGGER_RELATION_MAX = -10
 export const SITUATION_TIMEOUT_MONTHS = 3
 /** Embargo length the crackdown pack imposes. */
 export const OPIUM_CRISIS_EMBARGO_MONTHS = 24
+/** Cap on a participant's narrative text fed to the arbiter. */
+export const SITUATION_NARRATIVE_MAX = 160
+
+/**
+ * Direct effects of the four opium-crisis result packs (plan 0004 §4.3). These
+ * are the numbers the packs apply on top of their modifier packs, declared here
+ * so the result magnitudes are tunable in one place (plan 0009 §9 D3).
+ */
+export const OPIUM_CRACKDOWN_LEGITIMACY = 6
+export const OPIUM_CRACKDOWN_AUTHORITY = 8
+export const OPIUM_CRACKDOWN_PRESTIGE = 8
+export const OPIUM_CRACKDOWN_GBR_PRESTIGE = 5
+export const OPIUM_CRACKDOWN_RELATION = -15
+export const OPIUM_COMPROMISE_TARIFF_CUT = 8
+export const OPIUM_COMPROMISE_LEGITIMACY = 4
+export const OPIUM_COMPROMISE_RADICALS = 5
+export const OPIUM_COMPROMISE_RELATION = 10
+export const OPIUM_WAR_RELATION = -40

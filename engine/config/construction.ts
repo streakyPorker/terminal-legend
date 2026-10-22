@@ -110,3 +110,5 @@ export const CANAL_MARKET_ACCESS = 0.01
 export const TELEGRAPH_MARKET_ACCESS = 0.005
 export const UNIVERSITY_ADMIN_CAPACITY = 0.5
 export const OFFICE_ADMIN_CAPACITY = 1
+/** Ceiling on administrative capacity the completion side effects clamp to. */
+export const ADMIN_CAPACITY_MAX = 100

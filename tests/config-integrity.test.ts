@@ -15,6 +15,8 @@ import {
   CAPACITY_COST as CONSTRUCTION_CAPACITY_COST,
   CONSTRUCTION_RENT_PER_POINT as CONSTRUCTION_RENT,
   WORKLOAD_MULTIPLIER as CONSTRUCTION_WORKLOAD,
+  WORKSHOP_CAPACITY_OUTPUT as CONSTRUCTION_WORKSHOP_OUTPUT,
+  PRIVATE_OWN_CAPACITY_SHARE as CONSTRUCTION_PRIVATE_OWN_SHARE,
 } from '../engine/construction'
 import { LAND_VALUE_PER_UNIT as TAX_LAND_VALUE } from '../engine/fiscal'
 import {
@@ -22,7 +24,20 @@ import {
   TRADE_WARMTH_MAX as DIPLO_TRADE_WARMTH,
 } from '../engine/diplomacy'
 import { TOP_PARTNERS as TRADE_TOP_PARTNERS } from '../engine/trade'
+import {
+  OPIUM_CRISIS_EMBARGO_MONTHS as ENGINE_SIT_EMBARGO,
+  SITUATION_TIMEOUT_MONTHS as ENGINE_SIT_TIMEOUT,
+} from '../engine/situations'
 import { UTIL_SMOOTHING as ECON_UTIL_SMOOTHING } from '../engine/economy'
+import {
+  OPIUM_CRACKDOWN_AUTHORITY,
+  OPIUM_CRACKDOWN_LEGITIMACY,
+  OPIUM_CRACKDOWN_RELATION,
+  OPIUM_COMPROMISE_TARIFF_CUT,
+  OPIUM_WAR_RELATION,
+  SITUATION_NARRATIVE_MAX,
+} from '../engine/config/situations'
+import { ADMIN_CAPACITY_MAX } from '../engine/config/construction'
 
 const MODULES: Record<string, Record<string, unknown>> = {
   balance,
@@ -80,6 +95,9 @@ describe('config integrity (plan 0009 §9 D1)', () => {
     expect(typeof construction.WORKLOAD_MULTIPLIER).toBe('number')
     expect(typeof events.EVENT_BASE_CHANCE).toBe('number')
     expect(typeof situations.SITUATION_TIMEOUT_MONTHS).toBe('number')
+    expect(typeof situations.SITUATION_NARRATIVE_MAX).toBe('number')
+    expect(typeof situations.OPIUM_WAR_RELATION).toBe('number')
+    expect(typeof construction.ADMIN_CAPACITY_MAX).toBe('number')
   })
 
   test('table-shaped exports keep their keys', () => {
@@ -104,6 +122,25 @@ describe('config integrity (plan 0009 §9 D1)', () => {
     expect(DIPLO_TRADE_WARMTH).toBe(diplomacy.TRADE_WARMTH_MAX)
     expect(TRADE_TOP_PARTNERS).toBe(trade.TOP_PARTNERS)
     expect(ECON_UTIL_SMOOTHING).toBe(economy.UTIL_SMOOTHING)
+    expect(ENGINE_SIT_TIMEOUT).toBe(situations.SITUATION_TIMEOUT_MONTHS)
+    expect(ENGINE_SIT_EMBARGO).toBe(situations.OPIUM_CRISIS_EMBARGO_MONTHS)
+    expect(CONSTRUCTION_WORKSHOP_OUTPUT).toBe(construction.WORKSHOP_CAPACITY_OUTPUT)
+    expect(CONSTRUCTION_PRIVATE_OWN_SHARE).toBe(construction.PRIVATE_OWN_CAPACITY_SHARE)
+  })
+
+  test('D3 relocated situations/construction constants match the prior inline literals', () => {
+    expect(OPIUM_CRACKDOWN_LEGITIMACY).toBe(6)
+    expect(OPIUM_CRACKDOWN_AUTHORITY).toBe(8)
+    expect(OPIUM_CRACKDOWN_RELATION).toBe(-15)
+    expect(OPIUM_COMPROMISE_TARIFF_CUT).toBe(8)
+    expect(OPIUM_WAR_RELATION).toBe(-40)
+    expect(SITUATION_NARRATIVE_MAX).toBe(160)
+    expect(situations.OPIUM_CRACKDOWN_PRESTIGE).toBe(8)
+    expect(situations.OPIUM_CRACKDOWN_GBR_PRESTIGE).toBe(5)
+    expect(situations.OPIUM_COMPROMISE_LEGITIMACY).toBe(4)
+    expect(situations.OPIUM_COMPROMISE_RADICALS).toBe(5)
+    expect(situations.OPIUM_COMPROMISE_RELATION).toBe(10)
+    expect(ADMIN_CAPACITY_MAX).toBe(100)
   })
 
   test('a sample of values equals the prior inline constants', () => {
