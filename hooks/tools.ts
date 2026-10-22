@@ -126,7 +126,7 @@ export const TOOL_SPECS: {
   {
     name: 'v3_cheat',
     description:
-      '终末传奇（天命）：修改玩家国家的金钱、科技点、建筑、关系、战争分数、日期，或触发事件、更换领袖、施加修正、立即完成国有建造队列。铁人模式下拒绝。action 取值：treasury（amount）、techPoints（amount）、building（building/count）、finishProjects（完成全部国有在建项目）、relations（country/amount）、warScore（country/amount）、date（year/month）、event（kind 可选）、leader（name/title/persona）、modifier（stat/stack/value/months/label）。',
+      '终末传奇（天命）：修改玩家国家的金钱、科技点、建筑、关系、战争分数、日期，或触发事件、更换领袖、施加修正、立即完成国有建造队列。铁人模式下拒绝。action 取值：treasury（amount；可选 country 指定任意国家）、techPoints（amount）、building（building/count）、finishProjects（完成全部国有在建项目）、relations（country/amount）、warScore（country/amount）、date（year/month）、event（kind 可选）、leader（name/title/persona）、modifier（stat/stack/value/months/label）。treasury/techPoints/building/finishProjects/event/leader/modifier 均支持可选 country，缺省为玩家国；relations/warScore 的 country 是对手方。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -192,7 +192,7 @@ export const TOOL_SPECS: {
   {
     name: 'v3_action',
     description:
-      '终末传奇：对玩家国家执行一项内政行动。action 取值：build（建造，需 building/count；可选 position=head/tail/before/after，默认 tail，before 为 before/after 的锚点项目 id）、cancel（取消国有项目，需 projectId 或 index（1-based 队列序号））、reorder（调整建造队列顺位，需 projectId 或 index，配 position/before）、tax（调整某一税基的税率，需 base（land=土地/profit=企业所得税/consumption=消费税/tariff=关税）与 rate；缺省 base 返回税菜单）、tariff（关税：rate 为进口税率，可选 exportRate 单独设出口税率；省略则进出口同率）、spending（支出，需 category/amount）、research（选择科技节点，需 tech=节点 id，如 industry-1；需前置与时代门槛满足）、conscript（征兵，需 amount）、law（法案，需 name）、route（贸易路线：op 取 open/raise/lower/close，需 good 与 partner）。',
+      '终末传奇：对指定国家（缺省为玩家国）执行一项内政行动。action 取值：build（建造，需 building/count；可选 position=head/tail/before/after，默认 tail，before 为 before/after 的锚点项目 id）、cancel（取消国有项目，需 projectId 或 index（1-based 队列序号））、reorder（调整建造队列顺位，需 projectId 或 index，配 position/before）、tax（调整某一税基的税率，需 base（land=土地/profit=企业所得税/consumption=消费税/tariff=关税）与 rate；缺省 base 返回税菜单）、tariff（关税：rate 为进口税率，可选 exportRate 单独设出口税率；省略则进出口同率）、spending（支出，需 category/amount）、research（选择科技节点，需 tech=节点 id，如 industry-1；需前置与时代门槛满足）、conscript（征兵，需 amount）、law（法案，需 name）、route（贸易路线：op 取 open/raise/lower/close，需 good 与 partner）。country 可选，用于多国变更场景（如 AI 国家建造/加税）。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -210,6 +210,10 @@ export const TOOL_SPECS: {
             'law',
             'route',
           ],
+        },
+        country: {
+          type: 'string',
+          description: '可选国家代码（如 GBR）；缺省为玩家国。用于对任意国家执行同一内政行动。',
         },
         projectId: { type: 'string', description: 'cancel/reorder 时的项目 id（与 index 二选一）。' },
         index: {
@@ -296,10 +300,14 @@ export const TOOL_SPECS: {
   {
     name: 'v3_policy',
     description:
-      '终末传奇：提交一项政策提议。政策由若干效果条目组成，每条把某个数值入口加上 buff/debuff；引擎校验单位与数值后按叠算规则结算，并消耗权威（默认 5，最多 40）。效果条目字段：stat（修正对象）、stack（flat/percent/multiply，默认 flat）、value、months（可选，持续月数）、label（可选）。',
+      '终末传奇：提交一项政策提议（缺省作用于玩家国，可用 country 指定任意国家）。政策由若干效果条目组成，每条把某个数值入口加上 buff/debuff；引擎校验单位与数值后按叠算规则结算，并消耗权威（默认 5，最多 40）。效果条目字段：stat（修正对象）、stack（flat/percent/multiply，默认 flat）、value、months（可选，持续月数）、label（可选）。',
     inputSchema: {
       type: 'object',
       properties: {
+        country: {
+          type: 'string',
+          description: '可选国家代码（如 GBR）；缺省为玩家国。',
+        },
         name: { type: 'string', description: '政策名称，例如「重商主义」。' },
         description: { type: 'string' },
         authorityCost: { type: 'integer', minimum: 0, maximum: 40 },
@@ -328,10 +336,11 @@ export const TOOL_SPECS: {
   {
     name: 'v3_diplomacy',
     description:
-      '终末传奇：执行外交行动。move 取值：improve（改善关系）、insult（交恶）、alliance（结盟）、rival（设为对手）、gift（赠礼）、war（宣战）、peace（停战；本方获胜时可用 indemnityTotal/indemnityMonths 声明赔款总额与最长分期月数）、embargo（禁运，可选定商品与月数）、unembargo（解除禁运）、tension（就敏感商品施加贸易张力）。target 是国家代码，例如 GBR、RUS、QING。',
+      '终末传奇：执行外交行动。move 取值：improve（改善关系）、insult（交恶）、alliance（结盟）、rival（设为对手）、gift（赠礼）、war（宣战）、peace（停战；本方获胜时可用 indemnityTotal/indemnityMonths 声明赔款总额与最长分期月数）、embargo（禁运，可选定商品与月数）、unembargo（解除禁运）、tension（就敏感商品施加贸易张力）。country 是行动发起国（缺省玩家国），target 是对方国家代码，例如 GBR、RUS、QING。',
     inputSchema: {
       type: 'object',
       properties: {
+        country: { type: 'string', description: '可选行动发起国代码；缺省为玩家国。' },
         target: { type: 'string', description: '目标国家代码，如 GBR。' },
         move: {
           type: 'string',
@@ -599,6 +608,9 @@ export const handleV3Action = async ($: EngineInterface, e: any) => {
     if (current === undefined) return toolFail('还没有进行中的游戏。')
     const args = e as unknown as Args
     const world = clone(current.world)
+    // Multi-country content: the GM may act for any power, not just the player.
+    const countryId = String(args.country ?? world.playerId).toUpperCase()
+    if (world.countries[countryId] === undefined) return toolFail(`未知国家 ${countryId}`)
     const params: Record<string, string | number | boolean | undefined> = {}
     for (const key of [
       'building',
@@ -630,7 +642,7 @@ export const handleV3Action = async ($: EngineInterface, e: any) => {
     const result = applyDecision(
       world,
       {
-        countryId: world.playerId,
+        countryId,
         action: String(args.action ?? ''),
         params,
       },
@@ -663,7 +675,9 @@ export const handleV3Policy = async ($: EngineInterface, e: any) => {
         : [],
     }
     const world = clone(current.world)
-    const result = applyPolicy(world, world.playerId, proposal)
+    const countryId = String(args.country ?? world.playerId).toUpperCase()
+    if (world.countries[countryId] === undefined) return toolFail(`未知国家 ${countryId}`)
+    const result = applyPolicy(world, countryId, proposal)
     if (!result.ok) return toolFail(result.text)
     await setWorld($, world)
     await saveGame($, world).catch(() => undefined)
@@ -703,9 +717,11 @@ export const handleV3Diplomacy = async ($: EngineInterface, e: any) => {
     if (typeof args.indemnityMonths === 'number') {
       params.indemnityMonths = args.indemnityMonths
     }
+    const actorId = String(args.country ?? world.playerId).toUpperCase()
+    if (world.countries[actorId] === undefined) return toolFail(`未知国家 ${actorId}`)
     const result = applyDecision(
       world,
-      { countryId: world.playerId, action: 'diplomacy', params },
+      { countryId: actorId, action: 'diplomacy', params },
       makeRngForWorld(world),
     )
     if (!result.ok) return toolFail(result.text)

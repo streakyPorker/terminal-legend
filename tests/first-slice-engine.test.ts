@@ -335,6 +335,34 @@ describe('M6 destiny and ironman', () => {
     expect(world.log.some(entry => entry.text.includes('[天命]'))).toBe(true)
   })
 
+  test('destiny can debit another power when a country is named (PT-050)', async () => {
+    const world = newWorld(20, 'QING')
+    const qing = world.countries.QING
+    const gbr = world.countries.GBR
+    expect(qing).toBeDefined()
+    expect(gbr).toBeDefined()
+    if (qing === undefined || gbr === undefined) return
+
+    const beforeQing = qing.econ.treasury
+    const beforeGbr = gbr.econ.treasury
+    expect(applyCheat(world, { action: 'treasury', country: 'GBR', amount: -100 }).ok).toBe(true)
+    expect(gbr.econ.treasury).toBe(beforeGbr - 100)
+    expect(qing.econ.treasury).toBe(beforeQing)
+
+    expect(applyCheat(world, { action: 'treasury', country: 'NOPE', amount: 1 }).ok).toBe(false)
+    expect(gbr.econ.treasury).toBe(beforeGbr - 100)
+
+    // Every player-scoped destiny action takes the same `country`.
+    const gbrFarms = gbr.econ.buildings.farms
+    expect(applyCheat(world, { action: 'building', country: 'GBR', building: 'farms', count: 2 }).ok).toBe(true)
+    expect(gbr.econ.buildings.farms).toBe(gbrFarms + 2)
+    expect(applyCheat(world, { action: 'techPoints', country: 'GBR', amount: 12 }).ok).toBe(true)
+    expect(gbr.tech.points).toBeGreaterThanOrEqual(12)
+    expect(applyCheat(world, { action: 'leader', country: 'GBR', name: '测试女王', title: '女王' }).ok).toBe(true)
+    expect(gbr.leader.name).toBe('测试女王')
+    expect(qing.leader.name).not.toBe('测试女王')
+  })
+
   test('destiny completes every state project and leaves private ones', async () => {
     const world = newWorld(19, 'QING')
     const qing = world.countries.QING
