@@ -10,12 +10,94 @@ import {
 import { clamp, num } from '../internal'
 import type { ActionParams, ActionResult } from './types'
 
+/** `[FLAG] 名称` prefix shared by every action report line. */
+const tagOf = (country: Country): string => `[${country.flag}] ${country.name}`
+
+/** One `1=id（名×count）` entry per queued project, for not-found errors. */
+const availableList = (country: Country): string => {
+  const queue = country.econ.constructionQueue
+  if (queue.length === 0) return '（空）'
+  return queue
+    .map(
+      (project, i) =>
+        `${i + 1}=${project.id}（${BUILDINGS[project.building].name}×${project.count}）`,
+    )
+    .join('、')
+}
+
+/**
+ * Resolve a queue target by `params.projectId` (also accepts legacy `params.id`)
+ * or by `params.index` (1-based position in the FULL queue). projectId wins when
+ * both are supplied. Returns the array index and the live project object.
+ */
+const resolveQueueTarget = (
+  country: Country,
+  params: ActionParams,
+): { index: number; project: ConstructionProject } | undefined => {
+  const queue = country.econ.constructionQueue
+  const projectId =
+    params.projectId !== undefined
+      ? String(params.projectId)
+      : params.id !== undefined
+        ? String(params.id)
+        : ''
+  if (projectId !== '') {
+    const index = queue.findIndex(one => one.id === projectId)
+    const project = index >= 0 ? queue[index] : undefined
+    return project === undefined ? undefined : { index, project }
+  }
+  if (params.index !== undefined) {
+    const index = Math.floor(num(params.index, 0)) - 1
+    const project = queue[index]
+    if (index >= 0 && project !== undefined) return { index, project }
+  }
+  return undefined
+}
+
+/** The identifier echoed back in a not-found message (id first, else index). */
+const describeTarget = (params: ActionParams): string => {
+  if (params.projectId !== undefined) return String(params.projectId)
+  if (params.id !== undefined) return String(params.id)
+  if (params.index !== undefined) return String(Math.floor(num(params.index, 0)))
+  return ''
+}
+
+/**
+ * Resolve where an insertion should land within `queue`, honouring
+ * `position` (`head`/`tail`/`before`/`after`) and `before`. The destination is
+ * expressed as a valid splice index in `[0, queue.length]`. `'before'`/`'after'`
+ * require a `before` id that exists, otherwise an error string is returned.
+ */
+const resolveInsertPosition = (
+  country: Country,
+  params: ActionParams,
+): { at: number; note: string } | { error: string } => {
+  const queue = country.econ.constructionQueue
+  const position = String(params.position ?? 'tail')
+  if (position === 'head') return { at: 0, note: '，置于队首' }
+  if (position === 'before' || position === 'after') {
+    const beforeId = params.before !== undefined ? String(params.before) : ''
+    const anchor = beforeId !== '' ? queue.findIndex(one => one.id === beforeId) : -1
+    if (anchor < 0) {
+      return {
+        error: `未找到插入锚点项目 ${beforeId === '' ? '（空）' : beforeId}。可用项目：${availableList(country)}`,
+      }
+    }
+    return {
+      at: position === 'before' ? anchor : anchor + 1,
+      note: position === 'before' ? `，置于 ${beforeId} 之前` : `，置于 ${beforeId} 之后`,
+    }
+  }
+  // 'tail' and any unknown/garbage value push to the end.
+  return { at: queue.length, note: '' }
+}
+
 export function actionBuild(
   world: WorldState,
   country: Country,
   params: ActionParams,
 ): ActionResult {
-  const tag = `[${country.flag}] ${country.name}`
+  const tag = tagOf(country)
   const id = String(params.building ?? '')
   const building = buildOf(id)
   if (building === undefined) return { ok: false, text: `${tag} 未知建筑 ${id}` }
@@ -43,22 +125,25 @@ export function actionBuild(
     startedAt: { ...world.date },
   }
   draft.monthlyCost = constructionMonthlyCost(draft)
-  country.econ.constructionQueue.push(draft)
+  const placement = resolveInsertPosition(country, params)
+  if ('error' in placement) return { ok: false, text: `${tag} ${placement.error}` }
+  country.econ.constructionQueue.splice(placement.at, 0, draft)
   return {
     ok: true,
-    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列（工程量 ${projectWorkload(draft).toFixed(1)} 点；按队列顺序取用闲置建造力，一次最多投入剩余工程量；总造价 ${constructionTotalCost(draft).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft).toFixed(2)} 金）`,
+    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列${placement.note}（工程量 ${projectWorkload(draft).toFixed(1)} 点；按队列顺序取用闲置建造力，一次最多投入剩余工程量；总造价 ${constructionTotalCost(draft).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft).toFixed(2)} 金）`,
   }
 }
 
 export function actionCancel(country: Country, params: ActionParams): ActionResult {
-  const tag = `[${country.flag}] ${country.name}`
-  const projectId = String(params.projectId ?? params.id ?? '')
-  const index = country.econ.constructionQueue.findIndex(
-    project => project.id === projectId,
-  )
-  if (index < 0) return { ok: false, text: `${tag} 没有找到项目 ${projectId}` }
-  const project = country.econ.constructionQueue[index]
-  if (project === undefined) return { ok: false, text: `${tag} 没有找到项目 ${projectId}` }
+  const tag = tagOf(country)
+  const found = resolveQueueTarget(country, params)
+  if (found === undefined) {
+    return {
+      ok: false,
+      text: `${tag} 没有找到项目 ${describeTarget(params)}。可用项目：${availableList(country)}`,
+    }
+  }
+  const { index, project } = found
   if ((project.owner ?? 'state') === 'private') {
     return { ok: false, text: `${tag} 私人项目不可取消（${BUILDINGS[project.building].name}）` }
   }
@@ -66,5 +151,62 @@ export function actionCancel(country: Country, params: ActionParams): ActionResu
   return {
     ok: true,
     text: `${tag} 取消了 ${BUILDINGS[project.building].name}×${project.count} 的国有建造项目`,
+  }
+}
+
+/**
+ * Move an existing state project within `country.econ.constructionQueue`.
+ * The project object is spliced, never rebuilt, so its progress / fields
+ * survive. `position` is `head`/`tail`/`before`/`after` (default `tail`);
+ * `before` names the anchor for before/after. Resolves the target by
+ * `projectId` or 1-based `index`, like {@link actionCancel}.
+ */
+export function actionReorder(country: Country, params: ActionParams): ActionResult {
+  const tag = tagOf(country)
+  const queue = country.econ.constructionQueue
+  const found = resolveQueueTarget(country, params)
+  if (found === undefined) {
+    return {
+      ok: false,
+      text: `${tag} 没有找到项目 ${describeTarget(params)}。可用项目：${availableList(country)}`,
+    }
+  }
+  const { index, project } = found
+  if ((project.owner ?? 'state') === 'private') {
+    return { ok: false, text: `${tag} 私人项目不可重排（${BUILDINGS[project.building].name}）` }
+  }
+  const position = String(params.position ?? 'tail')
+  // Validate the anchor against the full queue before mutating anything.
+  if (position === 'before' || position === 'after') {
+    const beforeId = params.before !== undefined ? String(params.before) : ''
+    const exists = beforeId !== '' && queue.some(one => one.id === beforeId)
+    if (!exists) {
+      return {
+        ok: false,
+        text: `${tag} 未找到插入锚点项目 ${beforeId === '' ? '（空）' : beforeId}。可用项目：${availableList(country)}`,
+      }
+    }
+  }
+  const label = `${BUILDINGS[project.building].name}×${project.count}`
+  // Detach the target first; its object identity is preserved across the move.
+  queue.splice(index, 1)
+  let dest: number
+  let note: string
+  if (position === 'head') {
+    dest = 0
+    note = '移到队首'
+  } else if (position === 'before' || position === 'after') {
+    const beforeId = String(params.before)
+    const anchor = queue.findIndex(one => one.id === beforeId)
+    dest = anchor < 0 ? queue.length : position === 'before' ? anchor : anchor + 1
+    note = position === 'before' ? `移到 ${beforeId} 之前` : `移到 ${beforeId} 之后`
+  } else {
+    dest = queue.length
+    note = '移到队尾'
+  }
+  queue.splice(Math.max(0, Math.min(dest, queue.length)), 0, project)
+  return {
+    ok: true,
+    text: `${tag} 将 ${label} ${note}（队列第 ${queue.indexOf(project) + 1} 位）`,
   }
 }

@@ -1,7 +1,7 @@
 import type { WorldState } from '../../types'
 import type { Decision } from '../internal'
 import type { Rng } from '../rng'
-import { actionBuild, actionCancel } from './build'
+import { actionBuild, actionCancel, actionReorder } from './build'
 import { actionTax } from './tax'
 import { actionTariff } from './tariff'
 import { actionSpending } from './spending'
@@ -46,6 +46,8 @@ export function applyDecision(
       return actionConscript(country, params)
     case 'cancel':
       return actionCancel(country, params)
+    case 'reorder':
+      return actionReorder(country, params)
     case 'law':
       return actionLaw(country, params)
     case 'diplomacy':

@@ -303,3 +303,127 @@ describe('construction schedule estimate', () => {
     expect(schedule['slot-4']?.turns ?? 0).toBeGreaterThan(firstTurns)
   })
 })
+
+describe('construction queue orchestration (PT-037)', () => {
+  test('cancel by 1-based index removes exactly that entry', async () => {
+    const world = newWorld(9310, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.constructionQueue = [
+      project({ id: 'a', building: 'textileMills', count: 1, owner: 'state' }, world.date),
+      project({ id: 'b', building: 'coalMines', count: 2, owner: 'state' }, world.date),
+      project({ id: 'c', building: 'workshops', count: 3, owner: 'state' }, world.date),
+    ]
+    const removed = applyDecision(
+      world,
+      { countryId: 'QING', action: 'cancel', params: { index: 2 } },
+      makeRngForWorld(world),
+    )
+    expect(removed.ok).toBe(true)
+    expect(qing.econ.constructionQueue.map(one => one.id)).toEqual(['a', 'c'])
+
+    const missing = applyDecision(
+      world,
+      { countryId: 'QING', action: 'cancel', params: { index: 9 } },
+      makeRngForWorld(world),
+    )
+    expect(missing.ok).toBe(false)
+    expect(missing.text).toContain('可用项目')
+    expect(missing.text).toContain('1=a（')
+  })
+
+  test('build inserts at head or immediately before an existing project', async () => {
+    const world = newWorld(9311, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.constructionQueue = [
+      project({ id: 'existing', building: 'textileMills', count: 1, owner: 'state' }, world.date),
+    ]
+    const head = applyDecision(
+      world,
+      {
+        countryId: 'QING',
+        action: 'build',
+        params: { building: 'coalMines', count: 1, position: 'head' },
+      },
+      makeRngForWorld(world),
+    )
+    expect(head.ok).toBe(true)
+    expect(qing.econ.constructionQueue.map(one => one.building)).toEqual([
+      'coalMines',
+      'textileMills',
+    ])
+    expect(qing.econ.constructionQueue[1]?.id).toBe('existing')
+
+    const before = applyDecision(
+      world,
+      {
+        countryId: 'QING',
+        action: 'build',
+        params: { building: 'workshops', count: 1, position: 'before', before: 'existing' },
+      },
+      makeRngForWorld(world),
+    )
+    expect(before.ok).toBe(true)
+    expect(qing.econ.constructionQueue.map(one => one.building)).toEqual([
+      'coalMines',
+      'workshops',
+      'textileMills',
+    ])
+    expect(qing.econ.constructionQueue[2]?.id).toBe('existing')
+
+    const badAnchor = applyDecision(
+      world,
+      {
+        countryId: 'QING',
+        action: 'build',
+        params: { building: 'workshops', count: 1, position: 'before', before: 'nope' },
+      },
+      makeRngForWorld(world),
+    )
+    expect(badAnchor.ok).toBe(false)
+    expect(badAnchor.text).toContain('可用项目')
+  })
+
+  test('reorder moves an entry and preserves its progress; private is refused', async () => {
+    const world = newWorld(9312, 'QING')
+    const qing = countryOf(world, 'QING')
+    const first = project(
+      { id: 'first', building: 'textileMills', count: 1, owner: 'state', progress: 0.42 },
+      world.date,
+    )
+    const second = project(
+      { id: 'second', building: 'coalMines', count: 2, owner: 'state' },
+      world.date,
+    )
+    qing.econ.constructionQueue = [first, second]
+
+    const moved = applyDecision(
+      world,
+      { countryId: 'QING', action: 'reorder', params: { projectId: 'second', position: 'head' } },
+      makeRngForWorld(world),
+    )
+    expect(moved.ok).toBe(true)
+    expect(qing.econ.constructionQueue.map(one => one.id)).toEqual(['second', 'first'])
+    expect(qing.econ.constructionQueue[1]).toBe(first)
+    expect(qing.econ.constructionQueue[1]?.progress).toBe(0.42)
+
+    const back = applyDecision(
+      world,
+      { countryId: 'QING', action: 'reorder', params: { index: 1, position: 'tail' } },
+      makeRngForWorld(world),
+    )
+    expect(back.ok).toBe(true)
+    expect(qing.econ.constructionQueue.map(one => one.id)).toEqual(['first', 'second'])
+    expect(qing.econ.constructionQueue[0]).toBe(first)
+    expect(qing.econ.constructionQueue[0]?.progress).toBe(0.42)
+
+    qing.econ.constructionQueue.push(
+      project({ id: 'priv', building: 'textileMills', count: 1, owner: 'private' }, world.date),
+    )
+    const denied = applyDecision(
+      world,
+      { countryId: 'QING', action: 'reorder', params: { projectId: 'priv', position: 'head' } },
+      makeRngForWorld(world),
+    )
+    expect(denied.ok).toBe(false)
+  })
+})

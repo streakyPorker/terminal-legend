@@ -7,12 +7,13 @@ import { n } from './shared'
 export function constructionSection(country: Country): string[] {
   const load = constructionLoad(country)
   const schedule = constructionSchedule(country)
-  const state = country.econ.constructionQueue.filter(
-    project => (project.owner ?? 'state') !== 'private',
-  )
-  const privateProjects = country.econ.constructionQueue.filter(
-    project => (project.owner ?? 'state') === 'private',
-  )
+  const queue = country.econ.constructionQueue
+  // 1-based position in the FULL queue (state + private), so it matches the
+  // index accepted by `v3_action cancel` / `reorder`.
+  const queueIndex = new Map<string, number>()
+  queue.forEach((project, i) => queueIndex.set(project.id, i + 1))
+  const state = queue.filter(project => (project.owner ?? 'state') !== 'private')
+  const privateProjects = queue.filter(project => (project.owner ?? 'state') === 'private')
   const subsidy = Math.max(0, country.econ.spending.construction)
   const lines: string[] = [
     `建造力 ${n(load.capacity)} 点/月 = 营造所 ${n(country.econ.buildings.workshops, 0)} 座的产出 + 建设补贴 ${n(subsidy, 0)} 级 × ${n(CONSTRUCTION_SUBSIDY_POINTS_PER_LEVEL)} 点（补贴另花 ${n(subsidy * 0.45)} 金/月）`,
@@ -21,12 +22,12 @@ export function constructionSection(country: Country): string[] {
   ]
   for (const project of state.slice(0, 12)) {
     lines.push(
-      `- 国有 ${BUILDINGS[project.building].name}×${project.count}：剩余 ${n(projectWorkload(project) * (1 - project.progress))}/${n(projectWorkload(project))} 点，进度 ${n(project.progress * 100, 0)}%，本月 ${n(load.byProject[project.id] ?? 0)} 点，预计 ${schedule[project.id]?.turns ?? '—'} 回合`,
+      `- [#${queueIndex.get(project.id) ?? 0}] 国有 ${BUILDINGS[project.building].name}×${project.count}：剩余 ${n(projectWorkload(project) * (1 - project.progress))}/${n(projectWorkload(project))} 点，进度 ${n(project.progress * 100, 0)}%，本月 ${n(load.byProject[project.id] ?? 0)} 点，预计 ${schedule[project.id]?.turns ?? '—'} 回合  id=${project.id}`,
     )
   }
   for (const project of privateProjects.slice(0, 8)) {
     lines.push(
-      `- 私人 ${BUILDINGS[project.building].name}×${project.count}：进度 ${n(project.progress * 100, 0)}%，自有 ${n(load.privateByProject[project.id]?.own ?? 0)} / 租用 ${n(load.privateByProject[project.id]?.rented ?? 0)} 点`,
+      `- [#${queueIndex.get(project.id) ?? 0}] 私人 ${BUILDINGS[project.building].name}×${project.count}：进度 ${n(project.progress * 100, 0)}%，自有 ${n(load.privateByProject[project.id]?.own ?? 0)} / 租用 ${n(load.privateByProject[project.id]?.rented ?? 0)} 点  id=${project.id}`,
     )
   }
   if (state.length + privateProjects.length === 0) lines.push('- 队列：空')
