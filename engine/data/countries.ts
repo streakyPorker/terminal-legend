@@ -100,8 +100,8 @@ type CountrySeed = {
   region: Region
   opium: { outputFactor: number; demandFactor: number }
   politicalEconomy: PoliticalEconomy
+  /** Legacy linear level (1–10); `createWorld` maps it to the era tech tree. */
   techLevel: number
-  researching: string
   army: number
   navy: number
   manpower: number
@@ -157,7 +157,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     opium: { outputFactor: 0.15, demandFactor: 0.2 },
     politicalEconomy: politicalEconomy(0.62, 0.2, 0.4, -5),
     techLevel: 1,
-    researching: '农业改良',
     army: 80,
     navy: 15,
     manpower: 2000,
@@ -212,7 +211,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     opium: { outputFactor: 8.0, demandFactor: 0.02 },
     politicalEconomy: politicalEconomy(0.52, 0.42, 0.55, 10),
     techLevel: 6,
-    researching: '钢铁工业',
     army: 25,
     navy: 120,
     manpower: 300,
@@ -267,7 +265,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     opium: { outputFactor: 0.1, demandFactor: 0.03 },
     politicalEconomy: politicalEconomy(0.55, 0.35, 0.5, 5),
     techLevel: 5,
-    researching: '机械化生产',
     army: 35,
     navy: 45,
     manpower: 500,
@@ -322,7 +319,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     opium: { outputFactor: 0.1, demandFactor: 0.03 },
     politicalEconomy: politicalEconomy(0.54, 0.38, 0.55, 8),
     techLevel: 4,
-    researching: '铁路时代',
     army: 25,
     navy: 8,
     manpower: 250,
@@ -377,7 +373,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     opium: { outputFactor: 0.1, demandFactor: 0.03 },
     politicalEconomy: politicalEconomy(0.63, 0.18, 0.35, -8),
     techLevel: 2,
-    researching: '蒸汽机',
     army: 90,
     navy: 25,
     manpower: 900,
@@ -432,7 +427,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     opium: { outputFactor: 0.1, demandFactor: 0.03 },
     politicalEconomy: politicalEconomy(0.6, 0.22, 0.4, -3),
     techLevel: 3,
-    researching: '铁路时代',
     army: 40,
     navy: 10,
     manpower: 400,
@@ -487,7 +481,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     opium: { outputFactor: 0.1, demandFactor: 0.03 },
     politicalEconomy: politicalEconomy(0.54, 0.4, 0.55, 12),
     techLevel: 3,
-    researching: '蒸汽机',
     army: 12,
     navy: 15,
     manpower: 200,
@@ -542,7 +535,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     opium: { outputFactor: 0.1, demandFactor: 0.03 },
     politicalEconomy: politicalEconomy(0.6, 0.24, 0.45, 0),
     techLevel: 1,
-    researching: '农业改良',
     army: 15,
     navy: 8,
     manpower: 300,
@@ -597,7 +589,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     opium: { outputFactor: 0.5, demandFactor: 0.05 },
     politicalEconomy: politicalEconomy(0.62, 0.18, 0.35, -6),
     techLevel: 1,
-    researching: '农业改良',
     army: 30,
     navy: 12,
     manpower: 400,
@@ -652,7 +643,6 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     opium: { outputFactor: 0.1, demandFactor: 0.03 },
     politicalEconomy: politicalEconomy(0.61, 0.2, 0.4, -4),
     techLevel: 3,
-    researching: '蒸汽机',
     army: 18,
     navy: 10,
     manpower: 150,

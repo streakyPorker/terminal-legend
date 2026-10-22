@@ -21,6 +21,7 @@ import {
 } from './config/blocks/war'
 import { embargoed, type TradeBlocker } from './trade'
 import { advanceDate, clamp, dateDistance } from './internal'
+import { techTier } from './data/tech'
 import type { Rng } from './rng'
 import { LEGITIMACY_MAX, PRESTIGE_MAX, RADICALS_MAX, RELATION_MAX, RELATION_MIN } from './config/balance'
 import { TARIFF_RATE_MAX } from './config/tax'
@@ -296,7 +297,7 @@ export function strength(world: WorldState, ids: string[]): number {
       country.military.army *
         country.military.quality *
         (country.military.morale / WAR_STRENGTH_MORALE_DIVISOR) *
-        (1 + country.tech.level * WAR_STRENGTH_TECH_COEF),
+        (1 + techTier(country.tech) * WAR_STRENGTH_TECH_COEF),
     )
   }
   return total

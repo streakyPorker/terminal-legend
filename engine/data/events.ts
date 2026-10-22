@@ -2,6 +2,7 @@ import type { Country, EventOption, GameEvent, WorldState } from '../../types'
 import type { Rng } from '../rng'
 import { industrialBuildingCount } from './derivations'
 import { GOODS } from './goods'
+import { techTier } from './tech'
 
 export function otherCountryIds(world: WorldState, countryId: string): string[] {
   return Object.keys(world.countries).filter(id => id !== countryId)
@@ -188,7 +189,7 @@ export const EVENT_TEMPLATES: EventTemplate[] = [
     kind: 'breakthrough',
     title: '技术突破',
     weight: 8,
-    when: c => c.tech.level >= 2,
+    when: c => techTier(c.tech) >= 2,
     text: c => `${c.name}的学者与工程师取得进展，一项新技术正走出实验室。`,
     options: () => [
       {

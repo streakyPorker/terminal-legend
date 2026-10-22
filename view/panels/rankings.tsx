@@ -1,4 +1,5 @@
 import type { Country, WorldState } from '../../types'
+import { techTier } from '../../engine/data'
 import { nationalDebt } from '../../engine/fiscal'
 import { countryTag, fmtNumber, fmtPercent, fmtPop } from '../format'
 import { Heading, TableRow, playerOf, type UiKit } from './shared'
@@ -76,8 +77,8 @@ export function RankingsPanel(props: { ui: UiKit; world: WorldState }): any {
         { label: '陆军战力', width: 10, value: country => fmtNumber(country.military.army * country.military.quality) },
       ])}
 
-      {table('科技与行政', '按科技等级排序', by(country => country.tech.level), [
-        { label: '科技', width: 7, value: country => `${country.tech.level} 级` },
+      {table('科技与行政', '按科技层级排序', by(country => techTier(country.tech)), [
+        { label: '科技', width: 10, value: country => `时代${country.tech.era}·${country.tech.unlocked.length}项` },
         { label: '官僚效能', width: 10, value: country => `${Math.round(country.bureaucracy.score)}/${Math.round(country.bureaucracy.ceiling)}` },
         { label: '合法性', width: 7, value: country => String(Math.round(country.government.legitimacy)) },
         { label: '权威', width: 6, value: country => String(Math.round(country.government.authority)) },

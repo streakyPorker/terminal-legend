@@ -8,6 +8,7 @@ import {
   GOOD_IDS,
   effectiveCount,
   makeRngForWorld,
+  techTier,
 } from '../engine/data'
 import { applyModifiers } from '../engine/modifiers'
 import { clamp, ensureConstructionFields, techMultiplier } from '../engine/internal'
@@ -26,8 +27,15 @@ const countryOf = (world: WorldState, id: string): Country => {
 
 const clone = (c: Country): Country => JSON.parse(JSON.stringify(c)) as Country
 
-/** Frozen pre-C5 tech factor: `1 + level × 0.07`. */
-const oracleTechMultiplier = (level: number): number => 1 + level * 0.07
+// Holds era 1 and pads the unlock list so techTier = 1 + 1.5 + n×0.05 = tier.
+const setTier = (c: Country, tier: number): void => {
+  c.tech.era = 1
+  const count = Math.max(0, Math.round((tier - 2.5) / 0.05))
+  c.tech.unlocked = Array.from({ length: count }, (_, i) => `tier-node-${i}`)
+}
+
+/** Frozen pre-C5 tech factor: `1 + tier × 0.07`. */
+const oracleTechMultiplier = (tier: number): number => 1 + tier * 0.07
 
 const zeroGoods = (): Record<GoodId, number> => {
   const out = {} as Record<GoodId, number>
@@ -50,7 +58,7 @@ const storedUtilization = (c: Country, id: BuildingId): number => {
  */
 function oracleProduction(c: Country): Record<GoodId, number> {
   ensureConstructionFields(c)
-  const tech = oracleTechMultiplier(c.tech.level)
+  const tech = oracleTechMultiplier(techTier(c.tech))
   const marketAccess = applyModifiers(c, 'marketAccess', c.econ.marketAccess)
   const access = 0.55 + marketAccess * 0.9
   const transport = applyModifiers(c, 'transportInfrastructure', c.econ.transportInfrastructure)
@@ -93,14 +101,18 @@ function oracleProduction(c: Country): Record<GoodId, number> {
 }
 
 describe('techMultiplier migration equivalence (C5, ADR 0024)', () => {
-  test('the factor is bit-for-bit the pre-C5 literal across every tech level', () => {
+  test('the factor is bit-for-bit the pre-C5 literal across every tech tier', () => {
     for (const seed of [8101, 8102, 8103]) {
       const world = newWorld(seed, 'QING')
       for (const id of ['QING', 'GBR', 'FRA', 'RUS']) {
         const c = countryOf(world, id)
-        for (let level = 0; level <= 10; level += 1) {
-          c.tech.level = level
-          expect(Object.is(techMultiplier(c), oracleTechMultiplier(level))).toBe(true)
+        for (let era = 1; era <= 4; era += 1) {
+          for (let unlocked = 0; unlocked <= 16; unlocked += 1) {
+            c.tech.era = era
+            c.tech.unlocked = Array.from({ length: unlocked }, (_, i) => `n${i}`)
+            const tier = techTier(c.tech)
+            expect(Object.is(techMultiplier(c), oracleTechMultiplier(tier))).toBe(true)
+          }
         }
       }
     }
@@ -113,18 +125,18 @@ describe('techMultiplier migration equivalence (C5, ADR 0024)', () => {
         advance(world, 1, [], makeRngForWorld(world))
         for (const id of ['QING', 'GBR', 'FRA']) {
           const live = countryOf(world, id)
-          for (let level = 1; level <= 10; level += 1) {
+          for (const tier of [1, 2.5, 3.75, 5, 6.5, 8]) {
             const forOracle = clone(live)
-            forOracle.tech.level = level
+            setTier(forOracle, tier)
             const forEngine = clone(live)
-            forEngine.tech.level = level
+            setTier(forEngine, tier)
 
             const oracle = oracleProduction(forOracle)
             const actual = inspectEconomy(forEngine).production
             for (const good of GOOD_IDS) {
               expect(
                 Object.is(actual[good], oracle[good]),
-                `${id} m${month} tech${level} ${good}: ${actual[good]} vs ${oracle[good]}`,
+                `${id} m${month} tier${tier} ${good}: ${actual[good]} vs ${oracle[good]}`,
               ).toBe(true)
             }
           }

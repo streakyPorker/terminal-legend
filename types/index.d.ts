@@ -15,6 +15,11 @@
 // bilateral trade routes still sit in front of the spot clearing (ADR 0020);
 // bilateral quantities, NX accounting, gold settlement and resource imports
 // remain live (plan 0004 T1a/T1b).
+// v12 folded railroads/ports/telegraphs into one `infrastructure` building
+// (plan 0014 / ADR 0029). v13 (plan 0005 K1) replaces the linear 1–10 tech
+// level with the `TechState` 4-era / 16-node tree; a derived `techTier`
+// (`1 + era×1.5 + unlocked×0.05`) keeps the old `1 + tier×0.07` multiplier
+// formula meaningful.
 
 export type GameDate = { year: number; month: number }
 
@@ -306,6 +311,12 @@ export type ModifierStat =
   | 'growth'
   | 'techPoints'
   | 'armyStrength'
+  /**
+   * Plan 0005 §4: the naval counterpart of `armyStrength`, added as a modifier
+   * seam so naval tech can raise fleet quality without a formula special case.
+   * Nothing reads it yet (the tech slice stores effects; K2 wires them).
+   */
+  | 'navyStrength'
   | 'morale'
   | 'manpower'
   | 'prestige'
@@ -629,12 +640,68 @@ export type Economy = {
   }
 }
 
-export type Technology = {
-  level: number
+export type TechBranch = 'general' | 'industry' | 'admin' | 'military'
+
+/** A permanent modifier a completed tech node installs (plan 0005 §1/§4). */
+export type TechNodeModifier = {
+  kind: 'modifier'
+  stat: ModifierStat
+  stack: ModifierStack
+  value: number
+  label?: string
+}
+
+/** A one-off stock change applied when a node completes (ADR 0004: stocks, not flows). */
+export type TechNodeImmediate = {
+  kind: 'immediate'
+  morale?: number
+  loyalists?: number
+  radicals?: number
+  legitimacy?: number
+  prestige?: number
+}
+
+export type TechNodeEffect = TechNodeModifier | TechNodeImmediate
+
+/**
+ * One node of the 4-era tech tree (plan 0005 §1). `era` is a tier (I–IV), not a
+ * calendar year; the optional `year` (years since 1836) is a soft historical
+ * pace hint. `effects` is stored in K1 and wired by K2.
+ */
+export type TechNodeDef = {
+  id: string
+  era: number
+  branch: TechBranch
+  name: string
+  cost: number
+  prerequisites: string[]
+  effects: TechNodeEffect[]
+  /** Feature flags recorded for later slices, e.g. `electrification`. */
+  unlocks?: string[]
+  year?: number
+  /**
+   * Extra gate: at least N unlocked nodes in ANY single non-general branch
+   * (`general-1865` needs 2, `general-1880` needs 3 — plan 0005 §1.1).
+   */
+  requiresAnyBranch?: number
+}
+
+/**
+ * The 4-era / 16-node tech tree replacement for the old linear level (plan
+ * 0005 K1). `unlocked` holds node ids; `nodes` holds 0..1 progress per node id;
+ * `researching` is the chosen node id (or '' while waiting for a choice). Old
+ * saves (`Technology.level`) are rejected by the v13 version bump (ADR 0005).
+ */
+export type TechState = {
+  /** 1..4, the current era tier. */
+  era: number
+  /** node id -> 0..1 progress. */
+  nodes: Record<string, number>
+  unlocked: string[]
+  /** node id, or '' when waiting for a choice. */
+  researching: string
   points: number
   pointsPerMonth: number
-  researching: string
-  unlocked: string[]
 }
 
 export type Military = {
@@ -673,7 +740,7 @@ export type Country = {
   econ: Economy
   /** Structural parameters of the country's political economy. */
   politicalEconomy: PoliticalEconomy
-  tech: Technology
+  tech: TechState
   military: Military
   diplo: Diplomacy
   bureaucracy: Bureaucracy

@@ -359,10 +359,10 @@ export const ARTISAN_SERVICE_OUTPUT = 0.01
 /**
  * Forward-compatible building unlock contract (plan 0011 F6, ADR 0026 §5).
  * A building is gated behind `unlock.techLevel` when that field is set: the
- * `build` action then requires `country.tech.level >= unlock.techLevel`.
+ * `build` action then requires the country's derived `techTier`
+ * (`1 + era×1.5 + unlocked×0.05`, plan 0005 K0) to be at least the threshold.
  * `unlock` absent, or `techLevel` absent, means always buildable. No building
- * sets a threshold yet — the real tech tree is plan 0005, so today every
- * building stays bit-for-bit buildable.
+ * sets a threshold yet — every building stays bit-for-bit buildable.
  */
 export type BuildingUnlock = { techLevel?: number }
 

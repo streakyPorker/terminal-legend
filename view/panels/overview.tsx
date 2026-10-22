@@ -1,5 +1,5 @@
 import type { WorldState } from '../../types'
-import { GOODS, GOOD_IDS, techName } from '../../engine/data'
+import { GOODS, GOOD_IDS, techNodeName } from '../../engine/data'
 import { fiscalLedger } from '../../engine/fiscal'
 import {
   bar,
@@ -65,8 +65,8 @@ export function Overview(props: { ui: UiKit; world: WorldState; width: number })
           <StatLine ui={props.ui} label="识字率" value={fmtPercent(player.pops.literacy)} />
           <StatLine ui={props.ui} label="陆军" value={`${fmtNumber(player.military.army)} 万  士气 ${Math.round(player.military.morale)}`} />
           <StatLine ui={props.ui} label="海军" value={`${fmtNumber(player.military.navy)} 艘  人力 ${fmtNumber(player.military.manpower)}`} />
-          <StatLine ui={props.ui} label="科技" value={`${player.tech.level} · ${techName(player.tech.level)}`} />
-          <StatLine ui={props.ui} label="研究" value={`${player.tech.researching} (${fmtNumber(player.tech.pointsPerMonth)}/月)`} />
+          <StatLine ui={props.ui} label="科技" value={`时代 ${player.tech.era} · 已解锁 ${player.tech.unlocked.length} 项`} />
+          <StatLine ui={props.ui} label="研究" value={`${player.tech.researching === '' ? '待选' : techNodeName(player.tech.researching)} (${fmtNumber(player.tech.pointsPerMonth)}/月)`} />
           <StatLine ui={props.ui} label="威望" value={String(Math.round(player.diplo.prestige))} />
           <StatLine ui={props.ui} label="战争" value={props.world.wars.length === 0 ? '无' : props.world.wars.map(war => war.name).join('，')} color={props.world.wars.length > 0 ? 'red' : undefined} />
         </Box>

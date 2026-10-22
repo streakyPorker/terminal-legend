@@ -98,7 +98,7 @@ const routeFlow = (
 describe('persistent trade routes: world shape (ADR 0020)', () => {
   test('a new world is version 11 and is seeded with standing routes', async () => {
     const world = newWorld(9801, 'QING')
-    expect(world.version).toBe(12)
+    expect(world.version).toBe(13)
     expect(world.tradeRoutes.length).toBeGreaterThan(0)
     const ids = new Set<string>()
     for (const route of world.tradeRoutes) {

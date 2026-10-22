@@ -1,5 +1,5 @@
 import type { ConstructionProject, Country, WorldState } from '../../types'
-import { BUILDINGS, buildOf } from '../data'
+import { BUILDINGS, buildOf, techTier } from '../data'
 import {
   MAX_BUILDINGS_PER_SLOT,
   constructionGoldPerPoint,
@@ -102,12 +102,13 @@ export function actionBuild(
   const building = buildOf(id)
   if (building === undefined) return { ok: false, text: `${tag} 未知建筑 ${id}` }
   // Forward-compat tech gate (plan 0011 F6): a building is locked while its
-  // `unlock.techLevel` exceeds the country's level. No building sets one yet.
+  // `unlock.techLevel` exceeds the country's derived tech tier. No building sets
+  // one yet.
   const unlock = BUILDINGS[building].unlock
-  if (unlock?.techLevel !== undefined && country.tech.level < unlock.techLevel) {
+  if (unlock?.techLevel !== undefined && techTier(country.tech) < unlock.techLevel) {
     return {
       ok: false,
-      text: `${tag} ${BUILDINGS[building].name}尚未解锁（需要科技等级 ${unlock.techLevel}，当前 ${country.tech.level}）`,
+      text: `${tag} ${BUILDINGS[building].name}尚未解锁（需要科技层级 ${unlock.techLevel}，当前 ${techTier(country.tech).toFixed(1)}）`,
     }
   }
   const count = clamp(Math.floor(num(params.count, 1)), 1, MAX_BUILDINGS_PER_SLOT)

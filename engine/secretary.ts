@@ -1,5 +1,5 @@
 import type { WorldState } from '../types'
-import { BUILDINGS } from './data'
+import { BUILDINGS, techNodeName } from './data'
 import { fiscalLedger } from './fiscal'
 import { MODIFIER_STAT_NAMES, describeModifier } from './modifiers'
 import { constructionLoad, projectWorkload } from './sim'
@@ -120,7 +120,7 @@ export function monthlyBriefing(world: WorldState): string {
     }`,
   )
   lines.push(
-    `科技：${player.tech.level} 级，研究「${player.tech.researching}」（${player.tech.pointsPerMonth.toFixed(1)} 点/月）`,
+    `科技：时代 ${player.tech.era}（已解锁 ${player.tech.unlocked.length} 项），研究「${player.tech.researching === '' ? '待选' : techNodeName(player.tech.researching)}」（${player.tech.pointsPerMonth.toFixed(1)} 点/月）`,
   )
   lines.push(
     `军力：陆军 ${player.military.army.toFixed(1)} 万，海军 ${player.military.navy.toFixed(1)}，士气 ${Math.round(player.military.morale)}，战争疲劳 ${Math.round(player.military.exhaustion)}，人力 ${player.military.manpower.toFixed(1)}`,

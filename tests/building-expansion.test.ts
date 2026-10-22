@@ -156,7 +156,7 @@ describe('F4 building expansion (schools / forts / navalYards) + plan 0014 merge
 
   test('the world carries the merged roster at version 12', () => {
     const world = newWorld(9100, 'QING')
-    expect(world.version).toBe(12)
+    expect(world.version).toBe(13)
     expect(BUILDING_IDS.length).toBe(19)
     for (const gone of ['railroads', 'ports', 'canals', 'telegraphs']) {
       expect(BUILDING_IDS as string[]).not.toContain(gone)

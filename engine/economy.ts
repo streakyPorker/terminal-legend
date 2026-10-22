@@ -27,6 +27,7 @@ import {
   infrastructureStats,
   infrastructureUpkeep,
   resourceMultiplier,
+  techTier,
   type InfrastructureStats,
   type LaborStats,
 } from './data'
@@ -677,7 +678,7 @@ function computePrestige(country: Country): number {
       country.econ.gdp * PRESTIGE_GDP +
         country.military.army * PRESTIGE_ARMY +
         country.military.navy * PRESTIGE_NAVY +
-        country.tech.level * PRESTIGE_TECH +
+        techTier(country.tech) * PRESTIGE_TECH +
         infrastructureCount(country) * PRESTIGE_PORT,
     ),
     0,

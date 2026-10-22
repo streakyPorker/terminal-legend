@@ -6,6 +6,7 @@ import type {
   SecretaryState,
   TaxBaseId,
   TaxRates,
+  TechState,
   TradeState,
   UiState,
   WorldState,
@@ -15,7 +16,7 @@ import { BUILDING_IDS } from './buildings'
 import { COUNTRY_SEEDS } from './countries'
 import { administrativeCapacityFor, deriveBureaucracy, refreshInfrastructure } from './derivations'
 import { GOODS, GOOD_IDS } from './goods'
-import { TECHS } from './tech'
+import { TECH_NODES, clampEra, defaultResearchNode } from './tech'
 
 export const START_YEAR = 1836
 export const START_MONTH = 1
@@ -106,6 +107,29 @@ export function initialUi(): UiState {
       isRunning: false,
     },
   }
+}
+
+/**
+ * Seeds a country's `TechState` from its legacy linear level (plan 0005 K1).
+ * The old 1–10 level maps to an era tier (every 2.5 levels ≈ one era) and the
+ * general-line nodes up to that era are pre-unlocked, so a fresh world keeps a
+ * tech-gated production multiplier close to the pre-tree one.
+ */
+export function techStateFromLevel(level: number): TechState {
+  const era = clampEra(1 + Math.floor((level - 1) / 2.5))
+  const unlocked = TECH_NODES.filter(
+    node => node.branch === 'general' && node.era <= era,
+  ).map(node => node.id)
+  const state: TechState = {
+    era,
+    nodes: {},
+    unlocked,
+    researching: '',
+    points: 0,
+    pointsPerMonth: 0,
+  }
+  state.researching = defaultResearchNode(state)?.id ?? ''
+  return state
 }
 
 export function createWorld(seed: number, playerId = 'QING'): WorldState {
@@ -210,13 +234,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
           tariff: [],
         },
       },
-      tech: {
-        level: seedRow.techLevel,
-        points: 0,
-        pointsPerMonth: 0,
-        researching: seedRow.researching,
-        unlocked: TECHS.filter(tech => tech.level <= seedRow.techLevel).map(tech => tech.name),
-      },
+      tech: techStateFromLevel(seedRow.techLevel),
       military: {
         army: seedRow.army,
         navy: seedRow.navy,
@@ -249,7 +267,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
   }
 
   return {
-    version: 12,
+    version: 13,
     seed,
     date: { year: START_YEAR, month: START_MONTH },
     tick: 0,

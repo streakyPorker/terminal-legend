@@ -27,7 +27,7 @@ import { DEBT_PRESSURE_BLOCK } from '../engine/config/blocks/fiscal'
 import { GATE_BLOCKS } from '../engine/config/blocks/gates'
 import { evaluateThresholds } from '../engine/thresholds'
 import { addModifier, applyModifiers, tickModifiers } from '../engine/modifiers'
-import { industrialBuildingCount, makeRngForWorld } from '../engine/data'
+import { industrialBuildingCount, makeRngForWorld, techTier } from '../engine/data'
 import { advance, newWorld } from '../engine/sim'
 
 const country = (seed: number, id = 'QING'): { world: WorldState; c: Country } => {
@@ -195,7 +195,7 @@ function oldReadStat(c: Country, stat: ConditionStat): number {
     case 'navy':
       return c.military.navy
     case 'techLevel':
-      return c.tech.level
+      return techTier(c.tech)
     case 'industry':
       return industrialBuildingCount(c)
     case 'prestige':

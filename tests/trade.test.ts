@@ -44,7 +44,7 @@ describe('T1a world schema (v11)', () => {
   test('the world is version 11 and carries region, trade and opium', async () => {
     const world = newWorld(9001, 'QING')
     const qing = world.countries.QING
-    expect(world.version).toBe(12)
+    expect(world.version).toBe(13)
     expect(qing).toBeDefined()
     if (qing === undefined) return
     expect(qing.region).toBe('eastAsia')

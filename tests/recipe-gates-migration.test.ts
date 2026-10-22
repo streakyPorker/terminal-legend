@@ -8,6 +8,7 @@ import {
   GOOD_IDS,
   effectiveCount,
   makeRngForWorld,
+  techTier,
 } from '../engine/data'
 import { addModifier, applyModifiers } from '../engine/modifiers'
 import { clamp, ensureConstructionFields } from '../engine/internal'
@@ -27,6 +28,13 @@ const countryOf = (world: WorldState, id: string): Country => {
 }
 
 const clone = (c: Country): Country => JSON.parse(JSON.stringify(c)) as Country
+
+// Holds era 1 and pads the unlock list so techTier = 1 + 1.5 + n×0.05 = tier.
+const setTier = (c: Country, tier: number): void => {
+  c.tech.era = 1
+  const count = Math.max(0, Math.round((tier - 2.5) / 0.05))
+  c.tech.unlocked = Array.from({ length: count }, (_, i) => `tier-node-${i}`)
+}
 
 const zeroGoods = (): Record<GoodId, number> => {
   const out = {} as Record<GoodId, number>
@@ -62,7 +70,7 @@ const oracleInfraMultiplier = (level: number): number => clamp(level / 100, 0.35
  */
 function oracleProduction(c: Country): Record<GoodId, number> {
   ensureConstructionFields(c)
-  const tech = oracleGate.tech(c.tech.level)
+  const tech = oracleGate.tech(techTier(c.tech))
   const marketAccess = applyModifiers(c, 'marketAccess', c.econ.marketAccess)
   const access = oracleGate.access(marketAccess)
   const transport = applyModifiers(c, 'transportInfrastructure', c.econ.transportInfrastructure)
@@ -148,7 +156,7 @@ describe('RecipeGates migration equivalence (C7, ADR 0024)', () => {
                   c.econ.marketAccess = marketAccess
                   c.econ.resources.coal = coal
                   c.econ.resources.iron = 100 - coal
-                  c.tech.level = (coal % 10) + 1
+                  setTier(c, (coal % 10) + 1)
                 }
                 expectProductionMatch(
                   forOracle,

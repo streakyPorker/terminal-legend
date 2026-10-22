@@ -13,7 +13,7 @@ export function buildingsSection(country: Country): string[] {
     const workload = capacity * WORKLOAD_MULTIPLIER
     const extra: string[] = []
     if (meta.unlock?.techLevel !== undefined) {
-      extra.push(`需科技等级 ${meta.unlock.techLevel}`)
+      extra.push(`需科技层级 ${meta.unlock.techLevel}`)
     }
     if (meta.infrastructureNeed !== undefined) {
       extra.push(`基础设施需求 ${n(meta.infrastructureNeed)}`)
@@ -31,7 +31,7 @@ export function buildingsSection(country: Country): string[] {
     }
   }
   lines.push(
-    '说明：本版 19 类建筑均开局解锁（`unlock.techLevel` 为 plan 0005 科技树的前瞻门槛，当前无建筑设阈值，F6 已接入 `build` 校验）；`infrastructureNeed`（F5）已落地并计入统一基础设施需求；plan 0014 把铁路/港口/电报合并为「基础设施」、删除运河。',
+    '说明：本版 19 类建筑均开局解锁（`unlock.techLevel` 为 plan 0005 科技树的前瞻门槛，按派生科技层级判定，当前无建筑设阈值，F6 已接入 `build` 校验）；`infrastructureNeed`（F5）已落地并计入统一基础设施需求；plan 0014 把铁路/港口/电报合并为「基础设施」、删除运河。',
   )
   return lines
 }

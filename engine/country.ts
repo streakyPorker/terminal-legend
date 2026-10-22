@@ -6,10 +6,12 @@ import {
   deriveBureaucracy,
   deriveUnemployment,
   industrialBuildingCount,
+  defaultResearchNode,
   refreshInfrastructure,
   successorFor,
-  techCost,
-  techName,
+  techNode,
+  techNodeName,
+  techTier,
 } from './data'
 import { debtPressure, nationalDebt } from './fiscal'
 import { applyModifiers, tickModifiers } from './modifiers'
@@ -109,7 +111,6 @@ import {
   RESEARCH_TECH_LEVEL_COEF,
   RESEARCH_UNIVERSITY_LITERACY_BASE,
   RESEARCH_UNIVERSITY_PER_BUILDING,
-  TECH_MAX_LEVEL,
 } from './config/tech'
 import {
   RESTRUCTURE_DEBT_RATIO,
@@ -311,7 +312,7 @@ export function simulateCountry(
   const industry = industrialBuildingCount(country)
   const urbanPull = Math.min(
     country.pops.peasants * URBAN_PEASANT_PULL,
-    industry * URBAN_INDUSTRY_PULL * (1 + country.tech.level * URBAN_TECH_PULL),
+    industry * URBAN_INDUSTRY_PULL * (1 + techTier(country.tech) * URBAN_TECH_PULL),
   )
   country.pops.peasants -= urbanPull
   country.pops.workers += urbanPull
@@ -329,7 +330,7 @@ export function simulateCountry(
       'sol',
       SOL_BASE +
         (snap.realGdp / Math.max(1, country.pops.total)) * SOL_GDP_PER_CAPITA +
-        country.tech.level * SOL_TECH -
+        techTier(country.tech) * SOL_TECH -
         country.pops.radicals * SOL_RADICALS +
         country.econ.spending.welfare * SOL_WELFARE,
     ),
@@ -479,25 +480,38 @@ export function simulateCountry(
       RESEARCH_UNIVERSITY_PER_BUILDING *
       (RESEARCH_UNIVERSITY_LITERACY_BASE + country.pops.literacy) *
       (1 + country.econ.spending.education * RESEARCH_EDUCATION_COEF) *
-      (1 + country.tech.level * RESEARCH_TECH_LEVEL_COEF)
+      (1 + techTier(country.tech) * RESEARCH_TECH_LEVEL_COEF)
   country.tech.points += applyModifiers(
     country,
     'techPoints',
     country.tech.pointsPerMonth,
   )
-  const nextCost = techCost(country.tech.level + 1)
-  if (country.tech.level < TECH_MAX_LEVEL && country.tech.points >= nextCost) {
-    country.tech.points -= nextCost
-    country.tech.level += 1
-    const unlocked = techName(country.tech.level)
-    country.tech.unlocked.push(unlocked)
-    country.tech.researching = techName(country.tech.level + 1)
-    log.push({
-      date: { ...world.date },
-      kind: 'tech',
-      countryId: country.id,
-      text: `[${country.flag}] ${country.name}解锁了「${unlocked}」`,
-    })
+  // Plan 0005 K1: points flow into the chosen node; completing it appends to
+  // `unlocked` and raises the era when it is a general-line node. An empty or
+  // stale choice falls back to the deterministic first-eligible node (the K3
+  // AI-selection seam); node effects are stored by K1 and wired by K2.
+  let node = techNode(country.tech.researching)
+  if (node === undefined || country.tech.unlocked.includes(node.id)) {
+    node = defaultResearchNode(country.tech)
+    country.tech.researching = node?.id ?? ''
+  }
+  if (node !== undefined) {
+    country.tech.nodes[node.id] = Math.min(1, country.tech.points / node.cost)
+    if (country.tech.points >= node.cost) {
+      country.tech.points -= node.cost
+      country.tech.nodes[node.id] = 1
+      country.tech.unlocked.push(node.id)
+      if (node.branch === 'general' && node.era > country.tech.era) {
+        country.tech.era = node.era
+      }
+      country.tech.researching = ''
+      log.push({
+        date: { ...world.date },
+        kind: 'tech',
+        countryId: country.id,
+        text: `[${country.flag}] ${country.name}解锁了「${techNodeName(node.id)}」`,
+      })
+    }
   }
 
   // Military.

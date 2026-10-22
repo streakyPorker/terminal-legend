@@ -132,7 +132,7 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
                   <Text color={profit === undefined ? undefined : profit >= 0 ? 'green' : 'red'} wrap="truncate">
                     {padEnd(profit === undefined ? '利—' : `利${profit.toFixed(2)}`, 8)}
                   </Text>
-                  <Text dimColor wrap="truncate">{padEnd(tech === undefined ? '' : `技${tech}`, 4)}</Text>
+                  <Text dimColor wrap="truncate">{padEnd(tech === undefined ? '' : `层${tech}`, 4)}</Text>
                   <Button key={`o:${id}:1x1`} label="建 1×1" onPress={() => props.onControl('build', { building: id, perSlot: 1, slots: 1 })} />
                   <Button key={`o:${id}:5x1`} label="建 5×1" onPress={() => props.onControl('build', { building: id, perSlot: 5, slots: 1 })} />
                   <Button key={`o:${id}:head`} label="⇤1×1" onPress={() => props.onControl('build', { building: id, perSlot: 1, slots: 1, position: 'head' })} />

@@ -167,7 +167,7 @@ export function statusLine(world: WorldState): string {
     `GDP${fmtGdp(player.econ.gdp)}`,
     `合法性${Math.round(player.government.legitimacy)}`,
     `激进${Math.round(player.pops.radicals)}`,
-    `科技${player.tech.level}`,
+    `科技时代${player.tech.era}·${player.tech.unlocked.length}项`,
     warText,
     pending > 0 ? `事件${pending}` : '',
     world.ironman ? '铁人' : '',

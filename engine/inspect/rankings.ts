@@ -1,4 +1,5 @@
 import type { Country, WorldState } from '../../types'
+import { techTier } from '../data'
 import { nationalDebt } from '../fiscal'
 import { n, pct } from './shared'
 
@@ -47,8 +48,8 @@ export function rankingsSection(world: WorldState): string[] {
       ['陆军战力', country => n(country.military.army * country.military.quality)],
     ],
   )
-  table('科技与行政（按科技等级排序）', by(country => country.tech.level), [
-    ['科技', country => `${country.tech.level}级`],
+  table('科技与行政（按科技层级排序）', by(country => techTier(country.tech)), [
+    ['科技', country => `时代${country.tech.era}·${country.tech.unlocked.length}项`],
     ['官僚效能', country => `${Math.round(country.bureaucracy.score)}/${Math.round(country.bureaucracy.ceiling)}`],
     ['合法性', country => n(country.government.legitimacy, 0)],
     ['权威', country => n(country.government.authority, 0)],

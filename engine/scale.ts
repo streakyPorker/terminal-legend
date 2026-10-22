@@ -8,6 +8,7 @@ import type {
 } from '../types'
 import { findBlock } from './config/blocks'
 import { industrialBuildingCount, resourceMultiplier } from './data'
+import { techTier } from './data/tech'
 import { effectiveResources } from './endowment'
 
 /**
@@ -49,7 +50,7 @@ export function readStatValue(country: Country, stat: ConditionStat): number {
     case 'navy':
       return country.military.navy
     case 'techLevel':
-      return country.tech.level
+      return techTier(country.tech)
     case 'industry':
       return industrialBuildingCount(country)
     case 'prestige':

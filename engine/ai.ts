@@ -1,6 +1,6 @@
 import type { EngineInterface } from 'claude-code'
 import type { Country, GameDate, SituationStance, WorldState } from '../types'
-import { BUILDING_IDS, GOODS, GOOD_IDS, SPENDING, WAR_GOAL_NAMES, techName } from './data'
+import { BUILDING_IDS, GOODS, GOOD_IDS, SPENDING, WAR_GOAL_NAMES, techNodeName, techTier } from './data'
 
 import { TAX_BASE_IDS, nationalDebt, sovereignFund } from './fiscal'
 import type { Rng } from './rng'
@@ -103,7 +103,7 @@ function countryLine(country: Country, world: WorldState): string {
     `生活:${Math.round(country.pops.sol)}`,
     `陆军:${n1(country.military.army)}`,
     `海军:${n1(country.military.navy)}`,
-    `科技:${country.tech.level}`,
+    `科技:${techTier(country.tech).toFixed(1)}`,
     `月盈余:${surplus >= 0 ? '+' : ''}${n1(surplus)}金/月`,
     war ? '战争:是' : '战争:否',
     `关系:${topRelations(country, world)}`,
@@ -416,7 +416,7 @@ export function describeWorldForNarrator(world: WorldState): string {
     `国库净资产 ${n1(player.econ.treasury)} 金（${net >= 0 ? '+' : ''}${n1(net)} 金/月，${stock}）｜GDP ${n1(player.econ.gdp)} 金/月（消费 ${n1(player.econ.gdpComponents.c)} / 投资 ${n1(player.econ.gdpComponents.i)} / 政府 ${n1(player.econ.gdpComponents.g)}）｜合法性 ${Math.round(player.government.legitimacy)}｜激进 ${Math.round(player.pops.radicals)}｜生活水平 ${Math.round(player.pops.sol)}`,
   )
   lines.push(
-    `人口 ${n1(player.pops.total)} 万｜识字率 ${Math.round(player.pops.literacy * 100)}%｜陆军 ${n1(player.military.army)} 万｜海军 ${n1(player.military.navy)}｜科技 ${player.tech.level}（${techName(player.tech.level)}）｜研究 ${player.tech.researching}`,
+    `人口 ${n1(player.pops.total)} 万｜识字率 ${Math.round(player.pops.literacy * 100)}%｜陆军 ${n1(player.military.army)} 万｜海军 ${n1(player.military.navy)}｜科技 时代${player.tech.era}（已解锁 ${player.tech.unlocked.length} 项）｜研究 ${techNodeName(player.tech.researching)}`,
   )
   const goods = GOOD_IDS.slice(0, 6)
     .map(id => `${GOODS[id].name}${n1(player.econ.prices[id])}`)

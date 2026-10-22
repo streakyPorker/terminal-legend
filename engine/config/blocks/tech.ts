@@ -1,16 +1,17 @@
 import type { ConfigBlock, Curve } from '../../../types'
 
 /**
- * The technology-level multiplier as block data (C5, ADR 0024 §7). This is the
- * `1 + techLevel × 0.07` factor the engine applies to every tech-gated recipe
+ * The technology multiplier as block data (C5, ADR 0024 §7). This is the
+ * `1 + techTier × 0.07` factor the engine applies to every tech-gated recipe
  * output (`computeProduction`) and to construction capacity
  * (`constructionCapacity`). It is NOT an `applyModifiers` entry: the block is a
  * declaration whose `scales_with` curve is the factor, and the engine reads it
- * at its existing per-building/per-good seam via `techMultiplier`.
+ * at its existing per-building/per-good seam via `techMultiplier`. The
+ * `techLevel` stat name now resolves to the derived `techTier` (plan 0005 K0).
  */
 export const TECH_MULTIPLIER_ID = 'tech:multiplier'
 
-/** The `1 + techLevel × 0.07` curve, shared with the production gate registry. */
+/** The `1 + techTier × 0.07` curve, shared with the production gate registry. */
 export const TECH_MULTIPLIER_CURVE: Curve = {
   kind: 'linear',
   slope: 0.07,

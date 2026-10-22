@@ -2,11 +2,10 @@
 // `import ... from './data'` and `'../engine/data'` keep resolving here because
 // `engine/data.ts` was deleted, so `./data` now resolves to `./data/index.ts`.
 //
-// The named re-export list below reproduces the EXACT public export set of the
-// old `engine/data.ts` (72 symbols: 60 values + 12 types). It is deliberately
-// explicit rather than `export *` so internal-only helpers (e.g. `leader`,
-// `clampValue`, the seed constructors) stay private to their modules and cannot
-// leak into the public surface.
+// The named re-export list below reproduces the public export set of the old
+// `engine/data.ts`. It is deliberately explicit rather than `export *` so
+// internal-only helpers (e.g. `leader`, `clampValue`, the seed constructors)
+// stay private to their modules and cannot leak into the public surface.
 
 // ---------------------------------------------------------------- goods / resources / demand
 export {
@@ -53,7 +52,19 @@ export type {
 } from './buildings'
 
 // ---------------------------------------------------------------- tech
-export { TECHS, techCost, techName } from './tech'
+export {
+  TECH_NODES,
+  techNode,
+  techNodeName,
+  techNodesInBranch,
+  techTier,
+  unlockedInBranch,
+  eraGateOk,
+  prereqOk,
+  canResearchNode,
+  defaultResearchNode,
+  clampEra,
+} from './tech'
 
 // ---------------------------------------------------------------- leaders
 export { successorFor } from './leaders'
@@ -95,5 +106,6 @@ export {
   defaultSecretaryState,
   initialUi,
   createWorld,
+  techStateFromLevel,
   makeRngForWorld,
 } from './world'

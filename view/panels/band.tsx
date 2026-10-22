@@ -1,4 +1,4 @@
-import { techName } from '../../engine/data'
+import { techNodeName } from '../../engine/data'
 import { fiscalLedger } from '../../engine/fiscal'
 import {
   countryTag,
@@ -94,10 +94,11 @@ export function Band(props: BandProps): any {
       <Text>陆军 {fmtPop(player.military.army)}</Text>
       <Text>海军 {fmtNumber(player.military.navy)} 艘</Text>
       <Text>
-        科技 {player.tech.level} 级
-        <Text dimColor>（{techName(player.tech.level)}）</Text>
+        科技 时代 {player.tech.era} · 已解锁 {player.tech.unlocked.length} 项
       </Text>
-      <Text dimColor>研究中：{player.tech.researching}</Text>
+      <Text dimColor>
+        研究中：{player.tech.researching === '' ? '待选' : techNodeName(player.tech.researching)}
+      </Text>
     </Box>,
   )
   rows.push(

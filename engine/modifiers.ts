@@ -49,6 +49,7 @@ export const MODIFIER_STAT_NAMES: Record<ModifierStat, string> = {
   growth: '人口增长',
   techPoints: '科技点',
   armyStrength: '陆军战力',
+  navyStrength: '海军战力',
   morale: '士气',
   manpower: '人力',
   prestige: '威望',

@@ -7,7 +7,7 @@ import { TECH_MULTIPLIER_CURVE } from './tech'
  * recipe's `gates` / `outputGates` flag turns on. The engine supplies the gate's
  * input at its existing seam and reads the curve from config:
  *
- *   tech           ← country.tech.level  (`techMultiplier`, also `tech:multiplier`)
+ *   tech           ← techTier (country.tech)  (`techMultiplier`, also `tech:multiplier`)
  *   infrastructure ← applyModifiers('transportInfrastructure', econ.transportInfrastructure)
  *   access         ← applyModifiers('marketAccess', econ.marketAccess)
  *   industrial     ← (resourceFactors.coal + resourceFactors.iron) / 2
