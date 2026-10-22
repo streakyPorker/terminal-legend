@@ -1029,4 +1029,4 @@
     `privateCapital`、`infrastructure`、`loyalty`、`quality`、`manpower`、`techPoints`；
   - 默认输出**保持五维不变**，请求时才在对应维度追加列，并在标题下注明「附加列（按需）」；
   - `tests/inspect.test.ts` 断言：默认不含「建造力」，传 `metrics` 后七列齐备。
-- 状态：**fixed（本次提交）**
+- 状态：**fixed（431d3b5）**
