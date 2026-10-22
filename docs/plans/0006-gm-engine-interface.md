@@ -60,3 +60,20 @@
 - 流式推送 / 订阅；第一期只做按需查询。
 - 把引擎拆成独立进程或独立 MCP server；当前 function-hooks 内注册工具即可满足。
 - 历史序列的完整导出；先覆盖当月与最近 N 月。
+
+## 6. 后续需求（2026-10-22 试玩新增）
+
+### 6.1 `v3_inspect rankings` 增加「建造力」维度
+
+- **背景**：试玩 QING 时，玩家要求对比“世界强国的建筑力与 GDP”。GDP 可由
+  `rankings` 的经济维度直接回答；**建造力却没有分国数据**——只有本国的
+  `v3_inspect construction` 可见，GM 无法横向比较，也不允许编造。
+- **需求**：在 `rankings` 中新增一维（建议置于「经济」之后）：
+  - 各国 `constructionCapacity`（建造点/月）、`idle`（闲置点数）、
+    `workshops`（营造所座数）、`subsidy`（建设补贴等级）；
+  - 按建造力从高到低排序；
+  - 与各国的 `construction` 分区数值一致。
+- **验收**：
+  - 七国建造力可按序读出，数值与逐国 `v3_inspect construction` 完全一致；
+  - 不新增存档字段（全部由既有世界状态派生）。
+- **关联**：PT-039、`engine/inspect/rankings.ts`
