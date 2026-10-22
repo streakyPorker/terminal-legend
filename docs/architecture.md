@@ -115,6 +115,23 @@ GLOSSARY「支出法 GDP」「私人资本/私人外债/投资信心」。
 来源：ADR 0021、ADR 0022、`engine/data/buildings.ts`、`engine/economy.ts`、
 `docs/plans/0008-economy-remake.md` §5、`tests/economy-recipe-calibration.test.ts`。
 
+### 劳动需求与失业（利用率为权，0007 E8）
+
+- **劳动需求 = `Σ(labor × count × utilization)`**（`engine/data/derivations.ts` 的 `deriveLabor`）：
+  逐类建筑按 `用工 × 座数 × 上月开工率` 求和，`utilization` 取**上月存储值**
+  （`country.econ.buildingProfits[id].utilization`）——与产出门控**同一字段、同一滞后**（ADR 0022）。
+  全行业 `utilization = 1` 时**逐值退化**为旧的 `Σ(labor × count)`（不变量）。
+- **失业的行业来源**：亏损/闲置的部门按开工率**释放劳力**，劳动需求随之下降、原始利用率缺口扩大；
+  于是**利润经由开工率传导到就业**（0007 E8，`d346b12`）。开工率下界 0.5、一阶平滑 0.25（ADR 0022），
+  故重农经济不会把海量农民读成 95% 闲置。
+- **失业率仍是结构性指标**（`deriveUnemployment`）：由工业建筑吸纳能力、识字率与激进共同决定，
+  **不等于** `1 − 劳动需求/劳动力`；`v3_inspect labor` 的「原始利用率」只反映需求缺口。
+- **`v3_inspect labor` 的「部门来源」行**：`满座需求 − 当月实际劳动需求 = 闲置部门释放的劳力`，
+  并列出开工率最低的几个闲置部门；全部满负荷时显示「无闲置释放」。
+- 纯派生口径，**不提升 World 版本、不改存档形状**（World 仍 v12）。测试：`tests/labor-utilization.test.ts`。
+
+来源：ADR 0022、plan 0007 §E8（`d346b12`）、`engine/data/derivations.ts`、`engine/inspect/labor.ts`。
+
 ## 4. 建造能力与队列
 
 - **营造所产出建造点**：每座每月 **4 点**，受科技、交通、市场接入与**原料可得性**约束
