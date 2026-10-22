@@ -1,4 +1,5 @@
 import type { Country, Modifier, ModifierStat } from '../types'
+import { MODIFIER_CAP } from './config/balance'
 import { effectiveModifierValue } from './scale'
 
 /** Every seam a modifier may target, with its Chinese display name. */
@@ -112,7 +113,13 @@ export function addModifier(country: Country, modifier: Modifier): Modifier {
   const index = country.modifiers.findIndex(one => one.id === modifier.id)
   if (index >= 0) country.modifiers[index] = modifier
   else country.modifiers.push(modifier)
-  if (country.modifiers.length > 64) country.modifiers.shift()
+  if (country.modifiers.length > MODIFIER_CAP) {
+    // Plan 0005 §4: evict a timed modifier before a permanent one, so early
+    // permanent tech effects are not silently pushed out by later buffs; only
+    // when every slot is permanent does the oldest go.
+    const timed = country.modifiers.findIndex(one => one.monthsLeft !== undefined)
+    country.modifiers.splice(timed >= 0 ? timed : 0, 1)
+  }
   return modifier
 }
 

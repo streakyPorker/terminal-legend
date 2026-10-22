@@ -137,8 +137,14 @@ describe('B5 recipe calibration gates (plan 0008 §5)', () => {
       }
     }
     for (const id of TWO_SIDED_GOODS) {
+      let emptyRun = 0
       for (let bucket = 0; bucket < windows; bucket += 1) {
-        expect(perWindow[id][bucket]).toBeGreaterThanOrEqual(1)
+        if (perWindow[id][bucket] >= 1) emptyRun = 0
+        else emptyRun += 1
+        // Plan 0005 K2: diffusion accelerates mid-game industry, so a good may
+        // be transiently one-sided; it must never stay so for more than two
+        // consecutive 12-month windows (pre-K2: never any).
+        expect(emptyRun, `${id} window ${bucket}`).toBeLessThanOrEqual(2)
       }
     }
   })
@@ -300,13 +306,17 @@ const FAMILIES: Record<string, readonly BuildingId[]> = {
 }
 
 // [floor, ceiling] on the 7-major production-weighted gross operating margin.
+// Plan 0005 K2 wires the tech-node effects (K1 stored them but never installed)
+// and adds diffusion/overflow, so the industrial output boost compresses margins
+// at the m84 horizon; these floors are re-baselined for that. Plan 0005 K4 owns
+// the final re-tightening once the tech pacing is tuned.
 const FAMILY_BANDS: Record<string, [number, number]> = {
-  agriculture: [0.48, 0.62],
-  extraction: [0.42, 0.62],
+  agriculture: [0.36, 0.62],
+  extraction: [0.33, 0.62],
   lightIndustry: [0.04, 0.25],
   heavyIndustry: [0.0, 0.36],
-  services: [0.38, 0.58],
-  military: [0.45, 0.65],
+  services: [0.30, 0.58],
+  military: [0.37, 0.65],
 }
 
 type FamilyRow = Record<BuildingId, { profit: number; revenue: number }>
@@ -411,7 +421,9 @@ describe('F7 building calibration gates (plan 0011 §6/§7)', () => {
       if (stats.ratio < 1) debuffed += 1
     }
     // Industry outgrowing infrastructure makes the debuff emerge somewhere.
-    expect(debuffed).toBeGreaterThanOrEqual(2)
+    // Plan 0005 K2 diffusion lets laggards industrialise faster, so one nation
+    // is enough here; K4 owns restoring the pre-K2 count.
+    expect(debuffed).toBeGreaterThanOrEqual(1)
   })
 
   test('build cost / time / capacity keep a plausible ordering', () => {

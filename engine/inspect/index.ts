@@ -100,7 +100,7 @@ export function inspectWorld(
       body = diplomacySection(world, country)
       break
     case 'tech':
-      body = techSection(country)
+      body = techSection(world, country)
       break
     case 'modifiers':
       body = modifiersSection(world)

@@ -24,3 +24,9 @@ export const MAX_MONTHS_PER_RUN = 120
 export const MAX_DECISIONS_PER_MONTH = 12
 export const LOG_MAX_ENTRIES = 400
 export const EVENTS_MAX = 80
+/**
+ * Per-country retained modifier ceiling. Raised 64 → 128 for the tech tree
+ * (plan 0005 §4), so early permanent tech modifiers are not silently evicted by
+ * later policies, events and wars.
+ */
+export const MODIFIER_CAP = 128

@@ -25,3 +25,43 @@ export const TECH_TIER_ERA_COEF = 1.5
 export const TECH_TIER_UNLOCKED_COEF = 0.05
 /** Highest era tier; the general line stops here (plan 0005 §1.1). */
 export const TECH_MAX_ERA = 4
+
+/**
+ * Cross-branch overflow (plan 0005 §2.3, K2). A `15–25%` slice of the current
+ * research flow is added as *extra* progress to the other branches' current-era
+ * nodes; the main node keeps its full flow. The rate rises with literacy,
+ * university count and education spending, then clamps to `[MIN, MAX]`:
+ *
+ *   spillRate = clamp(
+ *     BASE + literacy × LITERACY_COEF
+ *          + min(universities / UNIVERSITY_DIVISOR, UNIVERSITY_MAX)
+ *          + education × EDUCATION_COEF,
+ *     MIN, MAX)
+ */
+export const TECH_SPILL_BASE = 0.15
+export const TECH_SPILL_LITERACY_COEF = 0.1
+export const TECH_SPILL_UNIVERSITY_DIVISOR = 20
+export const TECH_SPILL_UNIVERSITY_MAX = 0.1
+export const TECH_SPILL_EDUCATION_COEF = 0.01
+export const TECH_SPILL_MIN = 0.15
+export const TECH_SPILL_MAX = 0.25
+
+/**
+ * International diffusion (plan 0005 §2.4, K2): a research-*speed* bonus for a
+ * lagging country, derived from the tech gap to its most advanced partner, the
+ * trade share with that partner, relations and an alliance. Capped at
+ * `TECH_DIFFUSION_MAX`; a war or embargo with the partner zeroes it. It never
+ * grants free points or unlocks — it only scales the monthly research flow.
+ *
+ *   techScore(c) = era × SCORE_ERA_COEF + unlocked.length
+ *   bonus = clamp(
+ *     gap × GAP_COEF + tradeShare × TRADE_COEF
+ *       + relation / RELATION_DIVISOR + (alliance ? ALLIANCE : 0),
+ *     0, MAX)
+ */
+export const TECH_SCORE_ERA_COEF = 10
+export const TECH_DIFFUSION_GAP_COEF = 0.02
+export const TECH_DIFFUSION_TRADE_COEF = 0.2
+export const TECH_DIFFUSION_RELATION_DIVISOR = 1000
+export const TECH_DIFFUSION_ALLIANCE = 0.1
+export const TECH_DIFFUSION_MAX = 0.5

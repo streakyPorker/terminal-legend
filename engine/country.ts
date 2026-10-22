@@ -14,6 +14,11 @@ import {
   techTier,
 } from './data'
 import { debtPressure, nationalDebt } from './fiscal'
+import {
+  flowTechOverflow,
+  installTechNodeEffects,
+  techDiffusionBonus,
+} from './tech'
 import { applyModifiers, tickModifiers } from './modifiers'
 import { evaluateThresholds, logThresholds } from './thresholds'
 import { effectiveSavingsRate, computeEconomy, computePrestige, SHRINK_MAX } from './economy'
@@ -474,33 +479,44 @@ export function simulateCountry(
     RESEARCH_BASE +
     country.pops.literacy * RESEARCH_LITERACY_COEF +
     country.bureaucracy.score * RESEARCH_BUREAUCRACY_COEF
-  country.tech.pointsPerMonth =
+  const baseRate =
     researchBase +
     country.econ.buildings.universities *
       RESEARCH_UNIVERSITY_PER_BUILDING *
       (RESEARCH_UNIVERSITY_LITERACY_BASE + country.pops.literacy) *
       (1 + country.econ.spending.education * RESEARCH_EDUCATION_COEF) *
       (1 + techTier(country.tech) * RESEARCH_TECH_LEVEL_COEF)
-  country.tech.points += applyModifiers(
+  // Plan 0005 K2 §2.4: a lagging country's research speed gains up to +50% from
+  // international diffusion (tech gap + trade + relations + alliance; zeroed by
+  // war or embargo). It scales the flow only — never free points or unlocks.
+  country.tech.pointsPerMonth =
+    baseRate * (1 + techDiffusionBonus(world, country))
+  const monthlyResearch = applyModifiers(
     country,
     'techPoints',
     country.tech.pointsPerMonth,
   )
-  // Plan 0005 K1: points flow into the chosen node; completing it appends to
-  // `unlocked` and raises the era when it is a general-line node. An empty or
-  // stale choice falls back to the deterministic first-eligible node (the K3
-  // AI-selection seam); node effects are stored by K1 and wired by K2.
+  country.tech.points += monthlyResearch
+  // Plan 0005 K1/K2: points flow into the chosen node; completing it appends to
+  // `unlocked`, installs its effects and raises the era for a general-line node.
+  // An empty or stale choice falls back to the deterministic first-eligible
+  // node (the K3 AI-selection seam).
   let node = techNode(country.tech.researching)
   if (node === undefined || country.tech.unlocked.includes(node.id)) {
     node = defaultResearchNode(country.tech)
     country.tech.researching = node?.id ?? ''
   }
   if (node !== undefined) {
-    country.tech.nodes[node.id] = Math.min(1, country.tech.points / node.cost)
+    // Keep any progress this node already accrued from a previous overflow.
+    country.tech.nodes[node.id] = Math.max(
+      country.tech.nodes[node.id] ?? 0,
+      Math.min(1, country.tech.points / node.cost),
+    )
     if (country.tech.points >= node.cost) {
       country.tech.points -= node.cost
       country.tech.nodes[node.id] = 1
       country.tech.unlocked.push(node.id)
+      installTechNodeEffects(country, node)
       if (node.branch === 'general' && node.era > country.tech.era) {
         country.tech.era = node.era
       }
@@ -510,6 +526,16 @@ export function simulateCountry(
         kind: 'tech',
         countryId: country.id,
         text: `[${country.flag}] ${country.name}解锁了「${techNodeName(node.id)}」`,
+      })
+    }
+    // Plan 0005 K2 §2.3: 15–25% of the flow adds extra progress to the other
+    // branches' current-era nodes; the main node above still took it all.
+    for (const completed of flowTechOverflow(country, node, monthlyResearch)) {
+      log.push({
+        date: { ...world.date },
+        kind: 'tech',
+        countryId: country.id,
+        text: `[${country.flag}] ${country.name}解锁了「${techNodeName(completed.id)}」（跨分支溢出）`,
       })
     }
   }
