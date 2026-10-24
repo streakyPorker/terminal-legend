@@ -101,7 +101,7 @@ export function EconomyPanel(props: {
           ['关税', ledger.income.taxBases.tariff],
           ['基建', ledger.income.ports],
           ['基金收益', ledger.income.sovereignIncome],
-          ['赔款收入', ledger.income.reparations],
+          ['赔款/转移', ledger.income.reparations],
           ['其他（建造力出租）', ledger.income.other],
         ] as const).map(([name, value]) => (
           <Box flexDirection="row" columnGap={1}>
@@ -125,7 +125,7 @@ export function EconomyPanel(props: {
           ['债息', ledger.expense.debtInterest],
           ['市场损耗', ledger.expense.marketLoss],
           ['设施维护', ledger.expense.upkeep],
-          ['赔款支出', ledger.expense.reparations],
+          ['赔款/转移', ledger.expense.reparations],
           ['国有建设', ledger.expense.construction],
           ['建设补贴', ledger.expense.constructionSubsidy],
         ] as const).map(([name, value]) => (
@@ -146,8 +146,8 @@ export function EconomyPanel(props: {
         <Text dimColor>
           私人部门贸易逆差 {fmtMoney(ledger.tradeGap)}（由私人资本/私人外债 {fmtMoney(ledger.privateDebt)} 承担，不影响国库）；净资产实际变动 {fmtSigned(ledger.net)} 金/月
         </Text>
-        <Text dimColor>GDP {fmtGdp(ledger.gdp)} 是产出（基期价），不是国库收支；国库只经手四税基税入、基建、基金收益与赔款。</Text>
-        {(props.world.indemnities ?? [])
+        <Text dimColor>GDP {fmtGdp(ledger.gdp)} 是产出（基期价），不是国库收支；国库只经手四税基税入、基建、基金收益与赔款/转移。</Text>
+        {[...(props.world.indemnities ?? []), ...(props.world.transfers ?? [])]
           .filter(
             schedule =>
               schedule.from === player.id || schedule.to === player.id,
@@ -156,11 +156,14 @@ export function EconomyPanel(props: {
             const paying = schedule.from === player.id
             const otherId = paying ? schedule.to : schedule.from
             const other = props.world.countries[otherId]?.name ?? otherId
+            const kind = 'label' in schedule ? '转移' : '赔款'
             return (
               <Text key={schedule.id} dimColor>
-                赔款{paying ? '支出' : '收入'}：{paying ? '付给' : '收自'}
+                {kind}
+                {paying ? '支出' : '收入'}：{paying ? '付给' : '收自'}
                 {other} 每月 {fmtMoney(schedule.monthlyAmount)}，剩余{' '}
                 {schedule.monthsLeft} 月（余 {fmtMoney(schedule.remaining)}）
+                {'label' in schedule ? `｜${schedule.label}` : ''}
               </Text>
             )
           })}
