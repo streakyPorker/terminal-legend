@@ -75,6 +75,32 @@ export function pendingOf(world: WorldState) {
   return world.events.filter(event => event.countryId === world.playerId && !event.isResolved)
 }
 
+// ---------------------------------------------------------------- GM notifications
+
+/**
+ * Who set a mutation in motion: the GM via an MCP tool (`tool`), the player via
+ * a panel button or a typed `/v3` command (`ui`), or the engine itself (`engine`,
+ * e.g. a managed-run step).
+ */
+export type ActionOrigin = 'tool' | 'ui' | 'engine'
+
+/**
+ * Appends one hidden user-role row the GM model reads on its next request.
+ * `$.ui.log` is NOT model-visible, so panel-button and typed-command actions —
+ * and managed-run outcomes — must go through here or the narrator never learns
+ * the world moved (PT-044/PT-045). Best-effort: a refusal or a closed session
+ * must never fail the action that triggered it.
+ */
+export async function noteToModel($: EngineInterface, text: string): Promise<void> {
+  try {
+    await $.session.append({
+      message: { type: 'user', content: [{ type: 'text', text }] },
+    })
+  } catch {
+    // The row is a courtesy to the GM; the game action stands regardless.
+  }
+}
+
 // ---------------------------------------------------------------- UI plumbing
 
 export async function refreshStatus($: EngineInterface): Promise<void> {

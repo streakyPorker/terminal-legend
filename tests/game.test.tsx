@@ -463,3 +463,66 @@ describe('terminal-legend drawing', () => {
     await ui.unmount()
   })
 })
+
+describe('terminal-legend GM notifications (PT-045)', () => {
+  test('a player command that changes the world appends a model-visible note', async ($, on) => {
+    const anyOn = on as unknown as (
+      event: string,
+      hook: ($: any, e: any) => unknown,
+    ) => void
+    anyOn('session.start', ($: any, e: any) => ({ cwd: e.cwd }))
+    anyOn('command.register', ($: any, e: any) => ({ value: { command: e.command } }))
+    anyOn('tool.register', ($: any, e: any) => ({ value: { tool: `mcp__terminal-legend__${e.name}` } }))
+    anyOn('agent.register', () => ({ value: { agent: 'terminal-legend:secretary' } }))
+    anyOn('fs.exists', () => ({ value: false }))
+    anyOn('fs.write', () => ({ value: undefined }))
+    anyOn('fs.read', () => ({ value: '' }))
+    anyOn('env.get', () => ({ value: '/tmp' }))
+    anyOn('session.root', () => ({ value: '/tmp' }))
+    anyOn('session.cwd', () => ({ value: '/tmp' }))
+    anyOn('session.id', () => ({ value: 'test-session' }))
+    anyOn('clock.every', () => ({ value: undefined }))
+    anyOn('ui.open', () => ({ value: { isPlaced: true } }))
+    anyOn('ui.status', () => ({ value: undefined }))
+    anyOn('ui.log', () => ({ value: undefined }))
+    anyOn('ui.toast', () => ({ value: undefined }))
+    anyOn('model.complete', () => ({
+      value: {
+        isAnswered: true,
+        text: '[]',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_read_input_tokens: 0,
+          cache_creation_input_tokens: 0,
+        },
+      },
+    }))
+    // PT-045: the note must be a hidden user row (the model reads it), not a
+    // system notice ($.ui.log, which the model never sees).
+    const notes: { type: string; text: string }[] = []
+    anyOn('session.append', ($: any, e: any, next: any) => {
+      notes.push({
+        type: String(e?.message?.type ?? ''),
+        text: String(e?.message?.content?.[0]?.text ?? ''),
+      })
+      return next(e)
+    })
+
+    await ($.session.start as unknown as (e: unknown) => Promise<unknown>)({
+      cwd: '/tmp',
+      surface: 'terminal',
+      isInteractive: true,
+    })
+    const run = (input: unknown) =>
+      ($.command.run as unknown as (e: unknown) => Promise<{ text: string }>)(input)
+    await run({ command: 'v3', args: 'new QING' })
+    await run({ command: 'v3', args: 'next' })
+
+    const advance = notes.find(note => note.text.includes('推进'))
+    expect(advance).toBeDefined()
+    expect(advance?.type).toBe('user')
+    expect(advance?.text).toContain('非玩家发言')
+    expect(advance?.text).toContain('玩家')
+  })
+})

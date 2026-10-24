@@ -16,7 +16,7 @@ import {
   setUi,
   setWorld,
 } from './internal'
-import { advanceGame, resolveEvent, startDelegated, startSecretary, stopDelegated } from './council'
+import { advanceGame, notifyPlayerAction, resolveEvent, startDelegated, startSecretary, stopDelegated } from './council'
 import { statusHint, statusText } from './prompt'
 
 // ---------------------------------------------------------------- commands
@@ -71,18 +71,18 @@ export async function runV3Command(
       case 'advance':
       case 'approve': {
         if (isDelegatedRun()) return { text: '托管进行中，请等它结束。' }
-        return { text: await advanceGame($, 1, true) }
+        return { text: await advanceGame($, 1, true, true, true, 'ui') }
       }
 
       case 'run': {
         if (current === undefined) return { text: '还没有进行中的游戏。' }
         const months = clamp(Math.floor(Number(parts[1] ?? current.world.secretary.delegation.months)), 1, 12)
-        return { text: await startDelegated($, months) }
+        return { text: await startDelegated($, months, 'ui') }
       }
 
       case 'stop': {
         if (current === undefined) return { text: '还没有进行中的游戏。' }
-        return { text: stopDelegated($) }
+        return { text: stopDelegated($, 'ui') }
       }
 
       case 'council': {
@@ -94,7 +94,7 @@ export async function runV3Command(
 
       case 'secretary': {
         if (current === undefined) return { text: '还没有进行中的游戏。' }
-        return { text: await startSecretary($) }
+        return { text: await startSecretary($, 'ui') }
       }
 
       case 'delegate': {
@@ -115,8 +115,11 @@ export async function runV3Command(
         await setWorld($, world)
         await saveGame($, world).catch(() => undefined)
         await refreshStatus($)
+        const label = domain === 'internal' ? '内政' : '外交'
+        const on = toggle === 'on'
+        await notifyPlayerAction($, 'ui', `将${label}委托${on ? '开启' : '关闭'}`)
         return {
-          text: `${domain === 'internal' ? '内政' : '外交'}委托已${toggle === 'on' ? '开启' : '关闭'}。`,
+          text: `${label}委托已${on ? '开启' : '关闭'}。`,
         }
       }
 
@@ -230,7 +233,7 @@ export async function runV3Command(
         if (eventId === undefined || optionId === undefined) {
           return { text: '用法：/v3 resolve <事件ID> <选项ID>。先 /v3 events 查看。' }
         }
-        const text = await resolveEvent($, eventId, optionId)
+        const text = await resolveEvent($, eventId, optionId, 'ui')
         return { text }
       }
 

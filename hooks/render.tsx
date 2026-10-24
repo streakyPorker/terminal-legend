@@ -28,14 +28,14 @@ export async function renderPane($: EngineInterface, e: any) {
         void patchUi($, { tab })
       }}
       onControl={(control, payload) => {
-        void controlGame($, control, payload)
+        void controlGame($, control, payload, 'ui')
       }}
       onEvent={(eventId, optionId) => {
-        void resolveEvent($, eventId, optionId)
+        void resolveEvent($, eventId, optionId, 'ui')
       }}
       council={current.ui.council}
       onCouncil={(action, value) => {
-        void councilAction($, action, value)
+        void councilAction($, action, value, 'ui')
       }}
     />
   )
@@ -52,11 +52,11 @@ export async function renderAbovePrompt($: EngineInterface, e: any, next: any) {
       width={e.props.bodyColumns}
       maxRows={e.props.maxRows}
       onControl={(control, payload) => {
-        void controlGame($, control, payload)
+        void controlGame($, control, payload, 'ui')
       }}
       council={current.ui.council}
       onCouncil={(action, value) => {
-        void councilAction($, action, value)
+        void councilAction($, action, value, 'ui')
       }}
     />
   )
@@ -77,7 +77,7 @@ export async function renderCommandOutput($: EngineInterface, e: any) {
       args={e.props.args}
       text={e.props.text}
       onEvent={(eventId, optionId) => {
-        void resolveEvent($, eventId, optionId)
+        void resolveEvent($, eventId, optionId, 'ui')
       }}
     />
   )

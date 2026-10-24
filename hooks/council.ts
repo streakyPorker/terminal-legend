@@ -30,6 +30,7 @@ import {
   getWorld,
   isDelegatedRun,
   isDelegatedStopRequested,
+  noteToModel,
   openPane,
   patchUi,
   pendingOf,
@@ -38,6 +39,7 @@ import {
   secretaryAnswers,
   setDelegatedRun,
   setWorld,
+  type ActionOrigin,
 } from './internal'
 
 // ---------------------------------------------------------------- engine plumbing
@@ -113,6 +115,30 @@ async function generateTurnEvents(
   return events
 }
 
+/** Flattens a result string to a bounded one-liner for a model-visible note. */
+function condense(text: string, max = 200): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  return flat.length > max ? `${flat.slice(0, max)}…` : flat
+}
+
+/**
+ * Tells the GM model the *player* acted, via a panel button or a typed `/v3`
+ * command. PT-045: those paths mutate the world without a tool call, so without
+ * this the narrator is blind to them. A no-op unless `origin` is `ui`, so a
+ * GM-issued tool call never double-notifies and the engine's own steps stay
+ * quiet; the model reads the row on its next request.
+ */
+export async function notifyPlayerAction(
+  $: EngineInterface,
+  origin: ActionOrigin,
+  what: string,
+  detail = '',
+): Promise<void> {
+  if (origin !== 'ui') return
+  const tail = detail === '' ? '' : `结果：${condense(detail)}`
+  await noteToModel($, `【玩家操作·非玩家发言】玩家${what}。${tail}`)
+}
+
 function summarize(report: AdvanceReport, months: number): string {
   const lines = [`推进 ${months} 个月：${fmtDate(report.start)} → ${fmtDate(report.end)}`]
   for (const entry of report.log.slice(-8)) {
@@ -137,6 +163,7 @@ export async function advanceGame(
   // Delegated runs pass false: skipping generation there keeps a multi-month
   // run from stalling on one model call per month (ADR 0025 §7).
   allowLiveEvents = true,
+  origin: ActionOrigin = 'tool',
 ): Promise<string> {
   if (isAdvancing) return '时间正在推进，请稍候。'
   const current = await activeWorld($)
@@ -260,6 +287,7 @@ export async function advanceGame(
     if (pending.length > 0 && announce) {
       $.ui.toast(`新事件：${pending.map(event => event.title).join('、')}`)
     }
+    await notifyPlayerAction($, origin, `批准并推进 ${months} 个月`, summary)
     return summary
   } finally {
     isAdvancing = false
@@ -271,6 +299,7 @@ export async function resolveEvent(
   $: EngineInterface,
   eventId: string,
   optionId: string,
+  origin: ActionOrigin = 'tool',
 ): Promise<string> {
   const current = await activeWorld($)
   if (current === undefined) return '还没有进行中的游戏。'
@@ -284,6 +313,7 @@ export async function resolveEvent(
   await saveGame($, world).catch(() => undefined)
   await refreshStatus($)
   $.ui.toast(text)
+  await notifyPlayerAction($, origin, `处理了事件「${event.title}」（${optionId}）`, text)
   return text
 }
 
@@ -323,7 +353,7 @@ async function askSecretary(
  * hooks have a short budget, while the subagent may take up to 240 seconds.
  * The report lands later through finishSecretary.
  */
-export async function startSecretary($: EngineInterface): Promise<string> {
+export async function startSecretary($: EngineInterface, origin: ActionOrigin = 'tool'): Promise<string> {
   const current = await activeWorld($)
   if (current === undefined) return '还没有进行中的游戏。输入 /v3 new 开始一局。'
   if (isDelegatedRun()) return '托管进行中，请等它结束再召见秘书。'
@@ -339,6 +369,7 @@ export async function startSecretary($: EngineInterface): Promise<string> {
     council: { ...current.ui.council, isRunning: true },
   })
   void finishSecretary($, world).catch(() => undefined)
+  await notifyPlayerAction($, origin, '召见秘书拟旨')
   return '秘书已受命，正在拟旨；报告到达后会提示。'
 }
 
@@ -440,6 +471,7 @@ async function panelDecision(
   $: EngineInterface,
   action: string,
   payload?: ControlPayload,
+  origin: ActionOrigin = 'tool',
 ): Promise<string> {
   const current = await activeWorld($)
   if (current === undefined) return '还没有进行中的游戏。'
@@ -455,6 +487,9 @@ async function panelDecision(
   await saveGame($, world).catch(() => undefined)
   await refreshStatus($)
   await patchUi($, { notice: result.text })
+  const label =
+    action === 'cancel' ? '取消了一项建造' : action === 'reorder' ? '调整了建造队列' : '调整了研究计划'
+  await notifyPlayerAction($, origin, label, result.text)
   return result.text
 }
 
@@ -463,7 +498,11 @@ async function panelDecision(
  * order of plan 0013, equivalent to `y` successive `v3_action build` calls.
  * For `head` the slots keep their order by anchoring later ones after the first.
  */
-async function panelBuild($: EngineInterface, payload?: ControlPayload): Promise<string> {
+async function panelBuild(
+  $: EngineInterface,
+  payload?: ControlPayload,
+  origin: ActionOrigin = 'tool',
+): Promise<string> {
   const current = await activeWorld($)
   if (current === undefined) return '还没有进行中的游戏。'
   if (isDelegatedRun()) return '托管进行中，请等它结束。'
@@ -502,6 +541,7 @@ async function panelBuild($: EngineInterface, payload?: ControlPayload): Promise
   await refreshStatus($)
   const text = texts.join('\n')
   await patchUi($, { notice: text })
+  await notifyPlayerAction($, origin, '在建造面板下单', text)
   return text
 }
 
@@ -509,13 +549,14 @@ export async function controlGame(
   $: EngineInterface,
   action: ControlAction,
   payload?: ControlPayload,
+  origin: ActionOrigin = 'tool',
 ): Promise<string> {
   const current = await activeWorld($)
   if (current === undefined) return '还没有进行中的游戏。'
 
   if (action === 'next') {
     if (isDelegatedRun()) return '托管进行中，请等它结束。'
-    return advanceGame($, 1, true)
+    return advanceGame($, 1, true, true, true, origin)
   }
 
   if (action === 'council') {
@@ -524,10 +565,10 @@ export async function controlGame(
     return '已打开御前议事。'
   }
 
-  if (action === 'build') return panelBuild($, payload)
-  if (action === 'cancel') return panelDecision($, 'cancel', payload)
-  if (action === 'reorder') return panelDecision($, 'reorder', payload)
-  if (action === 'research') return panelDecision($, 'research', payload)
+  if (action === 'build') return panelBuild($, payload, origin)
+  if (action === 'cancel') return panelDecision($, 'cancel', payload, origin)
+  if (action === 'reorder') return panelDecision($, 'reorder', payload, origin)
+  if (action === 'research') return panelDecision($, 'research', payload, origin)
 
   const world = clone(current.world)
   world.resumeOnStart = true
@@ -538,11 +579,12 @@ export async function controlGame(
 }
 
 /** Requests the in-flight delegated run to stop after the current month (PT-039). */
-export function stopDelegated($: EngineInterface): string {
+export function stopDelegated($: EngineInterface, origin: ActionOrigin = 'tool'): string {
   if (!isDelegatedRun()) return '当前没有正在进行的托管。'
   requestDelegatedStop()
   void patchUi($, { notice: '已请求停止托管，将在本月推进结束后停下…' }).catch(() => undefined)
   $.ui.toast('已请求停止托管')
+  void notifyPlayerAction($, origin, '请求停止托管')
   return '已请求停止托管，将在本月推进结束后停下。'
 }
 
@@ -564,7 +606,11 @@ function interruptReason(before: WorldState, after: WorldState): string {
  * Starts a managed run and returns at once. The monthly loop continues in
  * the background (command hooks have a short budget; a run may take minutes).
  */
-export async function startDelegated($: EngineInterface, months: number): Promise<string> {
+export async function startDelegated(
+  $: EngineInterface,
+  months: number,
+  origin: ActionOrigin = 'tool',
+): Promise<string> {
   const current = await activeWorld($)
   if (current === undefined) return '还没有进行中的游戏。'
   if (isDelegatedRun()) return '已有托管在进行中，请等它结束。'
@@ -583,6 +629,7 @@ export async function startDelegated($: EngineInterface, months: number): Promis
   void runDelegated($, total).catch(() => {
     setDelegatedRun(false)
   })
+  await notifyPlayerAction($, origin, `发起托管 ${total} 个月`)
   return `托管已开始：最多 ${total} 个月；遇待决事件、战争或秘书越权会停下并提示，也可用 /v3 stop（或 v3_control stop）手动停止。`
 }
 
@@ -598,7 +645,10 @@ async function runDelegated($: EngineInterface, total: number): Promise<void> {
       const before = await activeWorld($)
       if (before === undefined) break
       const snapshot = clone(before.world)
-      const summary = await advanceGame($, 1, false, false, false)
+      // announce=true so each month lands one settlement line in the player's
+      // transcript (PT-044); it triggers no model call. origin=engine keeps the
+      // per-month progress out of the GM's notes — only the completion is pushed.
+      const summary = await advanceGame($, 1, true, false, false, 'engine')
       if (!summary.startsWith('推进 ')) {
         reason = summary
         break
@@ -629,6 +679,11 @@ async function runDelegated($: EngineInterface, total: number): Promise<void> {
     })
     await refreshStatus($)
     $.ui.toast(header)
+    $.ui.log(header)
+    await noteToModel(
+      $,
+      `【托管结束·非玩家发言】玩家发起的托管已结束：${header}。最终：${condense(lastReport)}。（精确数字请查 v3_status）`,
+    )
   } finally {
     setDelegatedRun(false)
     clearDelegatedStop()
@@ -639,6 +694,7 @@ export async function councilAction(
   $: EngineInterface,
   action: CouncilAction,
   value?: number,
+  origin: ActionOrigin = 'tool',
 ): Promise<string> {
   const current = await activeWorld($)
   if (current === undefined) return '还没有进行中的游戏。'
@@ -648,18 +704,20 @@ export async function councilAction(
       await patchUi($, {
         council: { ...current.ui.council, isOpen: false },
       })
-      return advanceGame($, 1, true)
+      return advanceGame($, 1, true, true, true, origin)
     }
     case 'run':
-      return startDelegated($, value ?? current.world.secretary.delegation.months)
+      return startDelegated($, value ?? current.world.secretary.delegation.months, origin)
     case 'recompose':
-      return startSecretary($)
+      return startSecretary($, origin)
     case 'delegate-internal': {
       const world = clone(current.world)
       world.secretary.delegation.internal = !world.secretary.delegation.internal
       await setWorld($, world)
       await saveGame($, world).catch(() => undefined)
-      $.ui.toast(`内政委托已${world.secretary.delegation.internal ? '开启' : '关闭'}`)
+      const on = world.secretary.delegation.internal
+      $.ui.toast(`内政委托已${on ? '开启' : '关闭'}`)
+      await notifyPlayerAction($, origin, `将内政委托${on ? '开启' : '关闭'}`)
       return 'ok'
     }
     case 'delegate-diplomacy': {
@@ -667,14 +725,18 @@ export async function councilAction(
       world.secretary.delegation.diplomacy = !world.secretary.delegation.diplomacy
       await setWorld($, world)
       await saveGame($, world).catch(() => undefined)
-      $.ui.toast(`外交委托已${world.secretary.delegation.diplomacy ? '开启' : '关闭'}`)
+      const on = world.secretary.delegation.diplomacy
+      $.ui.toast(`外交委托已${on ? '开启' : '关闭'}`)
+      await notifyPlayerAction($, origin, `将外交委托${on ? '开启' : '关闭'}`)
       return 'ok'
     }
     case 'months': {
       const world = clone(current.world)
-      world.secretary.delegation.months = clamp(Math.round(value ?? 1), 1, 12)
+      const months = clamp(Math.round(value ?? 1), 1, 12)
+      world.secretary.delegation.months = months
       await setWorld($, world)
       await saveGame($, world).catch(() => undefined)
+      await notifyPlayerAction($, origin, `把委托月数改为 ${months}`)
       return 'ok'
     }
     default:
