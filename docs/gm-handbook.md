@@ -124,7 +124,7 @@
 
 ### 4.2 商品与物价
 
-14 种商品与基价（`basePrice`，单位「金」）：
+15 种商品与基价（`basePrice`，单位「金」）：
 
 | 商品 | id | 基价 | 商品 | id | 基价 |
 | --- | --- | ---: | --- | --- | ---: |
@@ -135,6 +135,7 @@
 | 布料 | `fabric` | 2.0 | 奢侈品 | `luxury` | 10.0 |
 | 成衣 | `clothes` | 3.0 | 鸦片 | `opium` | 2.5 |
 | 酒类 | `liquor` | 2.6 | 服务 | `services` | 4.0 |
+| **船只** | `ships` | **8.0** | | |
 
 - `iron` 是**铁矿石**（World v11 起；id 未变），由铁矿产出、只作**钢铁厂**炼钢的投入；`steel`（钢铁）
   由钢铁厂用「铁矿石 + 煤」炼成，供基础设施、建设投资、政府建设与机械/军械/家具使用。
@@ -170,12 +171,17 @@
 | 学校 `schools` | services 0.1 | 无 | 0.15 | access |
 | 基础设施 `infrastructure` | 无 | **steel 0.2**、wood 0.16 | 0.54 | 无 |
 | 要塞 `forts` | arms 0.08 | steel 0.02、wood 0.03 | 0.3 | tech + industrial |
-| 船坞 `navalYards` | machinery 0.14 | steel 0.08、wood 0.08 | 0.8 | tech + industrial |
+| 船坞 `navalYards` | **ships 0.3**、machinery 0.03 | steel 0.18、wood 0.12、machinery 0.04 | 0.8 | tech + industrial |
+| 海军营地 `navalBases` | 无（把船只编为海军，见下） | **ships 1** | 0.6 | tech |
 | 大学 `universities` | services 0.2 | 无 | 0.2 | 无 |
 | 兵营 `barracks` | arms 0.05 | 无 | 0.3 | 无 |
 | 官署 `offices` | services 0.8 | 无 | 0.1 | 无 |
 | 营造所 `workshops` | 无（产出建造点，`engine/economy.ts` 特判） | wood 1、grain 0.6、iron 0.3 | **0.8** | 无 |
 
+- **船只链（PT-066）**：`ships` 是可贸易商品。**船坞**每月每座产 **0.3 艘**；
+  **海军营地**每月每座吃 **1 艘**，并按「当月实际到货比例」把船编入海军：
+  `navy += 营地数 × min(1, 有效供给 ÷ 需求)`。所以没有船坞就没有船，没有船营地也变不出舰队。
+  船也可以进口/出口，是列强海权的产业基础。
 - **门控乘数**：tech `1 + 等级 × 0.07`；access `0.55 + 市场接入 × 0.9`；industrial 为煤铁禀赋因子
   （0.7~1.3）。旧的逐配方 infrastructure 门控（`0.6 + 交通 / 160`）**已退役**，由 F5 的统一基础设施
   短缺乘数（对所有建筑生效）取代。

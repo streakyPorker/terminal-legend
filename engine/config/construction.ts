@@ -30,6 +30,7 @@ export const CAPACITY_COST: Record<BuildingId, number> = {
   barracks: 1,
   offices: 1,
   workshops: 1.5,
+  navalBases: 2,
 }
 
 /** Private builders do this share of a slot's work with their own organisation. */
@@ -63,6 +64,7 @@ export const BUILDING_COST_MULTIPLIER: Record<BuildingId, number> = {
   barracks: 1,
   offices: 1,
   workshops: 1,
+  navalBases: 1,
 }
 /** Per-building fixed gold addend; v1 is 0 for every type. */
 export const BUILDING_COST_ADDEND: Record<BuildingId, number> = {
@@ -85,6 +87,7 @@ export const BUILDING_COST_ADDEND: Record<BuildingId, number> = {
   barracks: 0,
   offices: 0,
   workshops: 0,
+  navalBases: 0,
 }
 
 /** Workshop capacity access curve: base + marketAccess × slope (retired gate). */

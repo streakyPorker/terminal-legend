@@ -38,6 +38,9 @@ export type GoodId =
   | 'luxury'
   | 'opium'
   | 'services'
+  // PT-066: ships are a tradeable good. Shipyards make them, naval bases
+  // consume them to grow `military.navy`.
+  | 'ships'
 
 /** Transport-cost region of a country (plan 0004 §1.2). */
 export type Region = 'europe' | 'eastAsia' | 'americas' | 'middleEast'
@@ -188,6 +191,8 @@ export type BuildingId =
   | 'barracks'
   | 'offices'
   | 'workshops'
+  // PT-066: naval base — consumes `ships` and turns them into `military.navy`.
+  | 'navalBases'
 
 export type SpendingCategory =
   | 'army'

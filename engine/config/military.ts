@@ -19,6 +19,12 @@ export const MORALE_LOSS = -0.15
 export const MORALE_MIN = 20
 export const MORALE_MAX = 100
 
+/**
+ * PT-066: hulls a naval base can convert into a warship each month, scaled by
+ * the share of its `ships` demand that was actually delivered.
+ */
+export const SHIPS_PER_NAVAL_BASE = 1
+
 /** Leader ageing. */
 export const LEADER_AGE_PER_MONTH = 1 / 12
 export const LEADER_DEATH_AGE = 82

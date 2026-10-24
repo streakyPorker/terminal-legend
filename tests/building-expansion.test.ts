@@ -26,7 +26,7 @@ import type { BuildingId, Country, WorldState } from '../types'
 //   forts      = military (small arms output)
 //   navalYards = military (small machinery output)
 //   infrastructure = the merged unified-infrastructure provider (cost centre)
-const NEW_BUILDINGS: BuildingId[] = ['schools', 'forts', 'navalYards']
+const NEW_BUILDINGS: BuildingId[] = ['schools', 'forts', 'navalYards', 'navalBases']
 
 const countryOf = (world: WorldState, id: string): Country => {
   const country = world.countries[id]
@@ -40,7 +40,7 @@ const close = (actual: number, expected: number, eps = 1e-9): void => {
 
 describe('F4 building expansion (schools / forts / navalYards) + plan 0014 merge', () => {
   test('the surviving F4 ids and the merged infrastructure id live in every BuildingId table', () => {
-    expect(BUILDING_IDS.length).toBe(19)
+    expect(BUILDING_IDS.length).toBe(20)
     const tables: Record<string, Record<string, unknown>> = {
       BUILDINGS: BUILDINGS as unknown as Record<string, unknown>,
       BUILDING_RECIPES: BUILDING_RECIPES as unknown as Record<string, unknown>,
@@ -84,9 +84,13 @@ describe('F4 building expansion (schools / forts / navalYards) + plan 0014 merge
     expect(Object.keys(BUILDING_RECIPES.infrastructure.output)).toEqual([])
     expect(Object.keys(BUILDING_RECIPES.infrastructure.input).length).toBeGreaterThan(0)
 
-    // forts / navalYards — small military output (F7 calibrated to a positive margin).
+    // forts / navalYards — military output. PT-066: the yard now lays down
+    // hulls (`ships`, a tradeable good) instead of a token amount of machinery.
     expect(BUILDING_RECIPES.forts.output).toEqual({ arms: 0.08 })
-    expect(BUILDING_RECIPES.navalYards.output).toEqual({ machinery: 0.14 })
+    expect(BUILDING_RECIPES.navalYards.output).toEqual({ ships: 0.3, machinery: 0.03 })
+    // navalBases — consumes hulls, produces no goods of its own.
+    expect(Object.keys(BUILDING_RECIPES.navalBases.output)).toEqual([])
+    expect(BUILDING_RECIPES.navalBases.input).toEqual({ ships: 1 })
     expect(BUILDING_RECIPES.forts.gates?.tech).toBe(true)
     expect(BUILDING_RECIPES.forts.gates?.industrial).toBe(true)
     expect(BUILDING_RECIPES.navalYards.gates?.tech).toBe(true)
@@ -157,7 +161,7 @@ describe('F4 building expansion (schools / forts / navalYards) + plan 0014 merge
   test('the world carries the merged roster at version 12', () => {
     const world = newWorld(9100, 'QING')
     expect(world.version).toBe(13)
-    expect(BUILDING_IDS.length).toBe(19)
+    expect(BUILDING_IDS.length).toBe(20)
     for (const gone of ['railroads', 'ports', 'canals', 'telegraphs']) {
       expect(BUILDING_IDS as string[]).not.toContain(gone)
     }

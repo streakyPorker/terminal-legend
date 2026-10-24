@@ -64,7 +64,7 @@ const BUILDING_GROUPS: BuildingGroup[] = [
   { label: '轻工', ids: ['textileMills', 'furnitureWorks', 'distilleries', 'luxuryWorks'] },
   { label: '重工', ids: ['machineryWorks', 'steelMills'] },
   { label: '服务', ids: ['schools', 'universities', 'offices'] },
-  { label: '军事', ids: ['arsenals', 'barracks', 'forts', 'navalYards'] },
+  { label: '军事', ids: ['arsenals', 'barracks', 'forts', 'navalYards', 'navalBases'] },
   { label: '基建', ids: [...INFRA_BUILDING_IDS, 'workshops'] },
 ]
 

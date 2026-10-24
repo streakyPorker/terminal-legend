@@ -59,7 +59,7 @@ describe('T1a world schema (v11)', () => {
   })
 
   test('opium is a tradable good and services is not', async () => {
-    expect(Object.keys(GOODS).length).toBe(14)
+    expect(Object.keys(GOODS).length).toBe(15)
     expect(GOODS.opium.basePrice).toBe(2.5)
     expect(GOODS.steel.basePrice).toBeGreaterThan(GOODS.iron.basePrice)
     expect(GOODS.iron.name).toBe('铁矿石')

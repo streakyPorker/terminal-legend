@@ -108,6 +108,7 @@ import {
   MORALE_LOSS,
   MORALE_MAX,
   MORALE_MIN,
+  SHIPS_PER_NAVAL_BASE,
 } from './config/military'
 import {
   RESEARCH_BASE,
@@ -178,6 +179,16 @@ export function simulateCountry(
   country.econ.income = snap.income
   country.econ.lastIncomeOther = snap.revenue.other
   country.econ.expense = snap.expense
+  // PT-066: naval bases commission hulls. Only the share of their ship demand
+  // that was actually delivered (domestic output + imports) becomes tonnage,
+  // so a base with no hulls adds nothing.
+  const navalBases = country.econ.buildings.navalBases ?? 0
+  if (navalBases > 0) {
+    const shipDemand = snap.demand.ships ?? 0
+    const shipSupply = snap.supply.ships ?? 0
+    const deliveredRatio = shipDemand > 0 ? Math.min(1, shipSupply / shipDemand) : 0
+    country.military.navy += navalBases * SHIPS_PER_NAVAL_BASE * deliveredRatio
+  }
   country.econ.goods = snap.production
   country.econ.laborShare = snap.laborShare
   country.econ.wages = snap.wages

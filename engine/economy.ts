@@ -43,7 +43,7 @@ import {
 } from './fiscal'
 import { applyModifiers } from './modifiers'
 import { effectiveResources } from './trade'
-import { clamp, ensureConstructionFields, techMultiplier } from './internal'
+import { clamp, ensureConstructionFields, ensureGoodsFields, techMultiplier } from './internal'
 import { curveOutput } from './scale'
 import { PRODUCTION_GATE_CURVES } from './config/blocks/gates'
 import {
@@ -191,6 +191,7 @@ function wageBasisWeight(
 
 function computeProduction(country: Country): Record<GoodId, number> {
   ensureConstructionFields(country)
+  ensureGoodsFields(country)
   const tech = techMultiplier(country)
   const marketAccess = applyModifiers(country, 'marketAccess', country.econ.marketAccess)
   const access = curveOutput(PRODUCTION_GATE_CURVES.access, marketAccess)

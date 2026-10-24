@@ -1,5 +1,5 @@
 import type { Country, GameDate, GoodId, WarGoal } from '../types'
-import { GOOD_IDS, WAR_GOAL_NAMES } from './data'
+import { BUILDING_IDS, GOOD_IDS, GOODS, WAR_GOAL_NAMES } from './data'
 import { TECH_MULTIPLIER_BLOCK } from './config/blocks/tech'
 import { scaleProduct } from './scale'
 
@@ -67,6 +67,29 @@ const techMultiplier = (country: Country): number =>
   scaleProduct(country, TECH_MULTIPLIER_BLOCK.scales_with)
 
 export { techMultiplier }
+
+/**
+ * Additive good/building fields (PT-066): a save written before `ships` /
+ * `navalBases` existed has no entry in the per-good maps or the building
+ * count record. Fill them in place with neutral values so the running game
+ * keeps working — no world-version bump, so a live save is not discarded.
+ */
+export function ensureGoodsFields(country: Country): void {
+  const buildings = country.econ.buildings as Record<string, number>
+  for (const id of BUILDING_IDS) {
+    if (typeof buildings[id] !== 'number') buildings[id] = 0
+  }
+  const prices = country.econ.prices as Record<string, number>
+  const goods = country.econ.goods as Record<string, number>
+  for (const id of GOOD_IDS) {
+    if (typeof prices[id] !== 'number' || !Number.isFinite(prices[id])) {
+      prices[id] = GOODS[id].basePrice
+    }
+    if (typeof goods[id] !== 'number' || !Number.isFinite(goods[id])) {
+      goods[id] = 0
+    }
+  }
+}
 
 /**
  * Additive v7 fields: a world loaded before the construction sector existed

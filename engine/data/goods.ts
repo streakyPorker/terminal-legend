@@ -29,6 +29,9 @@ export const GOODS: Record<GoodId, { name: string; basePrice: number }> = {
   luxury: { name: '奢侈品', basePrice: 10 },
   opium: { name: '鸦片', basePrice: 2.5 },
   services: { name: '服务', basePrice: 4 },
+  // PT-066: a ship is a capital good, not a consumer good. Shipyards produce
+  // it; naval bases consume it and convert it into `military.navy`.
+  ships: { name: '船只', basePrice: 8 },
 }
 
 export const GOOD_IDS = Object.keys(GOODS) as GoodId[]

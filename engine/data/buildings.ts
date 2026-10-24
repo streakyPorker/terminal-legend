@@ -77,6 +77,8 @@ export const INVESTMENT_DEMAND: Record<BuildingId, Partial<Record<GoodId, number
   schools: { furniture: 0.1, wood: 0.05 },
   forts: { steel: 0.15, wood: 0.15 },
   navalYards: { wood: 0.3, steel: 0.2, machinery: 0.1 },
+  // PT-066: naval base — a dry dock plus barracks for the fleet.
+  navalBases: { steel: 0.25, wood: 0.2 },
 }
 
 /**
@@ -107,6 +109,7 @@ export const BUILDING_OUTPUT: Record<BuildingId, Partial<Record<GoodId, number>>
   barracks: { arms: 0.05 },
   offices: {},
   workshops: {},
+  navalBases: {},
   // Plan 0011 F4: the new buildings are public/military works. Empty here means
   // private investment never picks them (like universities/offices), so they are
   // only built by the state/AI and cannot perturb the goods calibration baseline.
@@ -305,10 +308,20 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     gates: { tech: true, industrial: true },
   },
   navalYards: {
-    output: { machinery: 0.14 },
-    input: { steel: 0.08, wood: 0.08 },
+    // PT-066: a yard lays down hulls. `ships` is a tradeable good; the naval
+    // base below turns delivered hulls into `military.navy`.
+    output: { ships: 0.3, machinery: 0.03 },
+    input: { steel: 0.18, wood: 0.12, machinery: 0.04 },
     labor: 0.8,
     gates: { tech: true, industrial: true },
+  },
+  navalBases: {
+    // Consumes one hull a month; the settlement grows the navy by the number
+    // of hulls actually delivered.
+    output: {},
+    input: { ships: 1 },
+    labor: 0.6,
+    gates: { tech: true },
   },
   universities: {
     output: { services: 0.2 },
@@ -405,6 +418,7 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   barracks: { name: '兵营', cost: 2.5, note: '军械产出', infrastructureNeed: 0.09 },
   offices: { name: '官署', cost: 3, note: '行政能力与官僚效能上限', infrastructureNeed: 0.08 },
   workshops: { name: '营造所', cost: 3, note: '消耗木材、粮食与铁，产出建造点', infrastructureNeed: 0.12 },
+  navalBases: { name: '海军营地', cost: 5, note: '消耗船只，编练为海军', infrastructureNeed: 0.12 },
 }
 
 export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[]
