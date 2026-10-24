@@ -2,15 +2,7 @@ import type { Country, GoodId, WorldState } from '../../types'
 import { GOODS, GOOD_IDS, RESOURCE_NAMES } from '../../engine/data'
 import { effectiveSupplyFor, tradeFlows } from '../../engine/inspect/shared'
 import { inspectEconomy } from '../../engine/sim'
-import {
-  bar,
-  countryTag,
-  fmtMoney,
-  fmtNumber,
-  fmtPercent,
-  fmtSigned,
-  sparkline,
-} from '../format'
+import { countryTag, fmtMoney, fmtNumber, fmtPercent, fmtSigned, sparkline } from '../format'
 import { Heading, TableRow, partnerTotals, playerOf, type UiKit } from './shared'
 
 export type MarketRow = {
@@ -56,7 +48,7 @@ export function MarketPanel(props: { ui: UiKit; world: WorldState; width: number
   const snapshot = inspectEconomy(player)
   const econ = player.econ
   const rows = marketRows(player, snapshot)
-  const widths = [6, 6, 7, 6, 6, 6, 5, 10]
+  const widths = [6, 5, 7, 6, 6, 7, 6, 4, 7, 6]
   const tradeWidths = [12, 10, 10, 10]
   const partners = partnerTotals(player).slice(0, 6)
   const playerRoutes = props.world.tradeRoutes
@@ -82,12 +74,12 @@ export function MarketPanel(props: { ui: UiKit; world: WorldState; width: number
         <Heading
           ui={props.ui}
           text="商品市场"
-          hint="有效供给 = 产出 + 进口 − 出口；状态按有效供给判定"
+          hint="总量 = 产出 + 进口 − 出口；满足 = 总量 ÷ 需求；状态按满足判定"
         />
       </Box>
       <TableRow
         ui={props.ui}
-        cells={['商品', '价格', '产出', '进口', '出口', '需求', '乘数', '状态']}
+        cells={['商品', '价格', '产出', '进口', '出口', '总量', '需求', '乘数', '满足', '状态']}
         widths={widths}
       />
       {rows.map(row => {
@@ -101,12 +93,17 @@ export function MarketPanel(props: { ui: UiKit; world: WorldState; width: number
               fmtNumber(row.production),
               fmtNumber(row.imports),
               fmtNumber(row.exports),
+              fmtNumber(row.supply),
               fmtNumber(row.demand),
               snapshot.resources[row.id].toFixed(2),
-              `${row.state} ${bar(Math.min(row.ratio, 1.5), 1.5, 6)}`,
+              `${Math.round(row.ratio * 100)}%`,
+              row.state,
             ]}
             widths={widths}
-            colors={[undefined, undefined, undefined, undefined, undefined, undefined, undefined, color]}
+            colors={[
+              undefined, undefined, undefined, undefined, undefined,
+              undefined, undefined, undefined, color, color,
+            ]}
           />
         )
       })}
