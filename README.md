@@ -131,7 +131,8 @@ Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplo
 | [`docs/plans/`](docs/plans/) | 工作包与路线（0001–0014） |
 | [`docs/adr/`](docs/adr/) | 架构决策记录（0001–0030） |
 | [`docs/gm-handbook.md`](docs/gm-handbook.md) | GM 机制手册（工具、经济、贸易、财政、口径 FAQ） |
-| [`docs/playtest-issues.md`](docs/playtest-issues.md) | 试玩问题记录 |
+| [`docs/playtest-issues.md`](docs/playtest-issues.md) | 试玩问题记录（未结）|
+| [`docs/playtest-issues-archive.md`](docs/playtest-issues-archive.md) | 已修复/无效条目归档 |
 | [`GLOSSARY.md`](GLOSSARY.md) | 术语表 |
 
 ## 开发
