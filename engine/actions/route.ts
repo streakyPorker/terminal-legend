@@ -1,7 +1,7 @@
 import type { Country, WorldState } from '../../types'
 import { GOODS } from '../data'
 import { atWar } from '../diplomacy'
-import { ROUTE_MAX_LEVEL, TRADABLE_GOODS, embargoed, routeId } from '../trade'
+import { ROUTE_MAX_LEVEL, TRADABLE_GOODS, embargoed, routeId, routeLandedPrice } from '../trade'
 import { inspectEconomy } from '../economy'
 import { asGood } from '../internal'
 import type { ActionParams, ActionResult } from './types'
@@ -50,6 +50,22 @@ export function actionRoute(
     if (existing !== undefined) {
       return { ok: false, text: `${tag} 与${partner.name}的${label}航线已存在（等级 ${existing.level}）` }
     }
+    // PT-043: a route whose importer's price does not clear the landed price can
+    // never trade (it would open dead and decay at once), so refuse it with the
+    // reason instead of silently creating a doomed route.
+    const exporter = world.countries[fromId]
+    const importer = world.countries[toId]
+    if (exporter === undefined || importer === undefined) {
+      return { ok: false, text: `${tag} 无法确定${label}航线端点` }
+    }
+    const landed = routeLandedPrice(exporter, importer, good)
+    const price = importer.econ.prices[good]
+    if (price - landed <= 0) {
+      return {
+        ok: false,
+        text: `${tag} ${label}航线无利可图：进口方${importer.name}本地价 ${price.toFixed(2)} 不高于到岸价 ${landed.toFixed(2)}，未开通`,
+      }
+    }
     world.tradeRoutes.push({
       id,
       good,
@@ -60,6 +76,12 @@ export function actionRoute(
       openedAt: { ...world.date },
       lastQty: 0,
       lastMargin: 0,
+    })
+    world.log.push({
+      date: { ...world.date },
+      kind: 'economy',
+      countryId: country.id,
+      text: `${tag} 开通${label}航线（等级 1，国有）`,
     })
     return { ok: true, text: `${tag} 开通${label}航线（等级 1，国有）` }
   }
@@ -72,7 +94,15 @@ export function actionRoute(
   }
   if (op === 'lower') {
     existing.level -= 1
-    if (existing.level <= 0) world.tradeRoutes.splice(index, 1)
+    if (existing.level <= 0) {
+      world.tradeRoutes.splice(index, 1)
+      world.log.push({
+        date: { ...world.date },
+        kind: 'economy',
+        countryId: country.id,
+        text: `${tag} 关闭了${label}航线`,
+      })
+    }
     return {
       ok: true,
       text:
@@ -83,6 +113,12 @@ export function actionRoute(
   }
   if (op === 'close') {
     world.tradeRoutes.splice(index, 1)
+    world.log.push({
+      date: { ...world.date },
+      kind: 'economy',
+      countryId: country.id,
+      text: `${tag} 关闭了${label}航线`,
+    })
     return { ok: true, text: `${tag} 关闭了${label}航线` }
   }
   return { ok: false, text: `${tag} 未知航线操作 ${op}` }

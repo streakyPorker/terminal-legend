@@ -9,10 +9,11 @@ import type {
   WarIndemnity,
   WorldState,
 } from '../types'
-import { createWorld, deriveLabor } from './data'
+import { createWorld, deriveLabor, GOODS } from './data'
 import { nationalDebt } from './fiscal'
 import {
   RELATION_CUTOFF,
+  ROUTE_GRACE_MONTHS,
   ROUTE_GROW_UTILIZATION,
   ROUTE_MAX_LEVEL,
   ROUTE_MAX_PER_COUNTRY,
@@ -194,46 +195,70 @@ function prepareIndemnities(world: WorldState): void {
   world.indemnities = active
 }
 
+/** Month index for route-age arithmetic: `GameDate`s are `{year, month}` pairs. */
+const monthIndex = (date: GameDate): number => date.year * 12 + date.month
+
 /**
  * Grows, decays or removes each standing route after settlement (ADR 0020),
  * then opens at most one fresh route per country. Growth uses the quantity the
  * route *matched* (before the soft/payment cuts) so a solvency squeeze does not
  * kill structurally sound routes; `lastQty` instead records what was actually
- * delivered. Deterministic: routes are visited in array order, every candidate
- * sort carries an explicit id tie-break, and there is no RNG.
+ * delivered. A route inside its opening grace window (PT-043) is held at its
+ * level instead of being judged, so a fresh L1 route is not deleted by its own
+ * inevitably-shallow first settlement. Deterministic: routes are visited in
+ * array order, every candidate sort carries an explicit id tie-break, there is
+ * no RNG, and the optional `log` only receives chronicle entries (its writes
+ * never influence any numeric result).
  */
 export function growRoutes(
   world: WorldState,
   services: Map<string, RouteService>,
   markets: Record<string, MarketSnapshot>,
+  log?: LogEntry[],
 ): void {
   const kept: TradeRoute[] = []
   for (const route of world.tradeRoutes) {
     const from = world.countries[route.from]
     const to = world.countries[route.to]
     if (from === undefined || to === undefined) continue
+    const service = services.get(route.id)
+    const margin = to.econ.prices[route.good] - routeLandedPrice(from, to, route.good)
+    const age = monthIndex(world.date) - monthIndex(route.openedAt)
+    if (age >= 1 && age <= ROUTE_GRACE_MONTHS) {
+      kept.push({ ...route, lastQty: service?.flow.quantity ?? 0, lastMargin: margin })
+      continue
+    }
     const blocked =
       atWar(world, route.from, route.to) ||
       embargoed(from.embargoes, route.to, route.good) ||
       embargoed(to.embargoes, route.from, route.good) ||
       (to.diplo.relations[route.from] ?? 0) < RELATION_CUTOFF
-    const service = services.get(route.id)
     const matched = service?.matched ?? 0
     const capacity =
       service?.capacity ?? route.level * ROUTE_UNIT_VOLUME * routeCapacityFactor(from, to)
-    const margin = to.econ.prices[route.good] - routeLandedPrice(from, to, route.good)
     const healthy =
       !blocked && margin > 0 && capacity > 0 && matched / capacity >= ROUTE_GROW_UTILIZATION
     const level = healthy ? Math.min(ROUTE_MAX_LEVEL, route.level + 1) : route.level - 1
-    if (level <= 0) continue
+    if (level <= 0) {
+      log?.push({
+        date: { ...world.date },
+        kind: 'economy',
+        text: `贸易航线 ${GOODS[route.good].name} ${route.from}→${route.to} 因运量不足关闭`,
+      })
+      continue
+    }
     kept.push({ ...route, level, lastQty: service?.flow.quantity ?? 0, lastMargin: margin })
   }
   world.tradeRoutes = kept
-  autoOpenRoutes(world, markets)
+  autoOpenRoutes(world, markets, log)
 }
 
 /** Opens at most one route per country for a complementary pair (ADR 0020). */
-function autoOpenRoutes(world: WorldState, markets: Record<string, MarketSnapshot>): void {
+function autoOpenRoutes(
+  world: WorldState,
+  markets: Record<string, MarketSnapshot>,
+  log?: LogEntry[],
+): void {
   const ids = Object.keys(world.countries).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
   const count = new Map<string, number>()
   const has = new Set<string>()
@@ -291,6 +316,11 @@ function autoOpenRoutes(world: WorldState, markets: Record<string, MarketSnapsho
       openedAt: { ...world.date },
       lastQty: 0,
       lastMargin: candidate.margin,
+    })
+    log?.push({
+      date: { ...world.date },
+      kind: 'economy',
+      text: `市场新开贸易航线 ${GOODS[candidate.good].name} ${candidate.exporter}→${candidate.importer}`,
     })
     has.add(id)
     opened.add(candidate.importer)
@@ -428,7 +458,7 @@ export function advance(
     }
     // Routes grow, decay or open once per month, after every country has been
     // settled, so their margin reads the freshly updated domestic prices.
-    growRoutes(world, routeServices, markets)
+    growRoutes(world, routeServices, markets, log)
     driftRelations(world)
     applyTradeRelations(world, log)
     resolveWars(world, rng, log)

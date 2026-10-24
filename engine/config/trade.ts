@@ -17,6 +17,17 @@ export const ROUTE_RESIDUAL_TOP_PARTNERS = 3
 export const ROUTE_SPOT_DISCOUNT = 0.9
 export const ROUTE_MAX_PER_COUNTRY = 12
 export const ROUTE_SEED_PER_PAIR = 3
+/**
+ * Grace window for a freshly opened route (PT-043): the number of monthly
+ * growth passes after the month it opened during which `growRoutes` neither
+ * grows nor decays it (the route is held at its current level). A level-1 route
+ * carries almost nothing in its first settlement, so without this it always
+ * fails the `ROUTE_GROW_UTILIZATION` gate and is deleted the month after it
+ * opens — "open one, it dies immediately". Age is a pure month difference from
+ * `openedAt` (`year * 12 + month`); the window covers `1 <= age <= this`, i.e.
+ * the first N growth passes, after which normal growth/decay resumes.
+ */
+export const ROUTE_GRACE_MONTHS = 2
 /** Share of GDP the private sector may borrow abroad in one month. */
 export const MAX_MONTHLY_DEFICIT_SHARE = 0.03
 

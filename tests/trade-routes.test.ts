@@ -420,3 +420,107 @@ describe('player route action (v3_action route)', () => {
     expect(embargoed.ok).toBe(false)
   })
 })
+
+describe('new route grace window and open validation (PT-043)', () => {
+  test('a freshly opened route is held through its grace window with zero volume', async () => {
+    const world = newWorld(9820, 'QING')
+    const route = makeRoute(world, 'coal', 'GBR', 'QING', 1)
+    countryOf(world, 'QING').econ.prices.coal = 100
+    countryOf(world, 'GBR').econ.prices.coal = 1
+    // Grow once per month through the window: no matched volume, yet the route
+    // must survive (without the grace period it would decay to 0 and be deleted).
+    for (const month of [2, 3]) {
+      world.tradeRoutes = [route]
+      world.date = { year: 1836, month }
+      growRoutes(world, new Map(), marketsFor(world, () => ({ production: {}, demand: {} })))
+      const kept = world.tradeRoutes.find(one => one.id === route.id)
+      expect(kept).toBeDefined()
+      expect(kept?.level).toBe(1)
+    }
+  })
+
+  test('the player open action survives the next simulated month', async () => {
+    const world = newWorld(9811, 'QING')
+    const open = applyDecision(
+      world,
+      { countryId: 'QING', action: 'route', params: { op: 'open', good: 'coal', partner: 'GBR' } },
+      rngFor(world),
+    )
+    expect(open.ok).toBe(true)
+    const route = world.tradeRoutes.find(one => one.owner === 'state')
+    expect(route).toBeDefined()
+    if (route === undefined) return
+    advance(world, 1, [], rngFor(world))
+    expect(world.tradeRoutes.some(one => one.id === route.id)).toBe(true)
+  })
+
+  test('after the grace window a still-idle route decays and is removed', async () => {
+    const world = newWorld(9821, 'QING')
+    const route = makeRoute(world, 'coal', 'GBR', 'QING', 1)
+    world.tradeRoutes = [route]
+    countryOf(world, 'QING').econ.prices.coal = 100
+    countryOf(world, 'GBR').econ.prices.coal = 1
+    world.date = { year: 1836, month: 4 }
+    growRoutes(world, new Map(), marketsFor(world, () => ({ production: {}, demand: {} })))
+    expect(world.tradeRoutes.some(one => one.id === route.id)).toBe(false)
+  })
+
+  test('opening a route with a non-positive margin is rejected without creating it', async () => {
+    const world = newWorld(9822, 'QING')
+    world.tradeRoutes = []
+    // Equal domestic prices with no duties leave the importer's price below the
+    // landed price for either direction, so the margin can never be positive.
+    for (const id of ['QING', 'GBR']) {
+      const country = countryOf(world, id)
+      country.econ.prices.coal = 1
+      country.econ.tariff = 0
+      country.econ.exportTariff = 0
+    }
+    const result = applyDecision(
+      world,
+      { countryId: 'QING', action: 'route', params: { op: 'open', good: 'coal', partner: 'GBR' } },
+      rngFor(world),
+    )
+    expect(result.ok).toBe(false)
+    expect(result.text).toContain('无利可图')
+    expect(world.tradeRoutes.length).toBe(0)
+  })
+
+  test('grace-period decay stays deterministic across identical opens', async () => {
+    const left = newWorld(9830, 'QING')
+    const right = newWorld(9830, 'QING')
+    const decision = {
+      countryId: 'QING',
+      action: 'route',
+      params: { op: 'open', good: 'coal', partner: 'GBR' },
+    }
+    expect(applyDecision(left, { ...decision }, rngFor(left)).ok).toBe(
+      applyDecision(right, { ...decision }, rngFor(right)).ok,
+    )
+    advance(left, 6, [], rngFor(left))
+    advance(right, 6, [], rngFor(right))
+    expect(left.tradeRoutes).toEqual(right.tradeRoutes)
+  })
+
+  test('opening and closing a route is written to the economy chronicle', async () => {
+    const world = newWorld(9831, 'QING')
+    const open = applyDecision(
+      world,
+      { countryId: 'QING', action: 'route', params: { op: 'open', good: 'coal', partner: 'GBR' } },
+      rngFor(world),
+    )
+    expect(open.ok).toBe(true)
+    expect(
+      world.log.some(entry => entry.kind === 'economy' && entry.text.includes('开通')),
+    ).toBe(true)
+    const close = applyDecision(
+      world,
+      { countryId: 'QING', action: 'route', params: { op: 'close', good: 'coal', partner: 'GBR' } },
+      rngFor(world),
+    )
+    expect(close.ok).toBe(true)
+    expect(
+      world.log.some(entry => entry.kind === 'economy' && entry.text.includes('关闭')),
+    ).toBe(true)
+  })
+})
