@@ -12,8 +12,8 @@ export function historySection(world: WorldState, country: Country): string[] {
   )
   if (length === 0) return ['（还没有月度历史）']
   const lines: string[] = ['日期　　GDP　消费　投资　政府　失业　收入　支出　关税　国债']
-  for (let index = length - 1; index >= 0; index -= 1) {
-    const date = monthsBefore(world.date, index)
+  for (let index = 0; index < length; index += 1) {
+    const date = monthsBefore(world.date, length - 1 - index)
     const at = (series: number[] | undefined, fallback: number): number => {
       const value = series?.[series.length - length + index]
       return value ?? fallback

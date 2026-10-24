@@ -2,6 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { TradeRoute } from '../types'
 import { makeRngForWorld } from '../engine/data'
 import { forecastWorld, inspectWorld, INSPECT_SECTIONS } from '../engine/inspect'
+import { monthsBefore } from '../engine/inspect/shared'
 import { advance, newWorld } from '../engine/sim'
 
 const route = (world: ReturnType<typeof newWorld>): TradeRoute => ({
@@ -146,6 +147,37 @@ describe('v3_inspect (plan 0006)', () => {
     const rows = text.split('\n').filter(line => /^\d{4}\.\d{2}/.test(line))
     expect(rows.length).toBeGreaterThan(3)
     expect(rows.some(line => /\s\d/.test(line.slice(8)))).toBe(true)
+  })
+
+  test('history rows pair each date with that month value, newest last (PT-046)', async () => {
+    const world = newWorld(9113, 'QING')
+    advance(world, 6, [], makeRngForWorld(world))
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    const history = qing.econ.history
+    const length = Math.min(
+      12,
+      history.gdp.length,
+      history.unemployment.length,
+      history.income.length,
+    )
+    const rows = inspectWorld(world, 'history')
+      .split('\n')
+      .filter(line => /^\d{4}\.\d{2}/.test(line))
+      .map(line => line.split('　'))
+    expect(rows.length).toBe(length)
+    const dateOf = (date: { year: number; month: number }): string =>
+      `${date.year}.${String(date.month).padStart(2, '0')}`
+    const dates = rows.map(cells => cells[0])
+    // Dates ascend across the window.
+    expect(dates).toEqual([...dates].sort())
+    // First row is the oldest window month carrying the oldest window GDP.
+    expect(dates[0]).toBe(dateOf(monthsBefore(world.date, length - 1)))
+    expect(Number(rows[0][1])).toBe(Number(history.gdp[history.gdp.length - length].toFixed(1)))
+    // Last row is the current month carrying the current GDP.
+    expect(dates[dates.length - 1]).toBe(dateOf(world.date))
+    expect(Number(rows[rows.length - 1][1])).toBe(Number(qing.econ.gdp.toFixed(1)))
   })
 
   test('forecast projects next month income, expense, net and treasury', async () => {
