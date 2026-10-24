@@ -29,7 +29,7 @@ function oracleDebtPressure(country: Country): {
   const debt = Math.max(0, -country.econ.treasury)
   const gdp = Math.max(1, country.econ.gdp)
   const ratio = debt / gdp
-  const severity = clamp((ratio - 0.25) / (2 - 0.25), 0, 2)
+  const severity = clamp((ratio - 0.25) / (1.5 - 0.25), 0, 2)
   const label =
     ratio < 0.25
       ? '无'
@@ -43,10 +43,10 @@ function oracleDebtPressure(country: Country): {
   return {
     ratio,
     severity,
-    incomePenalty: 0.1 * severity,
-    constructionPenalty: 0.2 * severity,
-    legitimacyPenalty: 5 * severity,
-    interestSpread: 0.004 * severity,
+    incomePenalty: 0.18 * severity,
+    constructionPenalty: 0.32 * severity,
+    legitimacyPenalty: 8 * severity,
+    interestSpread: 0.006 * severity,
     label,
   }
 }
@@ -117,9 +117,9 @@ describe('debtPressure migration equivalence (C7, ADR 0024 / ADR 0007)', () => {
     expect(Object.is(now.severity, ref.severity)).toBe(true)
   })
 
-  test('drift guard: block curve, coefficients and bands match the pre-C7 table', () => {
+  test('drift guard: block curve, coefficients and bands match the PT-063 table', () => {
     expect(DEBT_PRESSURE_START).toBe(0.25)
-    expect(DEBT_PRESSURE_FULL).toBe(2)
+    expect(DEBT_PRESSURE_FULL).toBe(1.5)
     expect(DEBT_PRESSURE_BLOCK.kind).toBe('fiscal')
     expect(DEBT_PRESSURE_BLOCK.effects).toEqual([])
     expect(DEBT_PRESSURE_BLOCK.scales_with).toEqual([
@@ -129,17 +129,17 @@ describe('debtPressure migration equivalence (C7, ADR 0024 / ADR 0007)', () => {
           kind: 'linear',
           slope: 1,
           preOffset: 0.25,
-          divisor: 1.75,
+          divisor: 1.25,
           min: 0,
           max: 2,
         },
       },
     ])
     expect(DEBT_PRESSURE_COEFFICIENTS).toEqual({
-      income: 0.1,
-      construction: 0.2,
-      legitimacy: 5,
-      interest: 0.004,
+      income: 0.18,
+      construction: 0.32,
+      legitimacy: 8,
+      interest: 0.006,
     })
     expect(DEBT_PRESSURE_BANDS.map(band => band.label)).toEqual([
       '无',

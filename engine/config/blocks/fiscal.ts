@@ -13,8 +13,12 @@ import type { ConfigBlock } from '../../../types'
 
 /** Debt/GDP at which the debuff begins. */
 export const DEBT_PRESSURE_START = 0.25
-/** Debt/GDP used as the severity curve's second reference point. */
-export const DEBT_PRESSURE_FULL = 2
+/**
+ * Debt/GDP at which severity reaches 1. Tightened from 2 to 1.5 (PT-063):
+ * a state at twice GDP should already be in visible trouble, not halfway
+ * through the mild half of the curve.
+ */
+export const DEBT_PRESSURE_FULL = 1.5
 
 export const DEBT_PRESSURE_BLOCK: ConfigBlock = {
   id: 'fiscal:debt-pressure',
@@ -46,10 +50,10 @@ export const DEBT_PRESSURE_BLOCK: ConfigBlock = {
  * removed from the legitimacy target, interestSpread the extra monthly rate.
  */
 export const DEBT_PRESSURE_COEFFICIENTS = {
-  income: 0.1,
-  construction: 0.2,
-  legitimacy: 5,
-  interest: 0.004,
+  income: 0.18,
+  construction: 0.32,
+  legitimacy: 8,
+  interest: 0.006,
 } as const
 
 /** Display bands; the first band whose `below` exceeds the ratio wins. */
@@ -57,7 +61,10 @@ export const DEBT_PRESSURE_BANDS: { below: number; label: string }[] = [
   { below: DEBT_PRESSURE_START, label: '无' },
   { below: 0.5, label: '轻度' },
   { below: 1, label: '中度' },
-  { below: DEBT_PRESSURE_FULL, label: '重度' },
+  // Display bands stay on the documented 200% line even after the penalty
+  // curve was tightened (PT-063): labels describe how deep the debt is, the
+  // severity curve decides what it costs.
+  { below: 2, label: '重度' },
   { below: Number.POSITIVE_INFINITY, label: '危重' },
 ]
 
