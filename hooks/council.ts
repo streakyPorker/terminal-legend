@@ -511,12 +511,18 @@ async function panelBuild(
   const perSlot = clamp(Math.round(payload?.perSlot ?? 1), 1, 5)
   const slots = clamp(Math.round(payload?.slots ?? 1), 1, MAX_SLOTS_PER_ORDER)
   const world = clone(current.world)
+  // The construction queue hangs off the player's country, not the world
+  // (PT-056): reading `world.econ` threw on every panel build, and the
+  // `void controlGame(...)` in the render hook swallowed the rejection, so
+  // the button looked dead.
+  const player = world.countries[world.playerId]
+  if (player === undefined) return '找不到玩家国家。'
   const rng = makeRngForWorld(world)
   let position: 'head' | 'tail' | 'before' | 'after' = payload?.position ?? 'tail'
   let before = payload?.before
   const texts: string[] = []
   for (let index = 0; index < slots; index += 1) {
-    const known = new Set(world.econ.constructionQueue.map(project => project.id))
+    const known = new Set(player.econ.constructionQueue.map(project => project.id))
     const result = applyDecision(
       world,
       {
@@ -529,7 +535,7 @@ async function panelBuild(
     if (!result.ok) return [...texts, result.text].join('\n')
     texts.push(result.text)
     if (position === 'head') {
-      const inserted = world.econ.constructionQueue.find(project => !known.has(project.id))
+      const inserted = player.econ.constructionQueue.find(project => !known.has(project.id))
       if (inserted !== undefined) {
         position = 'after'
         before = inserted.id
