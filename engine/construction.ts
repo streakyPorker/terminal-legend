@@ -458,6 +458,8 @@ export function settleConstruction(
     inputShare: number,
     workShare: number,
     isPrivate: boolean,
+    // PT-070 safety net: the treasury covers a broke private pool's shortfall.
+    subsidy = 0,
   ): void => {
     const owner = isPrivate ? 'private' : 'state'
     const goldNeed = project.monthlyCost * inputShare
@@ -465,14 +467,20 @@ export function settleConstruction(
       capacityTake <= 0
         ? 0
         : isPrivate
-          ? Math.min(privateBudget, goldNeed)
+          ? Math.min(privateBudget + subsidy, goldNeed)
           : Math.min(goldNeed, Math.max(0, country.econ.treasury - debtFloor))
     project.lastSpend = spend
     project.lastCapacity = capacityTake
     if (spend > 0) {
       if (isPrivate) {
-        privateBudget -= spend
-        privateSpent += spend
+        const fromPrivate = Math.min(privateBudget, spend)
+        privateBudget -= fromPrivate
+        privateSpent += fromPrivate
+        const fromState = spend - fromPrivate
+        if (fromState > 0) {
+          stateSpent += fromState
+          country.econ.treasury -= fromState
+        }
       } else {
         stateSpent += spend
         country.econ.treasury -= spend
@@ -566,12 +574,23 @@ export function settleConstruction(
       rentalIncome += rent
     }
     const capacityTake = own + rented
+    const inputShare = need > 0 ? capacityTake / need : 1
+    // Safety net only: a private pool that cannot pay gets the treasury behind
+    // it, so idle capacity never rots (PT-070).
+    const subsidy =
+      privateBudget + 1e-9 < project.monthlyCost * inputShare
+        ? Math.min(
+            project.monthlyCost * inputShare - privateBudget,
+            Math.max(0, country.econ.treasury - debtFloor),
+          )
+        : 0
     runProject(
       project,
       capacityTake,
-      need > 0 ? capacityTake / need : 1,
+      inputShare,
       workload > 0 ? capacityTake / workload : 1,
       true,
+      subsidy,
     )
   }
 

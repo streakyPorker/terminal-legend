@@ -155,7 +155,7 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     resources: resources(85, 60, 65, 40),
     region: 'eastAsia',
     opium: { outputFactor: 0.15, demandFactor: 0.2 },
-    politicalEconomy: politicalEconomy(0.62, 0.2, 0.4, -5),
+    politicalEconomy: politicalEconomy(0.62, 0.23, 0.4, -5),
     techLevel: 1,
     army: 80,
     navy: 15,
