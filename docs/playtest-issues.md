@@ -85,6 +85,7 @@
 | PT-062 | 建造队列显示内部项目 id | 0006 / UI | fixed（263b550） |
 | PT-063 | 债务压力惩罚太轻（200% 债务只扣 20% 收入） | 0006 / ADR 0007 | fixed（4a1d37f） |
 | PT-064 | 引擎缺少国家间分期支付/贷款能力 | 0006 / 0004 | fixed（dc45f2a） |
+| PT-065 | 贷款利息被「收入 +40%」修正放大（3.23 记成 4.4） | 0007-E2 / 0004 | fixed（19abc9b） |
 
 ---
 
@@ -1451,3 +1452,26 @@
   `engine/inspect/fiscal.ts`、`tests/transfer-loan.test.ts`。
 - 优先级：**P2**
 - 状态：**fixed（dc45f2a）**
+
+
+### PT-065 贷款利息被「收入 +40%」修正放大（3.23 记成 4.4）
+
+- 日期：2026-10-24
+- 游戏内日期：1837.07
+- 存档/种子：新局 QING（1836.01 起）
+- 现象：贷款合同写明每月还款 **3.23 金**，但「财政收入」里「赔款/转移」显示 **4.4**；
+  玩家指出「显示不是这么现实的」。
+- 数据：`computeEconomy` 把 `reparations` 并进 `applyModifiers(country,'income', …)` 的总和，
+  于是「柳大飞新政·理财有方 +40%」把**合同利息**也放大了：
+  `3.23 × 1.36 ≈ 4.39`。支出侧同理（`expense` 修正会放大对外付款）。
+- 判断：**口径缺陷**。分期支付是**合同金额**，不是国内税收；不应受国内征收效率类修正影响，
+  否则玩家看到的日程与到账永远对不上。
+- 修复（19abc9b）：
+  1. `computeEconomy`：`income = applyModifiers(income, 国内各项) + reparations`，
+     `expense = applyModifiers(expense, 国内各项) + reparations`——转移支付**不计入修正基数**；
+  2. `fiscalLedger`：转移收入/支出从 `incomeFactor` / `expenseFactor` 的基数中剔除，
+     并按**账面值**列示，使「赔款日程」与「财政收入」两处数字一致；
+  3. 新增 `tests/transfer-income.test.ts` 两个用例（+50% 收入修正下转移只按面值入账；账本按 3.23 列示）。全量 **533 项通过**。
+- 关联：`engine/economy.ts`、`engine/fiscal.ts`、`tests/transfer-income.test.ts`、PT-064。
+- 优先级：**P2**
+- 状态：**fixed（19abc9b）**
