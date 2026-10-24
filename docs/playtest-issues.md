@@ -86,7 +86,7 @@
 | PT-063 | 债务压力惩罚太轻（200% 债务只扣 20% 收入） | 0006 / ADR 0007 | fixed（4a1d37f） |
 | PT-064 | 引擎缺少国家间分期支付/贷款能力 | 0006 / 0004 | fixed（dc45f2a） |
 | PT-065 | 贷款利息被「收入 +40%」修正放大（3.23 记成 4.4） | 0007-E2 / 0004 | fixed（19abc9b） |
-| PT-066 | 没有任何机制能让海军数量增长（船坞只产机械） | 0008 / 军事 | open（实施中） |
+| PT-066 | 没有任何机制能让海军数量增长（船坞只产机械） | 0008 / 军事 | fixed（本提交） |
 | PT-067 | 贸易航线不消耗船只，运费也不归国库 | 0004 / 0006 | open（需求已登记） |
 
 ---
@@ -1504,7 +1504,7 @@
 - 关联：`engine/data/buildings.ts`（navalYards 配方）、`engine/actions/*`（无 navy 动作）、
   `engine/fiscal.ts`（NAVY_EXPENSE_PER_UNIT）、`engine/economy.ts`（ARMS_PER_SHIP / NAVY_DEMAND_PER_UNIT）。
 - 优先级：**P2**
-- 状态：**open**
+- 状态：**fixed（船只链已落地）**
 
 
 ### PT-067 贸易航线不消耗船只，运费也不归国库（需求登记）
