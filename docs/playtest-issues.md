@@ -73,6 +73,10 @@
 | PT-050 | GM 无法写入他国国库 | 0006 / ADR 0025 | fixed（496408b） |
 | PT-051 | `rankings` 缺少建造力等跨国关键参数 | 0006 | fixed（431d3b5） |
 | PT-052 | 营造所因账面亏损每月折损 ~2% | ADR 0022 / 0007 | fixed（b0a2193） |
+| PT-053 | 「生产 +50%」修正生效后 GDP 不升反降 | 0007-E1–E5 | open |
+| PT-054 | 天命修正无法撤销，只能叠加反向修正对冲 | 0006 / 手册 §3 | open |
+| PT-055 | 「市场接入 +20」把建造力/产出放大 ~19 倍（0–1 标量未钳位） | 0006 / 手册 §4.3·§4.6 | open |
+| PT-056 | 建造面板「建 x×y」按钮点击无反应（`world.econ` 不存在，异常被吞） | 0006 / ADR 0027 | fixed（本提交） |
 
 ---
 
@@ -1182,3 +1186,31 @@
   `engine/economy.ts`（access 门控）、手册 §4.3 / §4.6。
 - 优先级：**P1**
 - 状态：**open**
+
+
+### PT-056 建造面板「建 x×y」按钮点击无反应（`world.econ` 不存在，异常被吞）
+
+- 日期：2026-10-24
+- 游戏内日期：1836.03
+- 存档/种子：新局 QING（1836.01 起）
+- 现象：建造面板里点「建 1×1 / 建 5×1 / ⇤1×1」全部**无任何反应**——队列不变、无提示、无报错。
+  同一动作经 `v3_action build` 由 GM 下单却一律成功，说明请求根本没走到引擎。
+- 根因：`hooks/council.ts` 的 `panelBuild` 读 **`world.econ.constructionQueue`**，而 `WorldState`
+  没有 `econ` 字段（队列挂在 `world.countries[playerId].econ` 上）。每次点击都在循环第一步抛
+  `TypeError: undefined is not an object`；`view` 侧按钮走 `void controlGame(...)`，
+  **rejection 被丢弃**，于是 UI 完全静默。
+- 数据：修复前 1836.03 队列剩余 221 点、5 个国有项目，点击后无变化；
+  `v3_action build` 下同一建筑可正常入队。
+- 修复（b630912）：
+  1. `panelBuild` 改取 `world.countries[world.playerId]`，找不到国家时返回可读错误；
+     两处 `world.econ` 全部改为 `player.econ`。
+  2. 新增 `tests/panel-build.test.tsx` 三个用例，驱动**真实 Pane render hook + 真实按钮**
+     （`建 1×1` / `建 5×1` / `⇤1×1` 置顶），断言队列出现对应条目与「置于队首」提示。
+  3. 全量 **508 项通过**，`claude plugin validate .` 通过。
+- 遗留建议：`view/panels/*` 里所有 `void controlGame(...)` / `void councilAction(...)`
+  都应在 `.catch` 里把错误写进 `notice`，否则**任何**面板按钮的运行时异常都会表现为「点了没反应」。
+  这条待后续单独处理（先记为同一问题的观察项）。
+- 关联：`hooks/council.ts`（`panelBuild`）、`hooks/render.tsx:30`、`view/panels/construction.tsx:161`、
+  `tests/panel-build.test.tsx`、ADR 0027。
+- 优先级：**P1**
+- 状态：**fixed（b630912）**
