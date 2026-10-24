@@ -37,9 +37,9 @@ export function laborSection(country: Country): string[] {
       : `闲置 ${idle.join('、')} 等释放劳力约 ${n(released)} 万（满座需求 ${n(fullDemand)} 万）`
   return [
     `失业 ${n(econ.unemployment)}%（平滑存量，每月向目标收敛，步长 ≤ ±1.5 个点）→ 本月目标 ${n(u.rawTarget)}%：基础 ${n(u.base)} + 工业吸纳不足 ${signed(u.industry)} + 劳动力利用率罚项 ${signed(u.laborPenalty)} + 激进 ${signed(u.radicals)} + 识字率 ${signed(u.literacy)}（各项求和后夹在 0–30）`,
-    `劳动需求 ${n(econ.laborDemand)} 万 / 劳动力 ${n(econ.laborForce)} 万；原始需求占比 ${pct(econ.laborRawUtilization)}（= 劳动需求 ÷ 劳动力，非失业缺口，不可与上一行相加）；工资 ${n(econ.wages)}，劳动份额 ${pct(econ.laborShare)}`,
+    `劳动需求（建筑正式用工，含营造所）${n(econ.laborDemand)} 万 / 劳动力 ${n(econ.laborForce)} 万 = ${pct(econ.laborRawUtilization)}；分子只算农场/矿场/工厂/营造所/基建的雇工，不含自耕农与手工业自雇，**不是就业率**，也不可与上一行相减；它只进入下面的低利用率罚项（夹在 0.5–1）。工资 ${n(econ.wages)}，劳动份额 ${pct(econ.laborShare)}`,
     `部门来源：${idleText}`,
     `就业基础：农田 ${n(econ.buildings.farms, 0)}、煤矿 ${n(econ.buildings.coalMines, 0)}、铁矿 ${n(econ.buildings.ironMines, 0)}、伐木场 ${n(econ.buildings.lumberMills, 0)}、纺织 ${n(econ.buildings.textileMills, 0)}、家具 ${n(econ.buildings.furnitureWorks, 0)}、酿酒 ${n(econ.buildings.distilleries, 0)}、机械 ${n(econ.buildings.machineryWorks, 0)}、钢铁 ${n(econ.buildings.steelMills, 0)}、兵工 ${n(econ.buildings.arsenals, 0)}、奢侈 ${n(econ.buildings.luxuryWorks, 0)}、营造所 ${n(econ.buildings.workshops, 0)}、基础设施 ${n(econ.buildings.infrastructure, 0)}`,
-    `说明：失业率是平滑存量，逐月向「基础 + 工业吸纳不足 + 劳动力利用率罚项 + 激进 + 识字率」决定的目标收敛（步长 ≤ ±1.5 个点）；「原始需求占比」是劳动需求 ÷ 劳动力，属另一个口径，不参与该加总。`,
+    `说明：失业率是平滑存量，逐月向「基础 + 工业吸纳不足 + 劳动力利用率罚项 + 激进 + 识字率」决定的目标收敛（步长 ≤ ±1.5 个点）；营造所同时计入「工业吸纳」与劳动需求两个口径（PT-048/PT-061）。`,
   ]
 }

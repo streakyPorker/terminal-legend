@@ -146,8 +146,10 @@ describe('unemployment decomposition (PT-047)', () => {
     // The contradiction is gone: no "structural part ≈ 0" and no "gap points".
     expect(text).not.toContain('结构性部分')
     expect(text).not.toContain('对应缺口')
-    expect(text).toContain('原始需求占比')
-    expect(text).toContain('非失业缺口')
+    // PT-061: the ratio is labelled as a formal-sector demand share, not an
+    // employment rate and not gap points.
+    expect(text).toContain('不是就业率')
+    expect(text).toContain('不可与上一行相减')
     // The real driver (components + smoothed stock) is now surfaced.
     expect(text).toContain('本月目标')
     expect(text).toContain('平滑存量')
