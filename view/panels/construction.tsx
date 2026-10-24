@@ -137,7 +137,11 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
-        <Heading ui={props.ui} text="可建建筑" hint="x*y = 每槽 x 座 × y 槽；点按钮下单" />
+        <Heading
+          ui={props.ui}
+          text="可建建筑"
+          hint="x*y = 每槽 x 座 × y 槽；⇤ = 插入队首"
+        />
         {buildingGroups().map(group => (
           <Box flexDirection="column" key={`group:${group.label}`}>
             <Text dimColor>— {group.label} —</Text>
@@ -151,15 +155,17 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
                 <Box flexDirection="row" columnGap={1} key={`build:${id}`}>
                   <Text wrap="truncate">{padEnd(BUILDINGS[id].name, 9)}</Text>
                   <Text wrap="truncate">{padEnd(`存${fmtNumber(econ.buildings[id])}`, 7)}</Text>
-                  <Text dimColor wrap="truncate">{padEnd(`量${fmtNumber(singleWorkload)}点`, 8)}</Text>
-                  <Text dimColor wrap="truncate">{padEnd(`月耗${cap}点`, 8)}</Text>
-                  <Text dimColor wrap="truncate">{padEnd(`造价${singleCost.toFixed(1)}金`, 9)}</Text>
+                  <Text dimColor wrap="truncate">{padEnd(`量${fmtNumber(singleWorkload)}点`, 7)}</Text>
+                  <Text dimColor wrap="truncate">{padEnd(`月耗${cap}点`, 7)}</Text>
+                  <Text dimColor wrap="truncate">{padEnd(`造价${singleCost.toFixed(1)}金`, 8)}</Text>
                   <Text color={profit === undefined ? undefined : profit >= 0 ? 'green' : 'red'} wrap="truncate">
-                    {padEnd(profit === undefined ? '利—' : `利${profit.toFixed(2)}`, 8)}
+                    {padEnd(profit === undefined ? '利—' : `利${profit.toFixed(2)}`, 7)}
                   </Text>
-                  <Text dimColor wrap="truncate">{padEnd(tech === undefined ? '' : `层${tech}`, 4)}</Text>
-                  <Button key={`o:${id}:1x1`} label="建 1×1" onPress={() => props.onControl('build', { building: id, perSlot: 1, slots: 1 })} />
-                  <Button key={`o:${id}:5x1`} label="建 5×1" onPress={() => props.onControl('build', { building: id, perSlot: 5, slots: 1 })} />
+                  {tech === undefined ? null : (
+                    <Text dimColor wrap="truncate">{padEnd(`层${tech}`, 3)}</Text>
+                  )}
+                  <Button key={`o:${id}:1x1`} label="1×1" onPress={() => props.onControl('build', { building: id, perSlot: 1, slots: 1 })} />
+                  <Button key={`o:${id}:5x1`} label="5×1" onPress={() => props.onControl('build', { building: id, perSlot: 5, slots: 1 })} />
                   <Button key={`o:${id}:head`} label="⇤1×1" onPress={() => props.onControl('build', { building: id, perSlot: 1, slots: 1, position: 'head' })} />
                 </Box>
               )
