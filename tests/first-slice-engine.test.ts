@@ -315,6 +315,13 @@ describe('M6 destiny and ironman', () => {
     expect(applyCheat(world, { action: 'treasury', amount: 50 }).ok).toBe(true)
     expect(qing.econ.treasury).toBe(before + 50)
 
+    // PT-071: a one-off warship purchase (the GM deducts gold separately).
+    const navy = qing.military.navy
+    expect(applyCheat(world, { action: 'navy', amount: 10 }).ok).toBe(true)
+    expect(qing.military.navy).toBe(navy + 10)
+    expect(applyCheat(world, { action: 'navy', amount: -10 }).ok).toBe(true)
+    expect(qing.military.navy).toBe(navy)
+
     const farms = qing.econ.buildings.farms
     expect(applyCheat(world, { action: 'building', building: 'farms', count: 3 }).ok).toBe(true)
     expect(qing.econ.buildings.farms).toBe(farms + 3)

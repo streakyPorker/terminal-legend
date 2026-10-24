@@ -56,6 +56,15 @@ export function applyCheat(
       text = `${who}科技点${amount >= 0 ? '增加' : '减少'} ${Math.abs(amount).toFixed(1)}，现为 ${subject.tech.points.toFixed(1)}`
       break
     }
+    case 'navy': {
+      const amount = finite(params.amount)
+      const subject = subjectFor(params.country)
+      if (subject === undefined) return { ok: false, text: `未知国家 ${String(params.country)}` }
+      subject.military.navy = Math.max(0, subject.military.navy + amount)
+      const who = subject.id === player.id ? '' : `${subject.name}的`
+      text = `${who}海军${amount >= 0 ? '增加' : '减少'} ${Math.abs(amount).toFixed(1)} 艘，现为 ${subject.military.navy.toFixed(1)} 艘`
+      break
+    }
     case 'building': {
       const subject = subjectFor(params.country)
       if (subject === undefined) return { ok: false, text: `未知国家 ${String(params.country)}` }
