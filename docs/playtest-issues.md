@@ -86,6 +86,7 @@
 | PT-063 | 债务压力惩罚太轻（200% 债务只扣 20% 收入） | 0006 / ADR 0007 | fixed（4a1d37f） |
 | PT-064 | 引擎缺少国家间分期支付/贷款能力 | 0006 / 0004 | fixed（dc45f2a） |
 | PT-065 | 贷款利息被「收入 +40%」修正放大（3.23 记成 4.4） | 0007-E2 / 0004 | fixed（19abc9b） |
+| PT-066 | 没有任何机制能让海军数量增长（船坞只产机械） | 0008 / 军事 | open |
 
 ---
 
@@ -1475,3 +1476,31 @@
 - 关联：`engine/economy.ts`、`engine/fiscal.ts`、`tests/transfer-income.test.ts`、PT-064。
 - 优先级：**P2**
 - 状态：**fixed（19abc9b）**
+
+
+### PT-066 没有任何机制能让海军数量增长（船坞只产机械）
+
+- 日期：2026-10-24
+- 游戏内日期：1837.08
+- 存档/种子：新局 QING（1836.01 起）
+- 现象：玩家下令「振兴海军」，派调查团调研后发现——**引擎里海军是静态数字**：
+  1836.01 是 15 艘，1837.08 仍是 15 艘；`v3_action` 的全部动作（build/cancel/tax/tariff/
+  spending/research/conscript/law/route）中**没有一个能增加 `military.navy`**；
+  `v3_cheat` 也没有 navy 动作。
+- 数据：
+  - `grep military.navy engine/` 只找到**读取**处（军费、军械需求、威望），**没有任何写入/增长**路径；
+  - 船坞 `navalYards` 配方：产出 `machinery 0.14`、投入 steel 0.08 / wood 0.08，**不产出舰船**；
+  - 大清船坞 0 座、海军 15 艘、海军军费 0.8 级；英国 120 艘、法国 45、俄国 25。
+- 判断：**能力缺口**。陆军有 `conscript` 可以增长，海军却没有对应动作；「造船」在这个模型里不存在，
+  玩家想强海军只能靠随机事件或天命改数值（天命也没有该动作）。
+- 建议（三选一或组合）：
+  1. **船坞造船**：`navalYards` 每座每月产出 `ships`（例如 0.1/座 → 10 座 = 1 艘/月），
+     投入 steel/machinery，受科技门控；舰船进入 `military.navy`，并推高军费与军械/机械需求。
+  2. **专项购舰**：新增 `v3_action navyProgram { count }`，按「每艘 X 金 + Y 点工程量」走建造队列，
+     比自动化更容易控制节奏。
+  3. **军费等级上限**：把 `spending.navy` 与海军规模挂钩（军费越高，可维持的舰船上限越高），
+     至少让现有数字有经济含义。
+- 关联：`engine/data/buildings.ts`（navalYards 配方）、`engine/actions/*`（无 navy 动作）、
+  `engine/fiscal.ts`（NAVY_EXPENSE_PER_UNIT）、`engine/economy.ts`（ARMS_PER_SHIP / NAVY_DEMAND_PER_UNIT）。
+- 优先级：**P2**
+- 状态：**open**
