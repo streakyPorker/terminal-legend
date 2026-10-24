@@ -453,7 +453,8 @@ describe('terminal-legend drawing', () => {
     for (const id of BUILDING_IDS) {
       expect(await ui.find({ type: 'Text', text: new RegExp(BUILDINGS[id].name) })).toBeDefined()
     }
-    expect(await ui.find({ type: 'Text', text: /id:proj-abc/ })).toBeDefined()
+    // PT-062: the queue row is player-facing; internal project ids stay hidden.
+    expect(await ui.find({ type: 'Text', text: /id:proj-abc/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /农场×2/ })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'o:farms:1x1' })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'o:farms:5x1' })).toBeDefined()

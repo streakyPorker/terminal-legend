@@ -115,8 +115,7 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
             return (
               <Box flexDirection="row" columnGap={1} key={`queue:${project.id}`}>
                 <Text wrap="truncate">{padEnd(`#${position + 1}`, 4)}</Text>
-                <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
-                <Text dimColor wrap="truncate">{padEnd(`id:${project.id}`, 14)}</Text>
+                <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 12)}</Text>
                 <Text color="cyan">{padEnd(bar(project.progress, 1, 8), 9)}</Text>
                 <Text dimColor>
                   剩余 {fmtNumber(workload * (1 - project.progress))}/{fmtNumber(workload)} 点 · 进度 {Math.round(project.progress * 100)}% · 本月投入 {fmtNumber(load.byProject[project.id] ?? 0)} 点 · 预计 {schedule[project.id]?.turns ?? '—'} 回合 · 造价 {constructionTotalCost(project).toFixed(1)} 金
@@ -152,8 +151,7 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
               return (
                 <Box flexDirection="row" columnGap={1} key={`private:${project.id}`}>
                   <Text color="magenta">{padEnd('私人', 4)}</Text>
-                  <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 10)}</Text>
-                  <Text dimColor wrap="truncate">{padEnd(`id:${project.id}`, 14)}</Text>
+                  <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 12)}</Text>
                   <Text color="cyan">{padEnd(bar(project.progress, 1, 8), 9)}</Text>
                   <Text dimColor>
                     剩余 {fmtNumber(workload * (1 - project.progress))}/{fmtNumber(workload)} 点 · 进度 {Math.round(project.progress * 100)}% · 本月自有 {fmtNumber(byProject?.own ?? 0)} / 租用 {fmtNumber(byProject?.rented ?? 0)} 点 · 预计 {schedule[project.id]?.turns ?? '—'} 回合
