@@ -1,5 +1,6 @@
-import type { WorldState } from '../../types'
+import type { Country, GoodId, WorldState } from '../../types'
 import { GOODS, GOOD_IDS, RESOURCE_NAMES } from '../../engine/data'
+import { effectiveSupplyFor, tradeFlows } from '../../engine/inspect/shared'
 import { inspectEconomy } from '../../engine/sim'
 import {
   bar,
@@ -12,13 +13,50 @@ import {
 } from '../format'
 import { Heading, TableRow, partnerTotals, playerOf, type UiKit } from './shared'
 
+export type MarketRow = {
+  id: GoodId
+  production: number
+  imports: number
+  exports: number
+  /** 产出 + 进口 − 出口 — the same basis the price engine prices on. */
+  supply: number
+  demand: number
+  ratio: number
+  state: '盈余' | '平衡' | '短缺'
+}
+
+/**
+ * One row per good, judged on **effective supply**, not domestic output alone.
+ * PT-057: the pane used `production / demand`, so coal and iron read 短缺 while
+ * the imported cargo was already in port. Exported so a test can pin the
+ * basis without mounting the pane.
+ */
+export function marketRows(
+  player: Country,
+  snapshot: ReturnType<typeof inspectEconomy>,
+): MarketRow[] {
+  const flows = tradeFlows(player)
+  const effective = effectiveSupplyFor(snapshot.production, player)
+  return GOOD_IDS.map(id => {
+    const production = snapshot.production[id]
+    const demand = snapshot.demand[id]
+    const imports = flows.imports[id]
+    const exports = flows.exports[id]
+    const supply = effective[id]
+    const ratio = demand <= 0 ? 2 : supply / demand
+    const state: MarketRow['state'] = ratio >= 1.15 ? '盈余' : ratio >= 0.9 ? '平衡' : '短缺'
+    return { id, production, imports, exports, supply, demand, ratio, state }
+  })
+}
+
 export function MarketPanel(props: { ui: UiKit; world: WorldState; width: number }): any {
   const { Box, Text } = props.ui
   const player = playerOf(props.world)
   if (player === undefined) return <Text dimColor>无进行中的游戏。</Text>
   const snapshot = inspectEconomy(player)
   const econ = player.econ
-  const widths = [7, 7, 8, 8, 7, 11]
+  const rows = marketRows(player, snapshot)
+  const widths = [6, 6, 7, 6, 6, 6, 5, 10]
   const tradeWidths = [12, 10, 10, 10]
   const partners = partnerTotals(player).slice(0, 6)
   const playerRoutes = props.world.tradeRoutes
@@ -41,28 +79,34 @@ export function MarketPanel(props: { ui: UiKit; world: WorldState; width: number
   return (
     <Box flexDirection="column">
       <Box>
-        <Heading ui={props.ui} text="商品市场" hint="价格 · 产出 · 需求 · 资源乘数 · 供需" />
+        <Heading
+          ui={props.ui}
+          text="商品市场"
+          hint="有效供给 = 产出 + 进口 − 出口；状态按有效供给判定"
+        />
       </Box>
-      <TableRow ui={props.ui} cells={['商品', '价格', '产出', '需求', '乘数', '状态']} widths={widths} />
-      {GOOD_IDS.map(id => {
-        const production = snapshot.production[id]
-        const demand = snapshot.demand[id]
-        const ratio = demand <= 0 ? 2 : production / demand
-        const state = ratio >= 1.15 ? '盈余' : ratio >= 0.9 ? '平衡' : '短缺'
-        const color = state === '短缺' ? 'red' : state === '盈余' ? 'green' : 'yellow'
+      <TableRow
+        ui={props.ui}
+        cells={['商品', '价格', '产出', '进口', '出口', '需求', '乘数', '状态']}
+        widths={widths}
+      />
+      {rows.map(row => {
+        const color = row.state === '短缺' ? 'red' : row.state === '盈余' ? 'green' : 'yellow'
         return (
           <TableRow
             ui={props.ui}
             cells={[
-              GOODS[id].name,
-              econ.prices[id].toFixed(1),
-              fmtNumber(production),
-              fmtNumber(demand),
-              snapshot.resources[id].toFixed(2),
-              `${state} ${bar(Math.min(ratio, 1.5), 1.5, 6)}`,
+              GOODS[row.id].name,
+              econ.prices[row.id].toFixed(1),
+              fmtNumber(row.production),
+              fmtNumber(row.imports),
+              fmtNumber(row.exports),
+              fmtNumber(row.demand),
+              snapshot.resources[row.id].toFixed(2),
+              `${row.state} ${bar(Math.min(row.ratio, 1.5), 1.5, 6)}`,
             ]}
             widths={widths}
-            colors={[undefined, undefined, undefined, undefined, undefined, color]}
+            colors={[undefined, undefined, undefined, undefined, undefined, undefined, undefined, color]}
           />
         )
       })}
