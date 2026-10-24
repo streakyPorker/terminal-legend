@@ -1129,3 +1129,24 @@
   `engine/modifiers.ts`（production 修正的落点）、计划 0007-economy-polish 的 E1–E5。
 - 优先级：**P1**
 - 状态：**open**
+
+
+### PT-054 天命修正无法撤销，只能叠加反向修正对冲
+
+- 日期：2026-10-24
+- 游戏内日期：1836.01
+- 存档/种子：新局 QING（1836.01 起）
+- 现象：玩家要求撤回刚施加的「生产 +40%」永久修正。`v3_cheat` 的 `modifier` 只有「施加」语义，
+  没有 remove/clear/delete；`v3_inspect modifiers` 只读，也无撤销入口。GM 只能再叠一条
+  `stat=生产, stack=percent, value=-40` 的反向修正来对冲。
+- 数据：`v3_inspect modifiers` 现并列两条 `stat=生产`——`+40%`（柳大飞新政·百工振兴）与
+  `-40%`（撤回·百工振兴（与+40%对冲）），净效果取决于 percent 是否**加性**叠算；
+  手册 §3/§9 与工具输出均未说明 percent 多条同 stat 时是相加还是相乘。
+- 判断：**工具能力缺口 + 口径缺失**。撤销应当是一等操作（按 label/id 删除或清空某国 cheat 修正），
+  否则每条误施的修正都会永久留在列表里；同时 percent 的叠算规则需要写进手册，否则
+  「对冲是否真的等于 0」无法从工具判定。
+- 建议：`v3_cheat modifier` 增加 `action=remove`（按 label 或 id）或 `action=clear`；
+  `v3_inspect modifiers` 每行补一个稳定 `id`；手册 §9 补一行 percent 叠算口径。
+- 关联：`hooks/tools.ts`（`v3_cheat` modifier 规格）、`engine/modifiers.ts`、手册 §3/§9。
+- 优先级：**P2**
+- 状态：**open**
