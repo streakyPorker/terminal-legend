@@ -227,10 +227,28 @@ export type LaborStats = {
   demand: number
   /** Ten-thousands of available workers. */
   force: number
+  /** Share of the population inside the counted labour pool (0.35..0.85). */
+  participation: number
   /** Raw demand/force ratio; can be far below 0.5 in agrarian economies. */
   raw: number
   /** 0.5..1, plan 0003 §0.1's stability floor. */
   utilization: number
+}
+
+/**
+ * Share of the population that belongs to the **counted** labour pool.
+ *
+ * Farms are the reservoir: subsistence peasants sit outside the counted pool
+ * until agriculture and literacy improve enough to release them. Their
+ * productivity is proxied by the tech era (tech gates farm output), and
+ * literacy is the other release valve. This is the design core — the pool only
+ * grows with progress, and every building the player raises draws from it, so
+ * industry has to exist to match the people who join.
+ */
+export function laborParticipation(country: Country): number {
+  const literacy = country.pops.literacy
+  const era = country.tech.era
+  return clampValue(0.58 + literacy * 0.25 + (era - 1) * 0.02, 0.35, 0.85)
 }
 
 /**
@@ -260,10 +278,11 @@ export function deriveLabor(country: Country): LaborStats {
   for (const id of BUILDING_IDS) {
     demand += BUILDING_RECIPES[id].labor * (b[id] ?? 0) * storedUtilization(country, id)
   }
-  const force = country.pops.peasants * 0.6 + country.pops.workers + country.pops.artisans
+  const participation = laborParticipation(country)
+  const force = country.pops.total * participation
   const raw = demand / Math.max(1, force)
   const utilization = clampValue(raw, 0.5, 1)
-  return { demand, force, raw, utilization }
+  return { demand, force, participation, raw, utilization }
 }
 
 /**

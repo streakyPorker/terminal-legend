@@ -85,6 +85,7 @@ export {
   deriveUnemployment,
   unemploymentBreakdown,
   deriveLabor,
+  laborParticipation,
   resourceMultiplier,
   effectiveCount,
   infrastructureSupply,

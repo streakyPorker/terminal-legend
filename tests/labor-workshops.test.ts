@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { BUILDING_RECIPES, deriveLabor } from '../engine/data'
+import { BUILDING_RECIPES, deriveLabor, laborParticipation } from '../engine/data'
 import { inspectWorld } from '../engine/inspect'
 import { newWorld } from '../engine/sim'
 
@@ -33,5 +33,29 @@ describe('workshops are labour demand (PT-061)', () => {
     const text = inspectWorld(world, 'labor')
     expect(text).toContain('营造所')
     expect(text).toContain('不是就业率')
+  })
+
+  test('participation rises with literacy and with the tech era', () => {
+    const world = newWorld(43, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    const base = laborParticipation(qing)
+    qing.pops.literacy = Math.min(1, qing.pops.literacy + 0.1)
+    expect(laborParticipation(qing)).toBeGreaterThan(base)
+    const afterLiteracy = laborParticipation(qing)
+    qing.tech.era += 1
+    expect(laborParticipation(qing)).toBeGreaterThan(afterLiteracy)
+  })
+
+  test('the labour force is population × participation', () => {
+    const world = newWorld(44, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    const labor = deriveLabor(qing)
+    expect(labor.force).toBe(qing.pops.total * labor.participation)
+    expect(labor.participation).toBeGreaterThanOrEqual(0.35)
+    expect(labor.participation).toBeLessThanOrEqual(0.85)
   })
 })
