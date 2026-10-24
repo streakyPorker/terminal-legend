@@ -84,6 +84,7 @@
 | PT-061 | 营造所计入失业吸纳，却 `labor=0` 不计入劳动需求（口径互相矛盾） | 0007-E8 / PT-048 | fixed（7b7cdf0 + b2fb4df，劳动参与率显式化） |
 | PT-062 | 建造队列显示内部项目 id | 0006 / UI | fixed（263b550） |
 | PT-063 | 债务压力惩罚太轻（200% 债务只扣 20% 收入） | 0006 / ADR 0007 | fixed（4a1d37f） |
+| PT-064 | 引擎缺少国家间分期支付/贷款能力 | 0006 / 0004 | fixed（dc45f2a） |
 
 ---
 
@@ -1424,3 +1425,29 @@
   `tests/debt-pressure-migration.test.ts`、`tests/debt-pressure-punitive.test.ts`、ADR 0007。
 - 优先级：**P1**
 - 状态：**fixed（4a1d37f）**
+
+
+### PT-064 引擎缺少国家间分期支付/贷款能力
+
+- 日期：2026-10-24
+- 游戏内日期：1837.03
+- 存档/种子：新局 QING（1836.01 起）
+- 现象：玩家要给英国放 200 金、十年等额本息的贷款，引擎只有**战争赔款**（`world.indemnities`）
+  能按月划账，非战争的定期支付没有原语，GM 只能用天命工具一次性转账，之后靠人肉记忆每月记账。
+- 判断：**能力缺口**。赔款日程本质就是「payer → receiver 每月固定金额、有剩余期数」，
+  与贷款/补贴/岁贡是同一形状，应当抽成通用能力。
+- 修复（dc45f2a）：
+  1. 新增 `Transfer` 类型与可选字段 **`WorldState.transfers`**（旧存档缺该字段时按 `[]` 处理，**不升世界版本**，避免废掉进行中的存档）；
+  2. `engine/world.ts` 新增 `prepareTransfers()`，与 `prepareIndemnities()` 同点结算：
+     付款方支出、收款方收入、金币守恒；金额折进 `reparationsPaid/Received`
+     以复用既有账本与国库路径，同时写 `transfersPaid/Received` 供展示；
+  3. 外交动作新增 **`move: 'loan'`**：参数 `amount`（本金）、`months`（期数，缺省 120）、
+     `rate`（年息%，缺省 5）。放款方现在支付本金，借款方按**等额本息**
+     `P·r(1+r)^n / ((1+r)^n−1)` 每月还款；交战状态拒绝放贷；
+  4. `v3_diplomacy` 的 schema 增加 `loan` 与 `rate`，`amount` 上限 30 → 100000、`months` 上限 60 → 240；
+  5. `v3_inspect fiscal` 增加「转移支付日程」行，prompt 的日程行合并赔款与转移；
+  6. 新增 `tests/transfer-loan.test.ts` 五个用例（本金与日程、逐月入账、零息均摊、期满退场、战时拒绝）。全量 **531 项通过**。
+- 关联：`types/index.d.ts`、`engine/world.ts`、`engine/actions/diplomacy.ts`、`hooks/tools.ts`、
+  `engine/inspect/fiscal.ts`、`tests/transfer-loan.test.ts`。
+- 优先级：**P2**
+- 状态：**fixed（dc45f2a）**
