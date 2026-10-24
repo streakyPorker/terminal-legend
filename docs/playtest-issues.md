@@ -63,6 +63,16 @@
 | PT-040 | `v3_inspect market` 产出/需求未计入进出口 | 0007-E2 | fixed（58e3e7b） |
 | PT-041 | `v3_inspect economy` GDP 未扣净出口（NX 显示 +0） | 0007-E2 | fixed（58e3e7b） |
 | PT-042 | status 与 inspect 分区时点/口径未注明 | 0007-E2 / 手册 §4.7 | fixed（58e3e7b） |
+| PT-043 | 新开贸易航线次月即消失，伙伴被静默改写 | 0004 / ADR 0020 | fixed（a491202） |
+| PT-044 | 托管全程静默：无逐月报告、无完成通知 | 0010 / ADR 0025 | fixed（96337f5） |
+| PT-045 | 御前 UI 按钮点击不回传 GM | PT-044 / ADR 0001 | fixed（96337f5） |
+| PT-046 | `v3_inspect history` 日期与数值倒序错位 | PT-042 | fixed（f19f00e） |
+| PT-047 | 失业率与 labor 分区自相矛盾 | PT-048 / 手册 §7 | fixed（c7ca492） |
+| PT-048 | 营造所 `labor: 0` 且不计入工业吸纳 | PT-047 | fixed（925aff1） |
+| PT-049 | 私人建造混在国有队列，序号乱序 | 0013 | fixed（844ddca） |
+| PT-050 | GM 无法写入他国国库 | 0006 / ADR 0025 | fixed（496408b） |
+| PT-051 | `rankings` 缺少建造力等跨国关键参数 | 0006 | fixed（431d3b5） |
+| PT-052 | 营造所因账面亏损每月折损 ~2% | ADR 0022 / 0007 | fixed（b0a2193） |
 
 ---
 
@@ -851,7 +861,14 @@
   说明本该有的「新线宽限期」字段是**写了没用**，属未完成的实现。
 - 建议（修复方向）：`growRoutes` 对 `openedAt === world.date`（或开店首 1–2 个月）的航线
   跳过降级 / 保底 L1；`open` 时若 `to 价 − 到岸价 ≤ 0` 直接拒绝并提示原因；航线增删改向写编年史。
-- 状态：**open（根因已定位，待修）**
+- 状态：**fixed（a491202）**
+- 修复（待提交）：`engine/config/trade.ts` 新增常量 `ROUTE_GRACE_MONTHS = 2`；`growRoutes()`
+  （`engine/world.ts`）读取 `openedAt`，按 `year * 12 + month` 计算月龄，`1 ≤ age ≤ 2` 的航线
+  在宽限期内既不升级也不降级（保底当前等级），宽限期后照常衰减；`actionRoute`
+  （`engine/actions/route.ts`）`open` 时校验「进口方本地价 − 到岸价 > 0」，否则拒绝并说明原因，
+  不再创建必死航线；航线开通/关闭/因运量不足关闭写入 `world.log`（`kind: 'economy'`，
+  写日志不影响任何数值结果）。测试见 `tests/trade-routes.test.ts`「new route grace window and
+  open validation (PT-043)」六例。
 
 
 ### PT-044 托管（`months>1`）全程静默：无逐月报告、无完成通知
@@ -873,7 +890,13 @@
   回写总结与中断原因；若托管中自动结算事件，至少在总结里列出「本月自动处理事件」及选项。
 - 关联：手册 §2、`hooks/council.ts`、`engine/liveEvents.ts`、`docs/plans/0010-live-events.md`
 - 优先级：**P0**
-- 状态：**open**
+- 修复（本地，待提交）：
+  1. `runDelegated`（`hooks/council.ts`）改为 `advanceGame($, 1, true, false, false, 'engine')`，
+     托管每月在对话里落一行结算（`announce=true` 只写 `$.ui.log`，**不触发任何模型调用**；
+     且经核实，此前的「`announce=false` 省模型调用」是误解——每月 `decideForAi` 本就会调一次模型）；
+  2. 完成/中断时除 `$.ui.toast` 外再 `$.ui.log(header)` 留痕，并 `noteToModel` 追加一条隐藏
+      user 行向 GM 推送「托管结束 + 最终摘要」（`$.ui.log` 不对模型可见，故必须走 `session.append`）。
+- 状态：**fixed（96337f5）**
 
 
 ### PT-045 御前 UI 按钮点击不回传 GM
@@ -892,7 +915,14 @@
   但 GM 无任何通知；直到 1837.01 查 `log kind=event` 才看到
   「谷贱伤农：官仓开收，米价旬日回涨」「停工与脚夫：招失业之民筑堤修路」两条已结算结果。
   GM 仍不知道玩家选了哪个选项、花了多少钱——与玩家原话「我点御前的按钮，你也不知情」一致。
-- 状态：**open**
+- 修复（本地，待提交）：新增 `hooks/internal.ts` 的 `noteToModel()`（`$.session.append` 一条隐藏
+  user 行，模型下轮可读）与 `ActionOrigin`（`tool`/`ui`/`engine`）；`hooks/council.ts` 的
+  `advanceGame`/`resolveEvent`/`panelBuild`/`panelDecision`/`startDelegated`/`stopDelegated`/
+  `startSecretary`/`councilAction` 均接受 `origin`，仅当 `origin === 'ui'` 时经 `notifyPlayerAction`
+  追加「【玩家操作·非玩家发言】…」一行；`render.tsx` 的面板回调与 `commands.ts` 的
+  `/v3 next|run|stop|secretary|resolve|delegate` 传 `ui`，工具路径保持 `tool`（工具结果已告知 GM，
+  不会重复通知）。测试见 `tests/game.test.tsx`「GM notifications (PT-045)」。
+- 状态：**fixed（96337f5）**
 
 
 ### PT-046 `v3_inspect history` 日期与数值倒序错位
@@ -910,7 +940,11 @@
   `history[0].date` 与 `history[0].gdp` 的对应关系。
 - 关联：`engine/inspect/history.ts`、PT-042（口径标注）
 - 优先级：**P1**
-- 状态：**open**
+- 修复（本地，待提交）：`engine/inspect/history.ts` 循环改为升序，日期取
+  `monthsBefore(world.date, length - 1 - index)`，与同一窗口元素对齐；新增单测
+  `history rows pair each date with that month value, newest last (PT-046)` 锁定
+  `rows[0]` = 最旧值、末行 = `world.date` + 当前值。
+- 状态：**fixed（f19f00e）**
 
 
 ### PT-047 失业率与 labor 分区自相矛盾，且 8 个月从 6% 机械升到 18%
@@ -930,7 +964,16 @@
   用单测锁定「结构性部分 + 缺口 ≈ 失业率」这一恒等式（或注明二者口径不同、不可相加）。
 - 关联：手册 §7、`engine/data/derivations.ts`（`deriveUnemployment`）、`engine/inspect/labor.ts`
 - 优先级：**P1**
-- 状态：**open**
+- 修复（本地，未提交）：
+  1. `engine/data/derivations.ts` 新增 `unemploymentBreakdown(country)`，返回模型真实加项
+     `{ base, industry, radicals, literacy, laborPenalty, curve, rawTarget }`；`deriveUnemployment`
+     改为读取其 `.curve`，二者共用同一真源、不会漂移；
+  2. `engine/inspect/labor.ts` 首行不再把“原始需求占比”当作“缺口点数”与失业率相减，改为
+     打印「平滑存量 → 本月目标 = 基础 + 工业吸纳不足 + 劳动力利用率罚项 + 激进 + 识字率」，
+     并注明存量为平滑值（步长 ≤ ±1.5 个点/月）、原始需求占比属另一口径不可相加；
+  3. 新增测试：分解各分量重构 curve 与夹逼目标、`deriveUnemployment` 与之一致；
+     labor 分区不再出现「结构性部分约 0」。
+- 状态：**fixed（c7ca492）**
 
 
 ### PT-048 营造所 `labor: 0` 且不计入工业吸纳，建 20 座也不创造就业
@@ -1059,3 +1102,30 @@
   `engine/config/diplomacy.ts`（`SENSITIVE_DRAG`）、`tests/trade-diplomacy.test.ts`、`tests/utilization.test.ts`
 - 优先级：**P1**
 - 状态：**fixed（b0a2193）**
+
+
+### PT-053 「生产 +50%」修正生效后 GDP 不升反降（564.2 → 531.9）
+
+- 日期：2026-10-24
+- 游戏内日期：1836.01 → 1836.02
+- 存档/种子：新局 QING（1836.01 起）
+- 现象：以天命注入 `生产 +50%（percent，240 月）` 修正，
+  `v3_inspect modifiers` 确认生效；推进一月后 GDP **564.2 → 531.9（-32.3，-5.7%）**，
+  生活水平 28 → 27、失业 6.0% → 7.5%。
+- 数据：
+  - GDP 分解：消费 549.8 → 543.1、投资 0 → 0、政府 14.4 → 14.9、净出口 0 → **-26.2**；
+  - 物价普遍下行：粮食 0.72 → 0.61（↓61% 基准）、木材 0.89 → 0.78、成衣 2.67 → 2.41；
+  - 私人部门贸易逆差 26.4 金，而「私人资本 0.0 / 私人外债 0.0」——逆差没有可见的融资方；
+  - 劳动原始利用率仍为 **3.9%**（需求 965 万 / 劳动力 2.5 亿）；
+  - 收入 18.6 / 支出 26.4，净 -7.8，国库 13.0 → 5.2。
+- 判断：**待定，但至少是「反直觉且无法从工具解释」**。两种可能：
+  1. GDP 以**市价**计量（C+I+G+NX），产出增加只压低了价格、没抬名义值，再叠加贸易逆差，
+     数字自然下行——经济上自洽，但与「生产 +50%」的字面预期严重不符；
+  2. 「生产」修正只作用于**潜在产能**，而需求约束下实际产出不变／变价不变量的口径不一致。
+  另外，私人贸易逆差 26.4 金在私人资本为 0 时如何结算，工具没有给出解释（疑似私部门外债即时计入但未显示）。
+- 建议：明确 GDP 口径（实际 vs 名义）并在 `v3_inspect economy` 标注；若为名义值，
+  生产类修正的说明应提示「需求不足时主要体现为降价」；补上私人贸易逆差的融资方显示。
+- 关联：`engine/economy.ts`（GDP 与价格结算）、`engine/trade.ts`（净出口/私人逆差）、
+  `engine/modifiers.ts`（production 修正的落点）、计划 0007-economy-polish 的 E1–E5。
+- 优先级：**P1**
+- 状态：**open**
