@@ -44,19 +44,60 @@ export function fmtPop(tenThousands: number): string {
   return `${tenThousands.toFixed(1)} 万`
 }
 
+/** Cells one character takes in a terminal: CJK / full-width count as two. */
+function charCells(ch: string): number {
+  const code = ch.codePointAt(0) ?? 0
+  if (code === 0x200b || code === 0x200d || code === 0xfe0f) return 0
+  if (
+    (code >= 0x1100 && code <= 0x115f) ||
+    (code >= 0x2e80 && code <= 0xa4cf) ||
+    (code >= 0xac00 && code <= 0xd7a3) ||
+    (code >= 0xf900 && code <= 0xfaff) ||
+    (code >= 0xfe30 && code <= 0xfe6f) ||
+    (code >= 0xff00 && code <= 0xff60) ||
+    (code >= 0xffe0 && code <= 0xffe6) ||
+    (code >= 0x1f300 && code <= 0x1faff)
+  ) {
+    return 2
+  }
+  return 1
+}
+
+/**
+ * Terminal columns taken by `text`. Padding by `String.length` misaligns every
+ * table whose header is Chinese but whose cells are numbers — 商品 occupies two
+ * cells per character, not one (PT-058).
+ */
+export function displayWidth(text: string): number {
+  let width = 0
+  for (const ch of text) width += charCells(ch)
+  return width
+}
+
+/** Truncates to `width` **cells**, appending `…` when something was cut. */
 export function clampText(text: string, width: number): string {
-  if (width <= 1) return ''
-  if (text.length <= width) return text
-  if (width <= 2) return text.slice(0, width)
-  return `${text.slice(0, width - 1)}…`
+  if (width <= 0) return ''
+  if (displayWidth(text) <= width) return text
+  if (width === 1) return '…'
+  let out = ''
+  let used = 0
+  for (const ch of text) {
+    const cells = charCells(ch)
+    if (used + cells > width - 1) break
+    out += ch
+    used += cells
+  }
+  return `${out}…`
 }
 
 export function padEnd(text: string, width: number): string {
-  return clampText(text, width).padEnd(width, ' ')
+  const clipped = clampText(text, width)
+  return clipped + ' '.repeat(Math.max(0, width - displayWidth(clipped)))
 }
 
 export function padStart(text: string, width: number): string {
-  return clampText(text, width).padStart(width, ' ')
+  const clipped = clampText(text, width)
+  return ' '.repeat(Math.max(0, width - displayWidth(clipped))) + clipped
 }
 
 export function bar(value: number, max: number, width: number, full = '█', empty = '░'): string {

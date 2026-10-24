@@ -149,7 +149,7 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
               const tech = BUILDINGS[id].unlock?.techLevel
               return (
                 <Box flexDirection="row" columnGap={1} key={`build:${id}`}>
-                  <Text wrap="truncate">{padEnd(BUILDINGS[id].name, 6)}</Text>
+                  <Text wrap="truncate">{padEnd(BUILDINGS[id].name, 9)}</Text>
                   <Text wrap="truncate">{padEnd(`存${fmtNumber(econ.buildings[id])}`, 7)}</Text>
                   <Text dimColor wrap="truncate">{padEnd(`量${fmtNumber(singleWorkload)}点`, 8)}</Text>
                   <Text dimColor wrap="truncate">{padEnd(`月耗${cap}点`, 8)}</Text>

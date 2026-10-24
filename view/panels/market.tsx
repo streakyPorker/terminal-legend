@@ -2,7 +2,7 @@ import type { Country, GoodId, WorldState } from '../../types'
 import { GOODS, GOOD_IDS, RESOURCE_NAMES } from '../../engine/data'
 import { effectiveSupplyFor, tradeFlows } from '../../engine/inspect/shared'
 import { inspectEconomy } from '../../engine/sim'
-import { countryTag, fmtMoney, fmtNumber, fmtPercent, fmtSigned, sparkline } from '../format'
+import { bar, countryTag, fmtMoney, fmtNumber, fmtPercent, fmtSigned, sparkline } from '../format'
 import { Heading, TableRow, partnerTotals, playerOf, type UiKit } from './shared'
 
 export type MarketRow = {
@@ -48,7 +48,8 @@ export function MarketPanel(props: { ui: UiKit; world: WorldState; width: number
   const snapshot = inspectEconomy(player)
   const econ = player.econ
   const rows = marketRows(player, snapshot)
-  const widths = [6, 5, 7, 6, 6, 7, 6, 4, 7, 6]
+  // Widths are terminal cells (CJK = 2); `padEnd` is display-width aware.
+  const widths = [6, 5, 7, 6, 6, 7, 6, 4, 7, 11]
   const tradeWidths = [12, 10, 10, 10]
   const partners = partnerTotals(player).slice(0, 6)
   const playerRoutes = props.world.tradeRoutes
@@ -97,7 +98,7 @@ export function MarketPanel(props: { ui: UiKit; world: WorldState; width: number
               fmtNumber(row.demand),
               snapshot.resources[row.id].toFixed(2),
               `${Math.round(row.ratio * 100)}%`,
-              row.state,
+              `${row.state} ${bar(Math.min(row.ratio, 1.5), 1.5, 6)}`,
             ]}
             widths={widths}
             colors={[
