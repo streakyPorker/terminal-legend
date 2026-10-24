@@ -83,6 +83,7 @@ export {
   administrativeCapacityFor,
   deriveBureaucracy,
   deriveUnemployment,
+  unemploymentBreakdown,
   deriveLabor,
   resourceMultiplier,
   effectiveCount,
@@ -96,7 +97,7 @@ export {
   unemploymentIndustryCount,
   infrastructureCount,
 } from './derivations'
-export type { LaborStats, InfrastructureStats } from './derivations'
+export type { LaborStats, InfrastructureStats, UnemploymentBreakdown } from './derivations'
 
 // ---------------------------------------------------------------- world / state constructors
 export {

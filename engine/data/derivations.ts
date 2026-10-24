@@ -11,6 +11,7 @@ import {
   INFRA_UPKEEP,
 } from './buildings'
 import { RESOURCE_IDS, RESOURCE_MAP } from './goods'
+import { UNEMPLOYMENT_LABOR_PENALTY, UNEMPLOYMENT_MAX, UNEMPLOYMENT_MIN } from '../config/society'
 
 const clampValue = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value))
@@ -176,16 +177,49 @@ export function unemploymentIndustryCount(country: Country): number {
 }
 
 /** Unemployment follows industry, literacy and unrest (plan §7.4). */
-export function deriveUnemployment(country: Country): number {
+/**
+ * The unemployment model's components, exposed so `v3_inspect labor` can show
+ * *why* the target sits where it does instead of guessing (PT-047). All terms
+ * are the raw addends of the curve; `curve` and `rawTarget` are the two clamps
+ * the model applies, in order.
+ */
+export type UnemploymentBreakdown = {
+  /** Flat floor of the curve. */
+  base: number
+  /** Industry failing to absorb the population: `(1 − industryCount/(popFactor·3))·30`. */
+  industry: number
+  /** Unrest push: `radicals · 0.15`. */
+  radicals: number
+  /** Literacy pull, always ≤ 0: `−literacy · 10`. */
+  literacy: number
+  /** Low labour-utilisation penalty added after the curve clamp (plan 0003 §0.1). */
+  laborPenalty: number
+  /** `clamp(base + industry + radicals + literacy, 0, 30)` — exactly `deriveUnemployment`. */
+  curve: number
+  /** The month's target before modifiers: `clamp(curve + laborPenalty, 0, 30)`. */
+  rawTarget: number
+}
+
+/**
+ * Decompose the unemployment target into its additive terms. This is the single
+ * source of the curve: `deriveUnemployment` reads `.curve` from here, so the
+ * displayed decomposition and the settlement can never drift (PT-047).
+ */
+export function unemploymentBreakdown(country: Country): UnemploymentBreakdown {
   const popFactor = Math.max(0.1, country.pops.total / 1000)
-  return clampValue(
-    4 +
-      (1 - unemploymentIndustryCount(country) / Math.max(1, popFactor * 3)) * 30 +
-      country.pops.radicals * 0.15 -
-      country.pops.literacy * 10,
-    0,
-    30,
-  )
+  const base = 4
+  const industry =
+    (1 - unemploymentIndustryCount(country) / Math.max(1, popFactor * 3)) * 30
+  const radicals = country.pops.radicals * 0.15
+  const literacy = -country.pops.literacy * 10
+  const curve = clampValue(base + industry + radicals + literacy, 0, 30)
+  const laborPenalty = (1 - country.econ.laborUtilization) * UNEMPLOYMENT_LABOR_PENALTY
+  const rawTarget = clampValue(curve + laborPenalty, UNEMPLOYMENT_MIN, UNEMPLOYMENT_MAX)
+  return { base, industry, radicals, literacy, laborPenalty, curve, rawTarget }
+}
+
+export function deriveUnemployment(country: Country): number {
+  return unemploymentBreakdown(country).curve
 }
 
 export type LaborStats = {
