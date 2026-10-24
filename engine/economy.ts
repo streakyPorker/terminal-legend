@@ -532,6 +532,8 @@ export function computeEconomy(
   // Fiscal context for the interest rates and the tax-collection reading.
   const context = { atWar: override?.atWar ?? false, tick: override?.tick ?? 0 }
   const outlay = expenseParts(country, gdp, context)
+  // Transfers paid are contractual too (PT-065): keep them out of the
+  // `expense` modifier, symmetric with the income side.
   const expense = applyModifiers(
     country,
     'expense',
@@ -543,9 +545,8 @@ export function computeEconomy(
       outlay.debtInterest +
       outlay.marketLoss +
       outlay.upkeep +
-      outlay.reparations +
       outlay.constructionSubsidy,
-  )
+  ) + outlay.reparations
 
   const labor = deriveLabor(country)
   const rawShare =
@@ -643,15 +644,14 @@ export function computeEconomy(
     context,
     taxBaseQty,
   )
+  // PT-065: scheduled transfers (loan installments, reparations) are
+  // contractual payments, not domestic revenue — an `income` modifier such as
+  // 「理财有方 +40%」 must not inflate them, or a 3.23/month loan books as 4.4.
   const income = applyModifiers(
     country,
     'income',
-    revenue.taxes +
-      revenue.ports +
-      revenue.sovereignIncome +
-      revenue.reparations +
-      revenue.other,
-  )
+    revenue.taxes + revenue.ports + revenue.sovereignIncome + revenue.other,
+  ) + revenue.reparations
 
   return {
     production,

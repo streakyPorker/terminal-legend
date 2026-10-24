@@ -409,18 +409,18 @@ export function fiscalLedger(
   const rawOther = Number.isFinite(econ.lastIncomeOther)
     ? econ.lastIncomeOther
     : rawIncome.other
-  const rawIncomeNoInterest =
-    rawIncome.taxes +
-    rawIncome.ports +
-    rawIncome.reparations +
-    rawOther
+  // PT-065: transfers are booked at contract value and never scaled by the
+  // `income` modifier, so they stay out of the factor's base and are reported
+  // as booked.
+  const rawIncomeNoInterest = rawIncome.taxes + rawIncome.ports + rawOther
+  const transferIncome = rawIncome.reparations
   // The settlement stored the interest actually applied on the opening
   // balance; using it here keeps a month that crossed zero from displaying
   // the other side's interest.
   const fundIncome = Number.isFinite(econ.lastFundIncome)
     ? econ.lastFundIncome
     : rawIncome.sovereignIncome
-  const incomeNonInterest = Math.max(0, econ.income - fundIncome)
+  const incomeNonInterest = Math.max(0, econ.income - fundIncome - transferIncome)
   const incomeFactor =
     rawIncomeNoInterest > 0 ? incomeNonInterest / rawIncomeNoInterest : 1
 
@@ -433,7 +433,6 @@ export function fiscalLedger(
     rawExpense.welfare +
     rawExpense.marketLoss +
     rawExpense.upkeep +
-    rawExpense.reparations +
     rawExpense.constructionSubsidy
   const debtInterest = Number.isFinite(econ.lastDebtInterest)
     ? econ.lastDebtInterest
@@ -441,7 +440,7 @@ export function fiscalLedger(
   const construction = Math.max(0, econ.lastStateConstructionSpend)
   const expenseNonInterest = Math.max(
     0,
-    econ.expense - construction - debtInterest,
+    econ.expense - construction - debtInterest - rawExpense.reparations,
   )
   const expenseFactor =
     rawExpenseNoInterest > 0 ? expenseNonInterest / rawExpenseNoInterest : 1
@@ -458,7 +457,7 @@ export function fiscalLedger(
       },
       ports: rawIncome.ports * incomeFactor,
       sovereignIncome: fundIncome,
-      reparations: rawIncome.reparations * incomeFactor,
+      reparations: transferIncome,
       other: rawOther * incomeFactor,
       total: econ.income,
     },
@@ -471,7 +470,7 @@ export function fiscalLedger(
       debtInterest,
       marketLoss: rawExpense.marketLoss * expenseFactor,
       upkeep: rawExpense.upkeep * expenseFactor,
-      reparations: rawExpense.reparations * expenseFactor,
+      reparations: rawExpense.reparations,
       constructionSubsidy: rawExpense.constructionSubsidy * expenseFactor,
       construction,
       total: econ.expense,
