@@ -43,13 +43,15 @@ export type StatCell = { key: string; width: number; text: string; color?: strin
  */
 export function fitStatCells(cells: StatCell[], width: number): StatCell[] {
   const priority = ['upkeep', 'cost', 'volume', 'stock', 'profit']
-  // name column + the three order buttons + their gaps.
-  let available = Math.max(0, width - 8 - 9 - 3)
+  // name column + the three order buttons + their gaps/margins. Generous on
+  // purpose: under-reserving is what truncated the numbers in the first place.
+  let available = Math.max(0, width - 8 - 12 - 4)
   const keep = new Set<string>()
   for (const key of priority) {
     const cell = cells.find(entry => entry.key === key)
     if (cell === undefined) continue
-    if (available >= cell.width) {
+    // +1 for the columnGap that follows the cell.
+    if (available >= cell.width + 1) {
       keep.add(key)
       available -= cell.width + 1
     }
@@ -179,17 +181,17 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
               const profit = econ.buildingProfits[id]?.profitPerBuilding
               const tech = BUILDINGS[id].unlock?.techLevel
               return (
-                <Box flexDirection="row" columnGap={1} key={`build:${id}`}>
+                <Box flexDirection="row" columnGap={1} flexWrap="wrap" key={`build:${id}`}>
                   <Text wrap="truncate">{padEnd(BUILDINGS[id].name, 8)}</Text>
                   {fitStatCells(
                     [
-                      { key: 'stock', width: 7, text: `存${fmtNumber(econ.buildings[id])}` },
-                      { key: 'volume', width: 6, text: `量${fmtNumber(singleWorkload)}点` },
-                      { key: 'upkeep', width: 7, text: `月耗${cap}点` },
-                      { key: 'cost', width: 8, text: `造价${singleCost.toFixed(1)}金` },
+                      { key: 'stock', width: 8, text: `存${fmtNumber(econ.buildings[id])}` },
+                      { key: 'volume', width: 8, text: `量${fmtNumber(singleWorkload)}点` },
+                      { key: 'upkeep', width: 9, text: `月耗${cap}点` },
+                      { key: 'cost', width: 10, text: `造价${singleCost.toFixed(1)}金` },
                       {
                         key: 'profit',
-                        width: 7,
+                        width: 8,
                         text: profit === undefined ? '利—' : `利${profit.toFixed(2)}`,
                         ...(profit === undefined ? {} : { color: profit >= 0 ? 'green' : 'red' }),
                       },

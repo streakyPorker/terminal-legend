@@ -26,7 +26,7 @@ describe('buildable row column fitting (PT-059)', () => {
   })
 
   test('a narrow pane keeps 月耗 and 造价, dropping the rest', () => {
-    const kept = fitStatCells(CELLS, 40).map(cell => cell.key)
+    const kept = fitStatCells(CELLS, 50).map(cell => cell.key)
     expect(kept).toContain('upkeep')
     expect(kept).toContain('cost')
     expect(kept).not.toContain('profit')
@@ -38,7 +38,7 @@ describe('buildable row column fitting (PT-059)', () => {
       const kept = fitStatCells(CELLS, width)
       const used = kept.reduce((sum, cell) => sum + cell.width + 1, 0)
       // A degenerate width may keep nothing; otherwise the row must fit.
-      expect(used).toBeLessThanOrEqual(Math.max(0, width - 8 - 9 - 3))
+      expect(used).toBeLessThanOrEqual(Math.max(0, width - 8 - 12 - 4))
     }
   })
 })
