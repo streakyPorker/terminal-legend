@@ -30,6 +30,33 @@ export type ConstructionPanelProps = {
 
 type BuildingGroup = { label: string; ids: BuildingId[] }
 
+/** One compact stat cell in a buildable-building row. */
+export type StatCell = { key: string; width: number; text: string; color?: string }
+
+/**
+ * Drops stat cells until the row fits `width` terminal cells (PT-059).
+ *
+ * Rendering every column into a narrow pane made the Text nodes shrink and
+ * truncate mid-word ("月耗…", "造价…"). The row now keeps only what fits,
+ * sacrificing the least useful columns first: 利 → 存 → 量 → then 造价 and
+ * 月耗 last, because those two are what a player compares before ordering.
+ */
+export function fitStatCells(cells: StatCell[], width: number): StatCell[] {
+  const priority = ['upkeep', 'cost', 'volume', 'stock', 'profit']
+  // name column + the three order buttons + their gaps.
+  let available = Math.max(0, width - 8 - 9 - 3)
+  const keep = new Set<string>()
+  for (const key of priority) {
+    const cell = cells.find(entry => entry.key === key)
+    if (cell === undefined) continue
+    if (available >= cell.width) {
+      keep.add(key)
+      available -= cell.width + 1
+    }
+  }
+  return cells.filter(cell => keep.has(cell.key))
+}
+
 const BUILDING_GROUPS: BuildingGroup[] = [
   { label: '采掘', ids: ['farms', 'coalMines', 'ironMines', 'lumberMills'] },
   { label: '轻工', ids: ['textileMills', 'furnitureWorks', 'distilleries', 'luxuryWorks'] },
@@ -153,20 +180,37 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
               const tech = BUILDINGS[id].unlock?.techLevel
               return (
                 <Box flexDirection="row" columnGap={1} key={`build:${id}`}>
-                  <Text wrap="truncate">{padEnd(BUILDINGS[id].name, 9)}</Text>
-                  <Text wrap="truncate">{padEnd(`存${fmtNumber(econ.buildings[id])}`, 7)}</Text>
-                  <Text dimColor wrap="truncate">{padEnd(`量${fmtNumber(singleWorkload)}点`, 7)}</Text>
-                  <Text dimColor wrap="truncate">{padEnd(`月耗${cap}点`, 7)}</Text>
-                  <Text dimColor wrap="truncate">{padEnd(`造价${singleCost.toFixed(1)}金`, 8)}</Text>
-                  <Text color={profit === undefined ? undefined : profit >= 0 ? 'green' : 'red'} wrap="truncate">
-                    {padEnd(profit === undefined ? '利—' : `利${profit.toFixed(2)}`, 7)}
-                  </Text>
+                  <Text wrap="truncate">{padEnd(BUILDINGS[id].name, 8)}</Text>
+                  {fitStatCells(
+                    [
+                      { key: 'stock', width: 7, text: `存${fmtNumber(econ.buildings[id])}` },
+                      { key: 'volume', width: 6, text: `量${fmtNumber(singleWorkload)}点` },
+                      { key: 'upkeep', width: 7, text: `月耗${cap}点` },
+                      { key: 'cost', width: 8, text: `造价${singleCost.toFixed(1)}金` },
+                      {
+                        key: 'profit',
+                        width: 7,
+                        text: profit === undefined ? '利—' : `利${profit.toFixed(2)}`,
+                        ...(profit === undefined ? {} : { color: profit >= 0 ? 'green' : 'red' }),
+                      },
+                    ],
+                    props.width,
+                  ).map(cell => (
+                    <Text
+                      key={`stat:${id}:${cell.key}`}
+                      dimColor={cell.color === undefined}
+                      {...(cell.color === undefined ? {} : { color: cell.color })}
+                      wrap="truncate"
+                    >
+                      {padEnd(cell.text, cell.width)}
+                    </Text>
+                  ))}
                   {tech === undefined ? null : (
                     <Text dimColor wrap="truncate">{padEnd(`层${tech}`, 3)}</Text>
                   )}
                   <Button key={`o:${id}:1x1`} label="1×1" onPress={() => props.onControl('build', { building: id, perSlot: 1, slots: 1 })} />
                   <Button key={`o:${id}:5x1`} label="5×1" onPress={() => props.onControl('build', { building: id, perSlot: 5, slots: 1 })} />
-                  <Button key={`o:${id}:head`} label="⇤1×1" onPress={() => props.onControl('build', { building: id, perSlot: 1, slots: 1, position: 'head' })} />
+                  <Button key={`o:${id}:head`} label="⇤" onPress={() => props.onControl('build', { building: id, perSlot: 1, slots: 1, position: 'head' })} />
                 </Box>
               )
             })}
