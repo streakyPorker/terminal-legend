@@ -43,7 +43,7 @@ export function statusText(world: WorldState): string {
       pressure.ratio < 0.25
         ? `债务压力：无（债务/GDP ${(pressure.ratio * 100).toFixed(0)}%）`
         : `债务压力：${pressure.label}（债务/GDP ${(pressure.ratio * 100).toFixed(0)}%，收入 −${(pressure.incomePenalty * 100).toFixed(0)}%，建设速度 −${(pressure.constructionPenalty * 100).toFixed(0)}%，合法性目标 −${pressure.legitimacyPenalty.toFixed(1)}，月息 +${(pressure.interestSpread * 100).toFixed(2)}%）`
-    const schedules = (world.indemnities ?? []).filter(
+    const schedules = [...(world.indemnities ?? []), ...(world.transfers ?? [])].filter(
       schedule => schedule.from === player.id || schedule.to === player.id,
     )
     lines.push(

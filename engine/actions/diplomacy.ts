@@ -4,6 +4,7 @@ import {
   EMBARGO_MONTHS_MAX,
   SENSITIVE_GOODS,
   TRADE_RELATION_ENVELOPE,
+  atWar,
   declareWar,
   endWar,
   type ReparationTerms,
@@ -90,6 +91,49 @@ export function actionDiplomacy(
         100,
       )
       return { ok: true, text: `${tag} 向${target.name}赠送了价值 ${amount.toFixed(1)} 的礼物` }
+    }
+    case 'loan': {
+      // Sovereign loan: the player pays the principal now and receives an
+      // equal-installment (annuity) stream back, booked through the same
+      // monthly schedule machinery as reparations (PT-064).
+      const principal = clamp(num(params.amount, 0), 1, 100000)
+      const months = Math.round(clamp(num(params.months, 120), 1, 240))
+      const rate = clamp(num(params.rate, 5), 0, 30)
+      if (atWar(world, country.id, target.id)) {
+        return { ok: false, text: `${tag} 与${target.name}处于战争状态，无法放贷` }
+      }
+      if (country.econ.treasury < principal) {
+        return { ok: false, text: `${tag} 国库不足以放贷 ${principal.toFixed(1)} 金` }
+      }
+      const r = rate / 100 / 12
+      const growth = Math.pow(1 + r, months)
+      const monthly =
+        r <= 0 ? principal / months : (principal * r * growth) / (growth - 1)
+      const monthlyAmount = Math.round(monthly * 100) / 100
+      country.econ.treasury -= principal
+      target.econ.treasury += principal
+      if (!Array.isArray(world.transfers)) world.transfers = []
+      world.transfers.push({
+        id: `loan-${country.id}-${target.id}-${world.tick}-${world.transfers.length}`,
+        from: target.id,
+        to: country.id,
+        monthlyAmount,
+        monthsLeft: months,
+        remaining: Math.round(monthlyAmount * months * 100) / 100,
+        startsAtTick: world.tick + 1,
+        startedAt: { ...world.date },
+        label: `${country.name}向${target.name}贷款 ${principal.toFixed(0)} 金 · 年息 ${rate}% · ${months} 期`,
+      })
+      country.diplo.relations[target.id] = clamp(current + 5, -100, 100)
+      target.diplo.relations[country.id] = clamp(
+        (target.diplo.relations[country.id] ?? 0) + 8,
+        -100,
+        100,
+      )
+      return {
+        ok: true,
+        text: `${tag} 向${target.name}放贷 ${principal.toFixed(0)} 金，年息 ${rate}%，${months} 期等额本息，每月还款 ${monthlyAmount.toFixed(2)} 金`,
+      }
     }
     case 'war': {
       const war = declareWar(

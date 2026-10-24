@@ -604,6 +604,10 @@ export type Economy = {
   reparationsPaid: number
   /** Installment reparations received this month, folded into income. */
   reparationsReceived: number
+  /** Scheduled transfers paid this month (loans/subsidies), folded into expense. */
+  transfersPaid: number
+  /** Scheduled transfers received this month, folded into income. */
+  transfersReceived: number
   /** Sovereign-fund interest applied in the last settlement (income side). */
   lastFundIncome: number
   /** National-debt interest applied in the last settlement (expense side). */
@@ -795,6 +799,27 @@ export type WarIndemnity = {
   startedAt: GameDate
 }
 
+/**
+ * A scheduled gold transfer between two countries — loan installments,
+ * subsidies, tribute. Created outside a war (unlike {@link WarIndemnity}),
+ * settled the same way: before the monthly simulation, payer expense and
+ * receiver income of equal size.
+ */
+export type Transfer = {
+  id: string
+  from: string
+  to: string
+  monthlyAmount: number
+  monthsLeft: number
+  /** Gold still owed after this month's installment. */
+  remaining: number
+  /** First tick that charges an installment. */
+  startsAtTick: number
+  startedAt: GameDate
+  /** Player-facing label, e.g. 「对英贷款 · 年息5% · 120期」. */
+  label: string
+}
+
 /** A participant's declared position in a situation (plan 0004 §4.2). */
 export type SituationStance = 'crackdown' | 'compromise' | 'war' | 'aid' | 'neutral'
 
@@ -942,6 +967,12 @@ export type WorldState = {
   wars: War[]
   /** Active installment reparations (lump sums do not appear here). */
   indemnities: WarIndemnity[]
+  /**
+   * Scheduled gold transfers outside war — loan installments, subsidies,
+   * tribute. Same monthly settlement shape as an indemnity. Optional so a
+   * pre-PT-064 save keeps loading (read sites fall back to `[]`).
+   */
+  transfers?: Transfer[]
   events: GameEvent[]
   log: LogEntry[]
   /** Auditable trade tensions, newest last; only the last 24 months are kept (plan 0004 §2.7). */

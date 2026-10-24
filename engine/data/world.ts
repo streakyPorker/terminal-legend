@@ -209,6 +209,8 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         lastPrivateConstructionSpend: 0,
         reparationsPaid: 0,
         reparationsReceived: 0,
+        transfersPaid: 0,
+        transfersReceived: 0,
         lastFundIncome: 0,
         lastDebtInterest: 0,
         lastImportBill: 0,
@@ -275,6 +277,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
     countries,
     wars: [],
     indemnities: [],
+    transfers: [],
     events: [],
     log: [
       {

@@ -6,6 +6,7 @@ import type {
   LogEntry,
   TradeFlow,
   TradeRoute,
+  Transfer,
   WarIndemnity,
   WorldState,
 } from '../types'
@@ -193,6 +194,43 @@ function prepareIndemnities(world: WorldState): void {
     }
   }
   world.indemnities = active
+}
+
+/**
+ * Books this month's scheduled transfers (loan installments, subsidies,
+ * tribute) onto both sides. Same settlement shape as an indemnity — payer
+ * expense, receiver income, gold conserved — but the schedule is created
+ * outside a war (PT-064). The amounts are folded into the reparations buckets
+ * so every downstream ledger/treasury path already accounts for them; the
+ * transfers buckets are kept separately for display.
+ */
+function prepareTransfers(world: WorldState): void {
+  if (!Array.isArray(world.transfers)) world.transfers = []
+  for (const country of Object.values(world.countries)) {
+    country.econ.transfersPaid = 0
+    country.econ.transfersReceived = 0
+  }
+  const active: Transfer[] = []
+  for (const schedule of world.transfers) {
+    if (world.tick < schedule.startsAtTick) {
+      active.push(schedule)
+      continue
+    }
+    const payer = world.countries[schedule.from]
+    const receiver = world.countries[schedule.to]
+    if (payer === undefined || receiver === undefined || schedule.remaining <= 0) {
+      continue
+    }
+    const amount = Math.min(schedule.monthlyAmount, schedule.remaining)
+    payer.econ.reparationsPaid += amount
+    receiver.econ.reparationsReceived += amount
+    payer.econ.transfersPaid += amount
+    receiver.econ.transfersReceived += amount
+    schedule.remaining = Math.max(0, schedule.remaining - amount)
+    schedule.monthsLeft -= 1
+    if (schedule.remaining > 1e-6 && schedule.monthsLeft > 0) active.push(schedule)
+  }
+  world.transfers = active
 }
 
 /** Month index for route-age arithmetic: `GameDate`s are `{year, month}` pairs. */
@@ -408,6 +446,7 @@ export function advance(
     // Reparations are booked before any country simulates, so both sides see
     // the same installment in this month's income/expense.
     prepareIndemnities(world)
+    prepareTransfers(world)
     // Embargoes age at the start of the month, before clearing, so an embargo
     // that expires this month no longer blocks it (plan §3).
     expireEmbargoes(world, log)

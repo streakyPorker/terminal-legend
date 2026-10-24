@@ -353,7 +353,7 @@ export const TOOL_SPECS: {
   {
     name: 'v3_diplomacy',
     description:
-      '终末传奇：执行外交行动。move 取值：improve（改善关系）、insult（交恶）、alliance（结盟）、rival（设为对手）、gift（赠礼）、war（宣战）、peace（停战；本方获胜时可用 indemnityTotal/indemnityMonths 声明赔款总额与最长分期月数）、embargo（禁运，可选定商品与月数）、unembargo（解除禁运）、tension（就敏感商品施加贸易张力）。country 是行动发起国（缺省玩家国），target 是对方国家代码，例如 GBR、RUS、QING。',
+      '终末传奇：执行外交行动。move 取值：improve（改善关系）、insult（交恶）、alliance（结盟）、rival（设为对手）、gift（赠礼）、loan（放贷：现在付出 amount 本金，对方按 months 期等额本息每月还款，rate 为年息百分数）、war（宣战）、peace（停战；本方获胜时可用 indemnityTotal/indemnityMonths 声明赔款总额与最长分期月数）、embargo（禁运，可选定商品与月数）、unembargo（解除禁运）、tension（就敏感商品施加贸易张力）。country 是行动发起国（缺省玩家国），target 是对方国家代码，例如 GBR、RUS、QING。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -367,6 +367,7 @@ export const TOOL_SPECS: {
             'alliance',
             'rival',
             'gift',
+            'loan',
             'war',
             'peace',
             'embargo',
@@ -377,8 +378,15 @@ export const TOOL_SPECS: {
         amount: {
           type: 'number',
           minimum: -10,
+          maximum: 100000,
+          description:
+            'improve/gift 的幅度；tension 时用作关系张力（-10..10）；loan 时为本金（金）。',
+        },
+        rate: {
+          type: 'number',
+          minimum: 0,
           maximum: 30,
-          description: 'improve/gift 的幅度；tension 时也可用作关系张力（-10..10）。',
+          description: 'loan 的年利率百分数（缺省 5），0 表示无息。',
         },
         good: {
           type: 'string',
@@ -388,8 +396,8 @@ export const TOOL_SPECS: {
         months: {
           type: 'number',
           minimum: 1,
-          maximum: 60,
-          description: 'embargo 的持续月数，缺省为永久。',
+          maximum: 240,
+          description: 'embargo 的持续月数（缺省永久）；loan 的还款期数（缺省 120）。',
         },
         relationDelta: {
           type: 'number',
@@ -726,6 +734,7 @@ export const handleV3Diplomacy = async ($: EngineInterface, e: any) => {
     if (typeof args.amount === 'number') params.amount = args.amount
     if (typeof args.good === 'string') params.good = args.good
     if (typeof args.months === 'number') params.months = args.months
+    if (typeof args.rate === 'number') params.rate = args.rate
     if (typeof args.relationDelta === 'number') params.relationDelta = args.relationDelta
     if (typeof args.reason === 'string') params.reason = args.reason
     if (typeof args.goal === 'string') params.goal = args.goal
