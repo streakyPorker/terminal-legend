@@ -157,7 +157,7 @@
 
 | 建筑 | output（每座/月） | input（每座/月） | labor | 门控 |
 | --- | --- | --- | ---: | --- |
-| 农场 `farms` | grain 0.30、wood 0.04、opium 0.004 | 无 | 0.3 | tech + access（wood 除外） |
+| 农场 `farms` | grain **0.20**、wood 0.04、opium 0.004 | 无 | 0.3 | tech + access（wood 除外） |
 | 煤矿 `coalMines` | coal 0.96 | 无 | 0.6 | tech |
 | 铁矿 `ironMines` | iron 0.96 | 无 | 0.6 | tech |
 | 伐木场 `lumberMills` | wood 0.96 | 无 | 0.4 | tech |

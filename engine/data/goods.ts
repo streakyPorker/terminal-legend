@@ -98,7 +98,7 @@ export const CONSUMER_GOODS: GoodId[] = [
  * final consumer basket actually absorbs enough output for those goods to trade
  * on both sides (PT-002 reversal). The other three floors are unchanged.
  */
-export const SUBSISTENCE_SCALE = 0.6
+export const SUBSISTENCE_SCALE = 0.62
 
 export const SUBSISTENCE: Record<GoodId, number> = {
   grain: 7.0 * SUBSISTENCE_SCALE,

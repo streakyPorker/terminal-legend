@@ -178,7 +178,7 @@ export type BuildingRecipe = {
  */
 export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
   farms: {
-    output: { grain: 0.3, wood: 0.04, opium: 0.004 },
+    output: { grain: 0.2, wood: 0.04, opium: 0.004 },
     input: {},
     labor: 0.3,
     gates: { tech: true, access: true },
