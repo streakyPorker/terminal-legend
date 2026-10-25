@@ -263,3 +263,69 @@ describe('v3_inspect (plan 0006)', () => {
     }
   })
 })
+
+describe('v3_inspect country subject (PT-074)', () => {
+  test('fiscal reads another power: header and tax rates follow the subject', async () => {
+    const world = newWorld(9102, 'QING')
+    const gbr = world.countries.GBR
+    expect(gbr).toBeDefined()
+    if (gbr === undefined) return
+    gbr.econ.taxes.land = 7
+    gbr.econ.taxes.profit = 9
+    gbr.econ.taxes.consumption = 11
+    gbr.econ.tariff = 13
+
+    const text = inspectWorld(world, 'fiscal', { country: 'GBR' })
+    expect(text).toContain('[英]')
+    expect(text).toContain('英国')
+    expect(text).not.toContain('大清')
+    expect(text).toContain('土地 7%')
+    expect(text).toContain('企业 9%')
+    expect(text).toContain('消费 11%')
+    expect(text).toContain('进口关税 13%')
+  })
+
+  test('every country-shaped section reports THAT country, not the player', async () => {
+    const world = newWorld(9103, 'QING')
+    const fra = world.countries.FRA
+    expect(fra).toBeDefined()
+    if (fra === undefined) return
+    // A distinctive value in the body proves the section read FRA, not QING.
+    fra.econ.gdp = 1234.5
+    const sections = [
+      'economy',
+      'market',
+      'fiscal',
+      'labor',
+      'trade',
+      'routes',
+      'buildings',
+      'construction',
+      'military',
+      'pops',
+      'diplomacy',
+      'tech',
+      'history',
+    ]
+    for (const section of sections) {
+      const text = inspectWorld(world, section, { country: 'FRA' })
+      expect(text.startsWith('[法]')).toBe(true)
+    }
+    expect(inspectWorld(world, 'economy', { country: 'FRA' })).toContain('1234.5')
+    expect(inspectWorld(world, 'economy', { country: 'FRA' })).not.toContain('927')
+    const log = inspectWorld(world, 'log', { country: 'FRA', limit: 5 })
+    expect(log).toContain('大清')
+  })
+
+  test('an unknown country id explains itself instead of silently reading the player', async () => {
+    const world = newWorld(9104, 'QING')
+    const text = inspectWorld(world, 'fiscal', { country: 'ZZZ' })
+    expect(text).toContain('未知国家')
+    expect(text).toContain('QING')
+  })
+
+  test('omitting country still reports the player', async () => {
+    const world = newWorld(9105, 'QING')
+    expect(inspectWorld(world, 'fiscal').startsWith('[清]')).toBe(true)
+  })
+})

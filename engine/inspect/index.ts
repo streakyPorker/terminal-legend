@@ -63,44 +63,53 @@ export function inspectWorld(
   const country = world.countries[world.playerId]
   if (country === undefined) return '还没有进行中的游戏。'
   const key = section.toLowerCase() as InspectSection
-  const header = `[${country.flag}] ${country.name} · ${world.date.year}.${String(world.date.month).padStart(2, '0')}`
+  // PT-074: every country-shaped section accepts a `country` id and reports
+  // THAT country, so the GM can compare the powers' basic economic data instead
+  // of only seeing the player's. `log` is the exception: there `country` filters
+  // log rows, it does not pick a subject.
+  const requested = key === 'log' ? undefined : options?.country?.toUpperCase()
+  const subject = requested === undefined ? country : world.countries[requested]
+  if (subject === undefined) {
+    return `未知国家「${options?.country ?? ''}」。可用：${Object.keys(world.countries).join(' / ')}`
+  }
+  const header = `[${subject.flag}] ${subject.name} · ${world.date.year}.${String(world.date.month).padStart(2, '0')}`
   let body: string[]
   switch (key) {
     case 'economy':
-      body = economySection(country)
+      body = economySection(subject)
       break
     case 'market':
-      body = marketSection(country)
+      body = marketSection(subject)
       break
     case 'fiscal':
-      body = fiscalSection(world, country)
+      body = fiscalSection(world, subject)
       break
     case 'labor':
-      body = laborSection(country)
+      body = laborSection(subject)
       break
     case 'trade':
-      body = tradeSection(world, country)
+      body = tradeSection(world, subject)
       break
     case 'routes':
-      body = routesSection(world, country)
+      body = routesSection(world, subject)
       break
     case 'buildings':
-      body = buildingsSection(country)
+      body = buildingsSection(subject)
       break
     case 'construction':
-      body = constructionSection(country)
+      body = constructionSection(subject)
       break
     case 'military':
-      body = militarySection(world, country)
+      body = militarySection(world, subject)
       break
     case 'pops':
-      body = popsSection(country)
+      body = popsSection(subject)
       break
     case 'diplomacy':
-      body = diplomacySection(world, country)
+      body = diplomacySection(world, subject)
       break
     case 'tech':
-      body = techSection(world, country)
+      body = techSection(world, subject)
       break
     case 'modifiers':
       body = modifiersSection(world)
@@ -112,7 +121,7 @@ export function inspectWorld(
       body = logSection(world, options)
       break
     case 'history':
-      body = historySection(world, country)
+      body = historySection(world, subject)
       break
     default:
       return `未知的 inspect 分区「${section}」。可用：${INSPECT_SECTIONS.join(' / ')}`

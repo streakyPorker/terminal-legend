@@ -68,6 +68,11 @@
 各国对比在 `rankings`（不在 `v3_status`）。**`economy`/`market`/`fiscal` 读的是上月结算快照**
 （与 `v3_status` 同源），分区标题会注明口径。
 
+**查他国（PT-074）**：除 `log` 外，每个分区都接受 **`country`** 参数指定主体国家，
+缺省为本国。例如 `v3_inspect { section: "fiscal", country: "GBR" }` 读英国的四税基、税率与债务，
+`section: "economy"` 同样可指向任意列强——基本经济数据不再是本国专有。
+`log` 分区里的 `country` 是**日志行过滤**，不是主体选择。
+
 | 分区 | 回答什么 |
 | --- | --- |
 | `economy` | **结算快照**：GDP 分解 C+I+G+NX（NX 已接入贸易、`C+I+G+NX = GDP`，与 `v3_status` 一致）、各商品现价/基准/缺口、工资利润（逐建筑利润见 `buildings`） |

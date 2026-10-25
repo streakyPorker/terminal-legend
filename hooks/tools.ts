@@ -82,7 +82,8 @@ export const TOOL_SPECS: {
         },
         country: {
           type: 'string',
-          description: '仅 log 分区：按国家 id 过滤（如 GBR）。',
+          description:
+            'log 分区：按国家 id 过滤日志；其他分区：查询该国的数据（缺省本国），如 country=GBR 看英国的财政与税率。',
         },
         limit: {
           type: 'integer',
