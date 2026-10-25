@@ -126,6 +126,21 @@ export async function openPane($: EngineInterface): Promise<void> {
   }
 }
 
+/**
+ * Redraws this plugin's own sites (PT-072). `ui.render` results are cached, so
+ * a `patchUi` that changes what the pane or the band should show never reaches
+ * the screen on its own; `$.ui.open` re-renders only when it actually places a
+ * pane that was not up. An action pressed on the band (outside the pane) must
+ * ask for the redraw itself or it looks dead.
+ */
+export function redrawUi($: EngineInterface): void {
+  try {
+    $.ui.invalidate('ui.render')
+  } catch {
+    // An engine or test double without `invalidate`: the next event redraws.
+  }
+}
+
 // ---------------------------------------------------------------- shared mutable state
 
 /** agentId -> settle the answer its `turn.complete` will carry. */

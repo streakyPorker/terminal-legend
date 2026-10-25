@@ -34,6 +34,7 @@ import {
   openPane,
   patchUi,
   pendingOf,
+  redrawUi,
   refreshStatus,
   requestDelegatedStop,
   secretaryAnswers,
@@ -263,6 +264,9 @@ export async function advanceGame(
       },
     })
     await refreshStatus($)
+    // The settlement landed in state; the pane and band only show it after a
+    // redraw, which a press on the band (outside the pane) does not force.
+    redrawUi($)
     try {
       await saveGame($, world)
     } catch {
@@ -568,6 +572,11 @@ export async function controlGame(
   if (action === 'council') {
     await patchUi($, { tab: 'council' })
     await openPane($)
+    // PT-072: `ui.open` on a pane that is already up only retitles it — it does
+    // not redraw. A press on the band (which sits outside the pane) therefore
+    // changed `ui.tab` and left the screen untouched: the button looked dead.
+    // Redraw both sites explicitly; the tab switch only lands with a render.
+    redrawUi($)
     return '已打开御前议事。'
   }
 
@@ -684,6 +693,7 @@ async function runDelegated($: EngineInterface, total: number): Promise<void> {
       notice: header,
     })
     await refreshStatus($)
+    redrawUi($)
     $.ui.toast(header)
     $.ui.log(header)
     await noteToModel(
@@ -710,10 +720,18 @@ export async function councilAction(
       await patchUi($, {
         council: { ...current.ui.council, isOpen: false },
       })
+      redrawUi($)
       return advanceGame($, 1, true, true, true, origin)
     }
-    case 'run':
-      return startDelegated($, value ?? current.world.secretary.delegation.months, origin)
+    case 'run': {
+      const text = await startDelegated(
+        $,
+        value ?? current.world.secretary.delegation.months,
+        origin,
+      )
+      redrawUi($)
+      return text
+    }
     case 'recompose':
       return startSecretary($, origin)
     case 'delegate-internal': {
@@ -722,6 +740,7 @@ export async function councilAction(
       await setWorld($, world)
       await saveGame($, world).catch(() => undefined)
       const on = world.secretary.delegation.internal
+      redrawUi($)
       $.ui.toast(`内政委托已${on ? '开启' : '关闭'}`)
       await notifyPlayerAction($, origin, `将内政委托${on ? '开启' : '关闭'}`)
       return 'ok'
@@ -732,6 +751,7 @@ export async function councilAction(
       await setWorld($, world)
       await saveGame($, world).catch(() => undefined)
       const on = world.secretary.delegation.diplomacy
+      redrawUi($)
       $.ui.toast(`外交委托已${on ? '开启' : '关闭'}`)
       await notifyPlayerAction($, origin, `将外交委托${on ? '开启' : '关闭'}`)
       return 'ok'
@@ -742,6 +762,7 @@ export async function councilAction(
       world.secretary.delegation.months = months
       await setWorld($, world)
       await saveGame($, world).catch(() => undefined)
+      redrawUi($)
       await notifyPlayerAction($, origin, `把委托月数改为 ${months}`)
       return 'ok'
     }

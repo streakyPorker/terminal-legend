@@ -32,6 +32,7 @@
 | PT-069 | 基础粮食产量过高：产出是内需的约 4 倍，粮价长期贴底 | 0007-E1 / 0008 B5 | fixed（63ef04b，缓和调整） |
 | PT-070 | 私人资本一穷就停工，私人项目建得极慢 | 0007 / 0013 | fixed（e04979d） |
 | PT-071 | 无法一次性购舰（引擎无「买船」入口） | 0008 / 军事 | fixed（57f92e1） |
+| PT-072 | 提示条上的「打开议事」点了没反应 | 0006 / UI | fixed（待提交） |
 
 <details><summary>已结（59 条，详情见 archive）</summary>
 
@@ -409,3 +410,29 @@
 - 关联：`engine/cheat.ts`、`hooks/tools.ts`、`engine/country.ts`（海军编练）、PT-066。
 - 优先级：**P2**
 - 状态：**fixed（57f92e1）**
+
+### PT-072 提示条上的「打开议事」点了没反应
+
+- 日期：2026-10-25
+- 游戏内日期：1839.02
+- 来源：玩家报告「点打开议事没动静」
+- 现象：御前待议时，提示条（Band）右侧多出一行按钮，其中「打开议事」按下后屏幕无任何变化。
+- 数据：
+  - `view/panels/band.tsx` 中「打开议事」与下方常驻行里的「御前」**共用同一个元素 key
+    `band:council`**，同一 site 上注册了两个同名元素；
+  - `hooks/council.ts` 的 `controlGame('council')` 只做了 `patchUi({ tab: 'council' })`
+    + `$.ui.open()`；而 `$.ui.open` 对**已经打开的 pane 只是改标题**，不会重绘，
+    `ui.render` 是缓存事件，band 的点击也只会重绘 band 自己（焦点在 pane 之外）。
+  - 结果：`ui.tab` 确实改成了 `council`，但没有任何东西要求面板重画。
+- 判断：**UI 缺陷**（两处叠加）。`patchUi` 之后凡是需要改变已挂载 site 显示的动作，
+  都必须显式 `$.ui.invalidate('ui.render')`，这在插件里此前一次都没用过。
+- 修复：
+  1. 提示条按钮改名 `band:open-council`，与常驻的 `band:council` 区分；
+  2. `hooks/internal.ts` 新增 `redrawUi($)`（`$.ui.invalidate('ui.render')`，带 try/catch）；
+  3. 在 `controlGame('council')`、`/v3 council`、`advanceGame` 结算后、
+     托管结束、`councilAction` 的 approve / run / delegate / months 分支调用 `redrawUi`；
+  4. `tests/band-council.test.tsx`：驱动真实 band 与真实 pane，press `band:open-council`
+     后面板必须切回议事页；全量 **537 项通过**。
+- 关联：`view/panels/band.tsx`、`hooks/internal.ts`、`hooks/council.ts`、`hooks/commands.ts`。
+- 优先级：**P2**
+- 状态：**fixed（待提交）**

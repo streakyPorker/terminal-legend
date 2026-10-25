@@ -12,6 +12,7 @@ import {
   openPane,
   patchUi,
   pendingOf,
+  redrawUi,
   refreshStatus,
   setUi,
   setWorld,
@@ -89,6 +90,7 @@ export async function runV3Command(
         if (current === undefined) return { text: '还没有进行中的游戏。' }
         await patchUi($, { tab: 'council' })
         await openPane($)
+        redrawUi($)
         return { text: '已切换到御前议事。' }
       }
 

@@ -45,7 +45,7 @@ export function Band(props: BandProps): any {
         <Text color="yellow" weight="bold">御前会议 · 待议</Text>
         <Button key="band:approve" label="批准并推进" onPress={() => props.onCouncil('approve')} />
         <Button key="band:run" label={`托管 ${delegation.months} 月`} onPress={() => props.onCouncil('run')} />
-        <Button key="band:council" label="打开议事" onPress={() => props.onControl('council')} />
+        <Button key="band:open-council" label="打开议事" onPress={() => props.onControl('council')} />
       </Box>,
     )
   }
