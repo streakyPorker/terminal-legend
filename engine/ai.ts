@@ -1,6 +1,15 @@
 import type { EngineInterface } from 'claude-code'
 import type { Country, GameDate, SituationStance, WorldState } from '../types'
-import { BUILDING_IDS, GOODS, GOOD_IDS, SPENDING, WAR_GOAL_NAMES, techNodeName, techTier } from './data'
+import {
+  BUILDINGS,
+  BUILDING_IDS,
+  GOODS,
+  GOOD_IDS,
+  SPENDING,
+  WAR_GOAL_NAMES,
+  techNodeName,
+  techTier,
+} from './data'
 
 import { TAX_BASE_IDS, nationalDebt, sovereignFund } from './fiscal'
 import type { Rng } from './rng'
@@ -18,8 +27,12 @@ const SYSTEM = `你是 19 世纪大战略游戏的世界决策引擎。你为每
 - 只输出一个 JSON 数组，不要输出解释、Markdown 或代码围栏。
 - 每个元素形如 {"country":"GBR","action":"build","params":{"building":"textileMills","count":1},"narrative":"一句符合该领袖性格的行动描述"}
 - 每个国家最多 1 条；只为他国（非玩家国）决策。
-- action 只能是：build, tax, tariff, spending, research, conscript, law, diplomacy, invest, situation。
+- action 只能是：build, cancel, reorder, tax, tariff, spending, research, conscript, law, diplomacy, route, invest, situation。
 - build 的 building 只能是：farms, coalMines, ironMines, lumberMills, textileMills, furnitureWorks, distilleries, machineryWorks, steelMills, arsenals, luxuryWorks, schools, infrastructure, forts, navalYards, universities, barracks, offices, navalBases；params.count 为 1..20 的数字。官署提供行政能力与官僚上限；学校育才促识字；基础设施（铁路/港口/电报合一）供给统一基础设施与市场接入；要塞/船坞是军事建造。
+- cancel 用 params.index（简报「队列」里的 #N）取消本国的国有建造项目；私人项目（带「私」）不可取消。
+- reorder 用 params.index 与 params.position（head=插到队首 / tail=队尾 / before / after），把本国国有项目挪位；重排保留已投入进度。
+- route 需要 params.good（商品代码）、params.partner（伙伴国家代码）与 params.op（open/raise/lower/close）：
+  开通或调整一条贸易航线。方向由两端该商品的净盈余自动决定；交战、禁运、与本国贸易会失败，选伙伴时避开。
 - tax 用 params.base（land=土地税, profit=企业所得税, consumption=消费税, tariff=关税）与 params.rate（0..60）；tariff 用 params.rate（0..60，可选 params.exportRate）；spending 用 params.category（army/navy/bureaucracy/education/welfare/construction）与 params.amount（0..50）；数值必须是 JSON 数字，不能写成字符串。
 - invest 调整投资信心：params.amount 取 -3..3，结果被限制在该国基准上下 10 点内。
 - diplomacy 需要 params.target（国家代码）与 params.move（improve, insult, alliance, rival, gift, war, peace, embargo, unembargo, tension）。
@@ -30,6 +43,11 @@ const SYSTEM = `你是 19 世纪大战略游戏的世界决策引擎。你为每
 - law 的 name 只能是：教育改革, 福利改革, 自由贸易, 保护关税, 征兵制, 宗教宽容。
 - 贸易简报给出各国贸易收支、Top-3 伙伴、鸦片进口、关税收入与资源进口；禁运与战争会切断对应贸易，若被禁运应寻找替代伙伴。
 - 每月为每个 AI 国家给出一次决策；行动要服从领袖的人格、当前财政与国内稳定；不要凭空创造数值。
+- 财政纪律：先读「月盈余」与「债务率」。月盈余为负且债务率 ≥ 50% 的国家，本月应当先止血——
+  用 tax 调高收益最大的那个税基（一次 +2 到 +5 个点，不要一次拉满），或用 spending 削减非必要支出
+  （教育/福利/建设优先于陆军，战时除外）；债务率 ≥ 100% 时不要再开新建造。
+  财政宽裕（月盈余为正、债务率 < 25%）时才大兴土木，必要时可减税刺激消费与投资。
+  不要所有国家每个月都建房子：建设、税收、支出、外交要按国情轮换。
 - GDP 是月度支出法流量（消费+投资+政府），价格与资源乘数会影响产能。`
 
 const fmtDate = (date: GameDate): string => `${date.year}年${date.month}月`
@@ -82,12 +100,13 @@ function countryLine(country: Country, world: WorldState): string {
     `议程:${country.leader.agenda}`,
     `情绪:${Math.round(country.leader.mood)}`,
     `净资产:${n1(country.econ.treasury)}金(${debt > 0 ? `国债${n1(debt)}` : `基金${n1(fund)}`})`,
-    `债务率:${n1(debt / Math.max(1, country.econ.gdp))}`,
+    `债务率:${Math.round((debt / Math.max(1, country.econ.gdp)) * 100)}%`,
     `赔款:付${n1(country.econ.reparationsPaid)}/收${n1(country.econ.reparationsReceived)}`,
     `GDP:${n1(country.econ.gdp)}金/月(消费${n1(country.econ.gdpComponents.c)}/投资${n1(country.econ.gdpComponents.i)}/政府${n1(country.econ.gdpComponents.g)})`,
     `税:土${country.econ.taxes.land}/企${country.econ.taxes.profit}/消${country.econ.taxes.consumption}%关税:进${country.econ.tariff}/出${country.econ.exportTariff ?? country.econ.tariff}%`,
     `支出:陆${n1(country.econ.spending.army)}/海${n1(country.econ.spending.navy)}/官${n1(country.econ.spending.bureaucracy)}/教${n1(country.econ.spending.education)}/福${n1(country.econ.spending.welfare)}/建${n1(country.econ.spending.construction)}`,
     `在建:${country.econ.constructionQueue.length}(上月实付${n1(country.econ.lastStateConstructionSpend)})`,
+    `队列:${describeQueue(country)}`,
     `建筑:农场${country.econ.buildings.farms}/煤${country.econ.buildings.coalMines}/铁${country.econ.buildings.ironMines}/木${country.econ.buildings.lumberMills}/纺织${country.econ.buildings.textileMills}/家具${country.econ.buildings.furnitureWorks}/酒${country.econ.buildings.distilleries}/机械${country.econ.buildings.machineryWorks}/钢铁${country.econ.buildings.steelMills}/军械${country.econ.buildings.arsenals}/奢侈${country.econ.buildings.luxuryWorks}/学校${country.econ.buildings.schools}/基建${country.econ.buildings.infrastructure}/要塞${country.econ.buildings.forts}/船坞${country.econ.buildings.navalYards}/官署${country.econ.buildings.offices}`,
     `权威:${Math.round(country.government.authority)}人力:${n1(country.military.manpower)}`,
     `私人资本:${n1(country.econ.privateCapital)}金`,
@@ -111,6 +130,23 @@ function countryLine(country: Country, world: WorldState): string {
       ? `近事:${country.leader.memory.slice(-2).join('；')}`
       : '近事:无',
   ].join(' | ')
+}
+
+/**
+ * PT-075: the queue in the AI brief. `cancel`/`reorder` reference a project by
+ * its 1-based `index`, so the model has to see the numbers it may cite.
+ * Private projects occupy a slot but cannot be touched, hence the mark.
+ */
+function describeQueue(country: Country): string {
+  const queue = country.econ.constructionQueue
+  if (queue.length === 0) return '空'
+  return queue
+    .slice(0, 8)
+    .map((project, index) => {
+      const mark = (project.owner ?? 'state') === 'private' ? '私' : ''
+      return `#${index + 1}${BUILDINGS[project.building].name}×${project.count}${mark}(${Math.round(project.progress * 100)}%)`
+    })
+    .join(',')
 }
 
 export function buildAiPrompt(world: WorldState): string {
@@ -171,6 +207,8 @@ function coerceParams(raw: unknown): Record<string, string | number | boolean | 
 
 const ACTIONS = new Set([
   'build',
+  'cancel',
+  'reorder',
   'tax',
   'tariff',
   'spending',
@@ -178,6 +216,7 @@ const ACTIONS = new Set([
   'conscript',
   'law',
   'diplomacy',
+  'route',
   'invest',
   'situation',
 ])
@@ -221,6 +260,20 @@ function validParams(
       return (
         (BUILDING_IDS as string[]).includes(String(params.building ?? '')) &&
         finite(params.count, 1, 20)
+      )
+    case 'cancel':
+      return finite(params.index, 1, 99) || typeof params.projectId === 'string'
+    case 'reorder':
+      return (
+        (finite(params.index, 1, 99) || typeof params.projectId === 'string') &&
+        ['head', 'tail', 'before', 'after'].includes(String(params.position ?? 'tail'))
+      )
+    case 'route':
+      return (
+        (GOOD_IDS as readonly string[]).includes(String(params.good ?? '')) &&
+        typeof params.partner === 'string' &&
+        params.partner !== countryId &&
+        ['open', 'raise', 'lower', 'close'].includes(String(params.op ?? 'open'))
       )
     case 'tax':
       return (
