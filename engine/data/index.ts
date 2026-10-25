@@ -91,7 +91,7 @@ export {
 export { successorFor } from './leaders'
 
 // ---------------------------------------------------------------- countries / seeds
-export { SPENDING, GOVERNMENT_TYPES, COUNTRY_SEEDS, defaultSpending } from './countries'
+export { SPENDING, GOVERNMENT_TYPES, COUNTRY_SEEDS, defaultSpending, navalQualitySeed } from './countries'
 
 // ---------------------------------------------------------------- events
 export { EVENT_TEMPLATES, spawnEvent, otherCountryIds, pickRival } from './events'

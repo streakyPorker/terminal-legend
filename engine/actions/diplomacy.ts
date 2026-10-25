@@ -9,8 +9,12 @@ import {
   endWar,
   type ReparationTerms,
 } from '../diplomacy'
+import { declareBlockade, liftBlockade } from '../navy'
 import {
   DIPLOMACY_ALLIANCE_MIN_RELATION,
+  DIPLOMACY_BLOCKADE_BACK,
+  DIPLOMACY_BLOCKADE_INFAMY,
+  DIPLOMACY_BLOCKADE_RELATION,
   DIPLOMACY_EMBARGO_BACK,
   DIPLOMACY_EMBARGO_RELATION,
   DIPLOMACY_GIFT_BACK_FACTOR,
@@ -262,6 +266,73 @@ export function actionDiplomacy(
             ? `${tag} 解除对${target.name}的禁运（${lifted} 项），关系回暖（${relationLine(country, target)}）`
             : `${tag} 与${target.name}本无禁运，关系回暖（${relationLine(country, target)}）`,
       }
+    }
+    case 'blockade': {
+      if (target.id === country.id) return { ok: false, text: `${tag} 不能封锁自己` }
+      if (!atWar(world, country.id, target.id)) {
+        return { ok: false, text: `${tag} 与${target.name}并未交战，无法封锁` }
+      }
+      const partyParam =
+        params.party === undefined ? undefined : String(params.party).toUpperCase()
+      if (partyParam !== undefined && world.countries[partyParam] === undefined) {
+        return { ok: false, text: `${tag} 未知第三方 ${partyParam}` }
+      }
+      const goodParam = params.good === undefined ? undefined : String(params.good)
+      const good = goodParam === undefined ? undefined : asGood(goodParam)
+      if (goodParam !== undefined && good === undefined) {
+        return { ok: false, text: `${tag} 未知商品 ${goodParam}` }
+      }
+      const war = declareBlockade(world, {
+        by: country.id,
+        enemy: target.id,
+        party: partyParam,
+        good,
+      })
+      if (war === undefined) {
+        return { ok: false, text: `${tag} 尚未掌握对${target.name}的制海权，无法封锁` }
+      }
+      country.diplo.infamy = clamp(country.diplo.infamy + DIPLOMACY_BLOCKADE_INFAMY, 0, 100)
+      let scope = '一切第三方'
+      if (partyParam !== undefined) {
+        const party = world.countries[partyParam]
+        country.diplo.relations[partyParam] = clamp(
+          (country.diplo.relations[partyParam] ?? 0) - DIPLOMACY_BLOCKADE_RELATION,
+          -100,
+          100,
+        )
+        if (party !== undefined) {
+          party.diplo.relations[country.id] = clamp(
+            (party.diplo.relations[country.id] ?? 0) - DIPLOMACY_BLOCKADE_BACK,
+            -100,
+            100,
+          )
+          scope = party.name
+        }
+      }
+      const goodsText = good === undefined ? '' : `（仅${GOODS[good].name}）`
+      return {
+        ok: true,
+        text: `${tag} 封锁${target.name}与${scope}的海上贸易${goodsText}`,
+      }
+    }
+    case 'unblockade': {
+      const partyParam =
+        params.party === undefined ? undefined : String(params.party).toUpperCase()
+      const goodParam = params.good === undefined ? undefined : String(params.good)
+      const good = goodParam === undefined ? undefined : asGood(goodParam)
+      if (goodParam !== undefined && good === undefined) {
+        return { ok: false, text: `${tag} 未知商品 ${goodParam}` }
+      }
+      const lifted = liftBlockade(world, {
+        by: country.id,
+        enemy: target.id,
+        party: partyParam,
+        good,
+      })
+      if (lifted === 0) {
+        return { ok: false, text: `${tag} 并无针对${target.name}的封锁` }
+      }
+      return { ok: true, text: `${tag} 解除对${target.name}的封锁（${lifted} 项）` }
     }
     case 'tension': {
       const good = asGood(String(params.good ?? ''))

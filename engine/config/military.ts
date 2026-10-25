@@ -61,3 +61,16 @@ export const WAR_END_EXHAUSTION_WIN = 15
 export const WAR_END_EXHAUSTION_LOSE = 5
 export const WAR_END_MORALE_WIN = 10
 export const WAR_END_RELATION_PENALTY = 20
+
+/**
+ * Plan 0015 §S5 / ADR 0031 §7: sea control. A side's tier comes from the ratio
+ * of its `seaPower` to its enemy's — complete ≥2.0, advantage ≥1.25, parity
+ * 0.8–1.25, disadvantage ≥0.5, lost below. Only advantage/complete score.
+ */
+export const NAVAL_CONTROL_COMPLETE = 2.0
+export const NAVAL_CONTROL_ADVANTAGE = 1.25
+export const NAVAL_CONTROL_PARITY = 0.8
+export const NAVAL_CONTROL_DISADVANTAGE = 0.5
+/** Monthly war score the sea-control side gains (plan §S5: 1.5 / 75 in 50 months). */
+export const SEA_SCORE_ADVANTAGE = 0.75
+export const SEA_SCORE_COMPLETE = 1.5

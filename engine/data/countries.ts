@@ -64,6 +64,23 @@ const resources = (
   iron: number,
 ): Resources => ({ farmland, timber, coal, iron })
 
+/**
+ * Plan 0015 §S5 / ADR 0031 §7: a country's 0–1 fleet-quality seed. Blends its
+ * general military `quality` seed with the size of its starting navy (relative
+ * to `NAVAL_QUALITY_NAVY_REF`), so a large, well-drilled fleet (GBR 0.94) sits
+ * far above a large but obsolete one (QING 0.30). Only tech `immediate` effects
+ * raise it thereafter.
+ */
+export const NAVAL_QUALITY_FROM_QUALITY = 0.6
+export const NAVAL_QUALITY_FROM_NAVY = 0.4
+export const NAVAL_QUALITY_NAVY_REF = 120
+
+export function navalQualitySeed(quality: number, navy: number): number {
+  const navyFactor = Math.min(Math.max(navy, 0), NAVAL_QUALITY_NAVY_REF) / NAVAL_QUALITY_NAVY_REF
+  const value = quality * NAVAL_QUALITY_FROM_QUALITY + navyFactor * NAVAL_QUALITY_FROM_NAVY
+  return Math.min(1, Math.max(0, value))
+}
+
 type CountrySeed = {
   id: string
   name: string

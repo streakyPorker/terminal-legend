@@ -2,7 +2,6 @@ import type {
   Country,
   Embargo,
   GameDate,
-  GoodId,
   LogEntry,
   War,
   WarGoal,
@@ -82,6 +81,7 @@ import {
   WAR_STRENGTH_MORALE_DIVISOR,
   WAR_STRENGTH_TECH_COEF,
 } from './config/military'
+import { blockadeBlocks } from './navy'
 
 /** The diplomacy calibration constants live in `config/diplomacy.ts`; they are
  *  re-exported here so the `./diplomacy` / `./sim` import surface is unchanged. */
@@ -147,6 +147,8 @@ export function declareWar(
 export function tradeBlocker(world: WorldState): TradeBlocker {
   return (importerId, exporterId, good) => {
     if (atWar(world, importerId, exporterId)) return true
+    // Plan 0015 §S5: a blockade cuts the enemy's trade with third parties.
+    if (blockadeBlocks(world, importerId, exporterId, good)) return true
     const importer = world.countries[importerId]
     const exporter = world.countries[exporterId]
     if (importer !== undefined && embargoed(importer.embargoes, exporterId, good)) return true

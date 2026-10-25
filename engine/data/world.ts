@@ -13,7 +13,7 @@ import type {
 } from '../../types'
 import { makeRng, type Rng } from '../rng'
 import { BUILDING_IDS } from './buildings'
-import { COUNTRY_SEEDS } from './countries'
+import { COUNTRY_SEEDS, navalQualitySeed } from './countries'
 import { administrativeCapacityFor, deriveBureaucracy, refreshInfrastructure } from './derivations'
 import { GOODS, GOOD_IDS } from './goods'
 import { TECH_NODES, clampEra, defaultResearchNode, techNode } from './tech'
@@ -21,9 +21,6 @@ import { installTechNodeEffects } from '../tech'
 
 export const START_YEAR = 1836
 export const START_MONTH = 1
-
-/** plan 0015 S0 placeholder; real per-country seeding is S5. */
-const NAVAL_QUALITY_SEED = 0.5
 
 const zeroGoods = (): Record<GoodId, number> => {
   const out = {} as Record<GoodId, number>
@@ -260,7 +257,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         navy: seedRow.navy,
         manpower: seedRow.manpower,
         quality: seedRow.quality,
-        navalQuality: NAVAL_QUALITY_SEED,
+        navalQuality: navalQualitySeed(seedRow.quality, seedRow.navy),
         morale: seedRow.morale,
         exhaustion: 0,
       },

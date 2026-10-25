@@ -75,6 +75,16 @@ export {
   applyTradeRelations,
   strength,
 } from './diplomacy'
+export {
+  seaPowerOf,
+  seaControlTier,
+  SEA_CONTROL_TIER_NAMES,
+  resolveSeaControl,
+  updateSeaControl,
+  blockadeBlocks,
+  declareBlockade,
+  liftBlockade,
+} from './navy'
 export type { ReparationTerms } from './diplomacy'
 
 export { applyEventOption } from './events'

@@ -52,6 +52,14 @@ export const DIPLOMACY_EMBARGO_RELATION = 15
 export const DIPLOMACY_EMBARGO_BACK = 12
 export const DIPLOMACY_UNEMBARGO_RELATION = 5
 
+/**
+ * `blockade` cost (plan 0015 §S5): a blockade always raises infamy; naming a
+ * third party (often a neutral) also cools relations with it both ways.
+ */
+export const DIPLOMACY_BLOCKADE_RELATION = 12
+export const DIPLOMACY_BLOCKADE_BACK = 8
+export const DIPLOMACY_BLOCKADE_INFAMY = 5
+
 /** War-goal settlement (plan §5). */
 export const REPARATIONS_DEFAULT_GDP_SHARE = 0.1
 export const REPARATIONS_MAX_GDP = 2

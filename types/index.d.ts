@@ -779,8 +779,9 @@ export type Military = {
   /** 0..1 */
   quality: number
   /**
-   * S0 placeholder (plan 0015 §S5): 0..1 fleet quality. Real per-country
-   * seeding and the `seaPower` formula land in a later slice.
+   * 0..1 fleet quality (plan 0015 §S5 / ADR 0031 §7): seeded per country from
+   * its military seeds, then raised only by the navy tech nodes' `immediate`
+   * effect. It scales `navy` into `seaPower`; it is independent of `quality`.
    */
   navalQuality: number
   /** 0..100 */
@@ -831,6 +832,43 @@ export type Country = {
 /** The four peace aims a war may be declared for (plan 0004 §5). */
 export type WarGoal = 'reparations' | 'openMarket' | 'sphere' | 'humiliation'
 
+/**
+ * The five sea-control tiers (plan 0015 §S5 / ADR 0031 §7), read from a side's
+ * `seaPower` ratio against its enemy: ≥2.0 完全控制, ≥1.25 优势, 0.8–1.25 均势,
+ * ≥0.5 劣势, below 丧失.
+ */
+export type SeaControlTier = 'complete' | 'advantage' | 'parity' | 'disadvantage' | 'lost'
+
+/**
+ * A standing blockade (plan 0015 §S5). `by` holds at least 优势 sea control over
+ * `enemy` in the war this record belongs to and severs `enemy`'s trade with
+ * third parties. `party` narrows it to one country (a neutral included), `good`
+ * to a single good; both absent means every third party and every good.
+ */
+export type Blockade = {
+  /** The blockading country; must hold advantage/complete sea control. */
+  by: string
+  /** The enemy whose third-party trade is cut. */
+  enemy: string
+  /** Optional single third country; absent = every third party. */
+  party?: string
+  /** Optional single good; absent = every good. */
+  good?: GoodId
+}
+
+/**
+ * This month's sea-control reading for one war (plan 0015 §S5), recomputed
+ * before the monthly trade clearing so a blockade bites the same month.
+ */
+export type WarSeaControl = {
+  /** `seaPower` per belligerent country id. */
+  power: Record<string, number>
+  /** Sea-control tier per belligerent country id. */
+  tier: Record<string, SeaControlTier>
+  /** Active blockades declared by the war's sea-control side. */
+  blockades: Blockade[]
+}
+
 export type War = {
   id: string
   name: string
@@ -848,10 +886,11 @@ export type War = {
   /** The declaring country; its side's win/loss decides which column applies. */
   goalOwner: string
   /**
-   * S0 placeholder (plan 0015 §S5): sea-control share per country. Nothing
-   * reads it yet; the sea-control slice fills and consumes it.
+   * This month's sea control (plan 0015 §S5): per-belligerent `seaPower` and
+   * tier, plus any blockades the sea-control side has declared. Recomputed each
+   * month before the trade clearing; undefined until the first settlement.
    */
-  seaControl?: Record<string, number>
+  seaControl?: WarSeaControl
 }
 
 /**

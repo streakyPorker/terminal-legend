@@ -339,7 +339,7 @@ export const TOOL_SPECS: {
   {
     name: 'v3_diplomacy',
     description:
-      '终末传奇：执行外交行动。move 取值：improve（改善关系）、insult（交恶）、alliance（结盟）、rival（设为对手）、gift（赠礼）、loan（放贷：现在付出 amount 本金，对方按 months 期等额本息每月还款，rate 为年息百分数）、war（宣战）、peace（停战；本方获胜时可用 indemnityTotal/indemnityMonths 声明赔款总额与最长分期月数）、embargo（禁运，可选定商品与月数）、unembargo（解除禁运）、tension（就敏感商品施加贸易张力）。country 是行动发起国（缺省玩家国），target 是对方国家代码，例如 GBR、RUS、QING。',
+      '终末传奇：执行外交行动。move 取值：improve（改善关系）、insult（交恶）、alliance（结盟）、rival（设为对手）、gift（赠礼）、loan（放贷：现在付出 amount 本金，对方按 months 期等额本息每月还款，rate 为年息百分数）、war（宣战）、peace（停战；本方获胜时可用 indemnityTotal/indemnityMonths 声明赔款总额与最长分期月数）、embargo（禁运，可选定商品与月数）、unembargo（解除禁运）、tension（就敏感商品施加贸易张力）、blockade（封锁：需已掌握对 target 的制海权（优势或完全控制）；可用 party 指定第三方（含中立国），否则封锁其与一切第三方的贸易，可用 good 限定商品；解除用 unblockade，参数相同）。country 是行动发起国（缺省玩家国），target 是对方国家代码，例如 GBR、RUS、QING。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -359,6 +359,8 @@ export const TOOL_SPECS: {
             'embargo',
             'unembargo',
             'tension',
+            'blockade',
+            'unblockade',
           ],
         },
         amount: {
@@ -378,6 +380,11 @@ export const TOOL_SPECS: {
           type: 'string',
           enum: [...GOOD_IDS],
           description: 'embargo/unembargo/tension 的商品；tension 仅限 opium/arms/grain。',
+        },
+        party: {
+          type: 'string',
+          description:
+            'blockade/unblockade 的第三方国家代码（含中立国）；省略则封锁 target 与一切第三方的贸易。',
         },
         months: {
           type: 'number',
@@ -722,6 +729,7 @@ export const handleV3Diplomacy = async ($: EngineInterface, e: any) => {
     }
     if (typeof args.amount === 'number') params.amount = args.amount
     if (typeof args.good === 'string') params.good = args.good
+    if (typeof args.party === 'string') params.party = args.party
     if (typeof args.months === 'number') params.months = args.months
     if (typeof args.rate === 'number') params.rate = args.rate
     if (typeof args.relationDelta === 'number') params.relationDelta = args.relationDelta

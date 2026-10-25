@@ -45,6 +45,7 @@ import {
   resolveWars,
   tradeBlocker,
 } from './diplomacy'
+import { blockadeBlocks, resolveSeaControl } from './navy'
 import { tickEvents } from './events'
 import { computeEconomy, computePrestige, inspectEconomy } from './economy'
 import { simulateCountry } from './country'
@@ -321,6 +322,7 @@ function autoOpenRoutes(
         if (exporterMarket.production[good] - exporterMarket.demand[good] <= 0) continue
         if (has.has(routeId(good, exporterId, importerId))) continue
         if (atWar(world, exporterId, importerId)) continue
+        if (blockadeBlocks(world, importerId, exporterId, good)) continue
         if (embargoed(importer.embargoes, exporterId, good)) continue
         if (embargoed(exporter.embargoes, importerId, good)) continue
         if ((importer.diplo.relations[exporterId] ?? 0) < RELATION_CUTOFF) continue
@@ -450,6 +452,9 @@ export function advance(
     // Embargoes age at the start of the month, before clearing, so an embargo
     // that expires this month no longer blocks it (plan §3).
     expireEmbargoes(world, log)
+    // Sea control is read before the clearing so a blockade bites and its war
+    // score lands the same month (plan 0015 §S5 / ADR 0031 §7).
+    resolveSeaControl(world)
     const countries = Object.values(world.countries)
     // Phase A: snapshot every country's domestic production and demand before
     // any of them is settled, so import/export decisions are order-independent.
