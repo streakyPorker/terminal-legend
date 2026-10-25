@@ -100,7 +100,7 @@ export function applyCheat(
           const remainder = completeUpgrade(subject, project)
           if (remainder !== undefined) remainders.push(remainder)
         } else {
-          completeBuilding(subject, project.building, project.count)
+          completeBuilding(subject, project.building, project.count, project.toTier ?? 0)
         }
       }
       subject.econ.constructionQueue = [

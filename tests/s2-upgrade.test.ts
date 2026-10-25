@@ -370,6 +370,38 @@ describe('S2 upgrade has no completeBuilding side effects (plan 0015 §S2)', () 
   })
 })
 
+describe('S2 cheat.finishProjects keeps a new build\'s target tier (plan 0015 §S2)', () => {
+  test('a tier-II build finished by 天命 lands its seats in the tier-II bucket', () => {
+    const world = newWorld(7013, 'QING')
+    const qing = countryOf(world, 'QING')
+    const restore = grantUnlockTier(qing, 'steelMills', 2)
+    try {
+      // `tier` is 1-based: order three steelMills directly onto tier II.
+      const ordered = applyDecision(
+        world,
+        {
+          countryId: 'QING',
+          action: 'build',
+          params: { building: 'steelMills', count: 3, tier: 2 },
+        },
+        makeRngForWorld(world),
+      )
+      expect(ordered.ok).toBe(true)
+      const tierI = qing.econ.buildingTiers.steelMills?.[0] ?? 0
+
+      const result = applyCheat(world, { action: 'finishProjects', country: 'QING' })
+      expect(result.ok).toBe(true)
+
+      // The finished seats file into tier II, not tier I, and Σ still holds.
+      expect(qing.econ.buildingTiers.steelMills[1]).toBe(3)
+      expect(qing.econ.buildingTiers.steelMills[0] ?? 0).toBe(tierI)
+      close(sum(qing.econ.buildingTiers.steelMills), qing.econ.buildings.steelMills)
+    } finally {
+      restore()
+    }
+  })
+})
+
 describe('S2 upgrade costs: capacity + gold only, no materials (ADR 0031 §5)', () => {
   test('an upgrade month draws no goods but pays its gold through the construction-spend channel', () => {
     const world = newWorld(7011, 'QING')
