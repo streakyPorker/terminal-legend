@@ -11,6 +11,7 @@ import {
   BUILDING_RECIPES,
   INFRA_BUILDING_IDS,
   INVESTMENT_DEMAND,
+  applyBuildingDelta,
   deriveBureaucracy,
   effectiveCount,
   infrastructureMultiplier,
@@ -327,11 +328,10 @@ export function constructionLoad(country: Country): ConstructionLoad {
 /** Adds built structures and their side effects. */
 export function completeBuilding(country: Country, building: BuildingId, count: number): void {
   ensureConstructionFields(country)
-  // Negative counts remove buildings (天命); never go below zero.
-  country.econ.buildings[building] = Math.max(
-    0,
-    (country.econ.buildings[building] ?? 0) + count,
-  )
+  // Negative counts remove buildings (天命); never go below zero. All new/removed
+  // buildings are tier I in S1, so the delta lands in the tier-I bucket and the
+  // mutator keeps `Σ buildingTiers[id] === buildings[id]` true.
+  applyBuildingDelta(country, building, 0, count)
   // Plan 0014 / ADR 0029: the merged infrastructure building keeps the providers'
   // market-access completion side effect; iterate `INFRA_BUILDING_IDS` and read
   // the per-building coefficient table so a future re-split stays data-only.

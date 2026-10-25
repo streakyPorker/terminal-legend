@@ -1,5 +1,5 @@
 import type { Country } from '../../types'
-import { BUILDING_IDS, BUILDINGS, BUILDING_RECIPES } from '../data'
+import { BUILDING_IDS, BUILDINGS, mixedRecipe } from '../data'
 import { CAPACITY_COST, WORKLOAD_MULTIPLIER } from '../sim'
 import { basket, n, pct, signed } from './shared'
 
@@ -7,7 +7,7 @@ export function buildingsSection(country: Country): string[] {
   const lines = ['建筑类型（配方为每座每月；经营利润按本月价，开工率为下月）：']
   for (const id of BUILDING_IDS) {
     const meta = BUILDINGS[id]
-    const recipe = BUILDING_RECIPES[id]
+    const recipe = mixedRecipe(country, id)
     const count = country.econ.buildings[id] ?? 0
     const capacity = CAPACITY_COST[id] ?? 1
     const workload = capacity * WORKLOAD_MULTIPLIER

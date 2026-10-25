@@ -3,6 +3,7 @@ import {
   BUILDING_IDS,
   GOOD_IDS,
   isCostCentre,
+  applyBuildingDecay,
   deriveBureaucracy,
   deriveUnemployment,
   industrialBuildingCount,
@@ -293,10 +294,7 @@ export function simulateCountry(
       ? 0
       : Math.max(0, -row.profitPerBuilding) / (row.revenue + 1)
     const extra = clamp(deepLoss, 0, SHRINK_MAX)
-    country.econ.buildings[id] = Math.max(
-      0,
-      country.econ.buildings[id] * (1 - DEPRECIATION_PER_MONTH - extra),
-    )
+    applyBuildingDecay(country, id, 1 - DEPRECIATION_PER_MONTH - extra)
   }
   // Rails, ports, offices and universities wear out too; their infrastructure
   // bonuses must not outlive the buildings that produced them. The unified

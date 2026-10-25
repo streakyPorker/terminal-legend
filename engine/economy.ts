@@ -10,7 +10,6 @@ import {
   ARTISAN_SERVICE_OUTPUT,
   BUILDINGS,
   BUILDING_IDS,
-  BUILDING_RECIPES,
   CAPITAL_LABOR_SCALE,
   CONSUMPTION_PROPENSITY,
   CONSUMER_GOODS,
@@ -27,6 +26,7 @@ import {
   infrastructureMultiplier,
   infrastructureStats,
   infrastructureUpkeep,
+  mixedRecipe,
   resourceMultiplier,
   techTier,
   type InfrastructureStats,
@@ -167,12 +167,13 @@ function storedUtilization(country: Country, id: BuildingId): number {
  * `labor × count` exactly as the pre-B5 baseline did.
  */
 function wageBasisWeight(
+  country: Country,
   id: BuildingId,
   revenue: number,
   inputCost: number,
   count: number,
 ): number {
-  const recipe = BUILDING_RECIPES[id]
+  const recipe = mixedRecipe(country, id)
   let weight: number
   switch (WAGE_ALLOCATION.basis) {
     case 'valueAdded':
@@ -230,7 +231,7 @@ function computeProduction(country: Country): Record<GoodId, number> {
   // same `tech`/`infra`/`access`/`industrial` factors the code always applied.
   const raw = zeroGoods()
   for (const id of BUILDING_IDS) {
-    const recipe = BUILDING_RECIPES[id]
+    const recipe = mixedRecipe(country, id)
     // Output is gated by last month's stored operating rate (ADR 0022): the
     // price → profit → capacity loop is one month behind, never same-month.
     const count = cap(b[id]) * storedUtilization(country, id)
@@ -370,7 +371,8 @@ function computeDemand(country: Country): DemandBreakdown {
   for (const id of BUILDING_IDS) {
     const count = b[id]
     if (count <= 0) continue
-    for (const [good, perBuilding] of Object.entries(BUILDING_RECIPES[id].input) as [
+    const recipe = mixedRecipe(country, id)
+    for (const [good, perBuilding] of Object.entries(recipe.input) as [
       GoodId,
       number,
     ][]) {
@@ -571,7 +573,7 @@ export function computeEconomy(
   const prices = country.econ.prices
   const buildings = country.econ.buildings
   const rows = BUILDING_IDS.map((id) => {
-    const recipe = BUILDING_RECIPES[id]
+    const recipe = mixedRecipe(country, id)
     const count = buildings[id]
     const effCount = effectiveCount(count)
     let revenue = 0
@@ -589,7 +591,7 @@ export function computeEconomy(
   let wageWeightTotal = 0
   const wageWeights = {} as Record<BuildingId, number>
   for (const row of rows) {
-    const weight = wageBasisWeight(row.id, row.revenue, row.inputCost, row.count)
+    const weight = wageBasisWeight(country, row.id, row.revenue, row.inputCost, row.count)
     wageWeights[row.id] = weight
     wageWeightTotal += weight
   }
@@ -600,7 +602,7 @@ export function computeEconomy(
   if (!(wageWeightTotal > 0)) {
     wageWeightTotal = 0
     for (const row of rows) {
-      const weight = BUILDING_RECIPES[row.id].labor * row.count
+      const weight = mixedRecipe(country, row.id).labor * row.count
       wageWeights[row.id] = weight
       wageWeightTotal += weight
     }

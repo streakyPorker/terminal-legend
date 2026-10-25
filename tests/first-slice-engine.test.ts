@@ -80,6 +80,7 @@ describe('M2 construction queue and economy fixes', () => {
 
     prussia.econ.spending.construction = 0
     prussia.econ.buildings.workshops = 0
+    prussia.econ.buildingTiers.workshops = [0]
     applyDecision(
       world,
       { countryId: 'PRU', action: 'build', params: { building: 'textileMills', count: 1 } },

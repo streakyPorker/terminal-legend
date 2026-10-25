@@ -3,13 +3,13 @@ import { applyModifiers } from '../modifiers'
 import {
   BUILDINGS,
   BUILDING_IDS,
-  BUILDING_RECIPES,
   INDUSTRIAL_BUILDING_IDS,
   INFRA_BUILDING_IDS,
   INFRA_MULT_FLOOR,
   INFRA_SUPPLY,
   INFRA_UPKEEP,
 } from './buildings'
+import { mixedRecipe } from './tiers'
 import { RESOURCE_IDS, RESOURCE_MAP } from './goods'
 import { UNEMPLOYMENT_LABOR_PENALTY, UNEMPLOYMENT_MAX, UNEMPLOYMENT_MIN } from '../config/society'
 
@@ -276,7 +276,7 @@ export function deriveLabor(country: Country): LaborStats {
   const b = country.econ.buildings
   let demand = 0
   for (const id of BUILDING_IDS) {
-    demand += BUILDING_RECIPES[id].labor * (b[id] ?? 0) * storedUtilization(country, id)
+    demand += mixedRecipe(country, id).labor * (b[id] ?? 0) * storedUtilization(country, id)
   }
   const participation = laborParticipation(country)
   const force = country.pops.total * participation

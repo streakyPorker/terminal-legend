@@ -55,7 +55,7 @@ export type {
 } from './buildings'
 
 // ---------------------------------------------------------------- building tiers / mutator
-export { recipeAt, applyBuildingDelta, applyBuildingDecay } from './tiers'
+export { recipeAt, mixedRecipe, applyBuildingDelta, applyBuildingDecay } from './tiers'
 
 // ---------------------------------------------------------------- tech
 export {

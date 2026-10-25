@@ -38,12 +38,16 @@ const clone = (c: Country): Country => JSON.parse(JSON.stringify(c)) as Country
 /** A country with every building count zeroed, for controlled supply/demand. */
 const blank = (c: Country): Country => {
   const out = clone(c)
-  for (const id of BUILDING_IDS) out.econ.buildings[id] = 0
+  for (const id of BUILDING_IDS) {
+    out.econ.buildings[id] = 0
+    out.econ.buildingTiers[id] = [0]
+  }
   return out
 }
 
 const set = (c: Country, id: BuildingId, count: number): Country => {
   c.econ.buildings[id] = count
+  c.econ.buildingTiers[id] = [count]
   return c
 }
 

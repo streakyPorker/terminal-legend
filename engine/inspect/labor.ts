@@ -1,5 +1,5 @@
 import type { BuildingId, Country } from '../../types'
-import { BUILDING_IDS, BUILDINGS, BUILDING_RECIPES, laborParticipation, unemploymentBreakdown } from '../data'
+import { BUILDING_IDS, BUILDINGS, mixedRecipe, laborParticipation, unemploymentBreakdown } from '../data'
 import { n, pct, signed } from './shared'
 
 export function laborSection(country: Country): string[] {
@@ -14,7 +14,7 @@ export function laborSection(country: Country): string[] {
   // sheds workers. Rebuild the full-capacity counterfactual to surface the
   // sectoral source of the gap.
   const fullDemand = BUILDING_IDS.reduce(
-    (sum, id) => sum + BUILDING_RECIPES[id].labor * (econ.buildings[id] ?? 0),
+    (sum, id) => sum + mixedRecipe(country, id).labor * (econ.buildings[id] ?? 0),
     0,
   )
   const released = Math.max(0, fullDemand - econ.laborDemand)

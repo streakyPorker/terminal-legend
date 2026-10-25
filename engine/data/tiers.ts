@@ -1,6 +1,6 @@
-import type { BuildingId, Country } from '../../types'
+import type { BuildingId, Country, GoodId } from '../../types'
 import { BUILDING_RECIPES } from './buildings'
-import type { BuildingRecipe } from './buildings'
+import type { BuildingRecipe, RecipeIO } from './buildings'
 
 /**
  * The active recipe for a building at a given tier (plan 0015 §S1).
@@ -14,6 +14,41 @@ export function recipeAt(id: BuildingId, tier: number): BuildingRecipe {
   const base = BUILDING_RECIPES[id]
   if (tier <= 0) return base
   return base.tiers?.[tier - 1] ?? base
+}
+
+/**
+ * Tier-count-weighted recipe: a drop-in for `BUILDING_RECIPES[id]` (plan 0015
+ * §S1). Every tier present in `buildingTiers[id]` contributes its own
+ * `recipeAt` basket weighted by that tier's share of the total, and the labor
+ * coefficient is blended the same way. `gates`/`outputGates`/`outputModifier`
+ * are preserved from tier I, so with only tier I the returned recipe equals the
+ * base recipe exactly (`w = 1`, coefficients unchanged) — the behaviour-neutral
+ * identity that lets the settlement read through here before any II/III tier
+ * exists.
+ */
+export function mixedRecipe(country: Country, id: BuildingId): BuildingRecipe {
+  const counts = country.econ.buildingTiers?.[id] ?? [country.econ.buildings[id] ?? 0]
+  const total = counts.reduce((sum, n) => sum + n, 0)
+  const base = BUILDING_RECIPES[id]
+  if (total <= 0) return base
+  const output: RecipeIO = {}
+  const input: RecipeIO = {}
+  let labor = 0
+  for (let tier = 0; tier < counts.length; tier += 1) {
+    const count = counts[tier]
+    if (count <= 0) continue
+    // tier 0 → tier I (the base recipe); tier 1 → tiers[0] (II); tier 2 → tiers[1] (III).
+    const recipe = recipeAt(id, tier)
+    const weight = count / total
+    for (const [good, value] of Object.entries(recipe.output) as [GoodId, number][]) {
+      output[good] = (output[good] ?? 0) + value * weight
+    }
+    for (const [good, value] of Object.entries(recipe.input) as [GoodId, number][]) {
+      input[good] = (input[good] ?? 0) + value * weight
+    }
+    labor += recipe.labor * weight
+  }
+  return { ...base, output, input, labor }
 }
 
 /**
