@@ -69,6 +69,9 @@
   - `economic-loop-regressions.test.ts` — E4/E5 AI 批处理与确定性 + Round 1–3 回归守卫（29 用例）。
 - 完成后：`claude plugin test .` 388 pass / 0 fail（跨 41 个文件，原 35 + 6），`validate` 通过（警告与拆分前一致）；被搬运的 80 个用例（first-slice 40 + economic-loop 40）逐字节原样迁移，仅调整各文件的 import 头与（跨 describe 拆分处的）describe 归并，断言零改动；World 仍 v11。最大文件 `economic-loop-regressions.test.ts` 597 行（<600 软警）。
 
+### S7 ⏳ `types/index.d.ts` → `types/`
+- 理由：类型契约在 plan 0015 S0 后增长到 1144 行，超过 ~900 硬拆线；拆分须保留公共导出与既有 import 路径不变，且为**行为零改动、单独提交**的重构。
+
 ## 2. 顺序与依赖
 
 - **等当前功能切片稳定后再做**：F3–F7（建筑扩展）与 E2–E7（实时事件）都可能改 `engine/data.ts`、`hooks/register.tsx`、`engine/actions.ts`、`engine/inspect.ts`——**并发拆分必然冲突**。

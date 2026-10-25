@@ -184,6 +184,13 @@ export function installTechNodeEffects(country: Country, node: TechNodeDef): voi
             PRESTIGE_MAX,
           )
         }
+        if (effect.navalQuality !== undefined) {
+          country.military.navalQuality = clampValue(
+            country.military.navalQuality + effect.navalQuality,
+            0,
+            1,
+          )
+        }
         return
     }
   })

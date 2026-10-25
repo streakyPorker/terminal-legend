@@ -4,7 +4,7 @@
 > 机制口径以本文件为准；术语以 `GLOSSARY.md` 为准；GM 面向的机制参考见 `docs/gm-handbook.md`；
 > 决策背景与取舍见 `docs/adr/`；路线与工作包见 `docs/plans/`。
 >
-> 当前世界版本 **v13**（**19 类建筑**、建筑配方与利用率/利润驱动投资、四税基、铁矿石/钢铁拆分、
+> 当前世界版本 **v14**（**23 类建筑**、建筑配方与利用率/利润驱动投资、四税基、铁矿石/钢铁拆分、
 > 统一基础设施（铁路/港口/电报合并为单一「基础设施」、运河删除，plan 0014/ADR 0029）、建筑 `unlock` 前向字段、
 > **4 时代 / 16 节点科技树**（plan 0005 K0–K4，替代 1–10 级线性科技，派生 `techTier` 代理，含 AI 选择与树形 UI，docs/adr/0030-tech-tree.md））。数值口径以 `v3_inspect` 分区输出为准，本文只解释**为什么**。
 
@@ -26,7 +26,7 @@
 
 ## 1. 世界模型
 
-- **规模**：10 个国家、14 种商品、19 种建筑、6 类支出、**4 时代 / 16 节点科技树**（通用时代线 4 + 工业/行政/军事各 4）。
+- **规模**：10 个国家、18 种商品、23 种建筑、6 类支出、**4 时代 / 16 节点科技树**（通用时代线 4 + 工业/行政/军事各 4）。
 - **月度结算流水线**：商品供需与价格 → GDP/财政 → 建造队列 → 人口增长与城市化 →
   生活水平/激进/合法性 → 官僚效能与权威 → 科技 → 军力与人力 → 外交关系漂移（受恶名拖累）→
   战争 → 随机事件 →（E1–E7）实时事件扫描 + 例行场景。
@@ -285,7 +285,7 @@ GLOSSARY（航线/到岸成本/软容量/禁运）。
      「经济」；「排名」按经济、人口与社会、军事、科技与行政、外交与威望五维列出列强。
 - 另外 `/v3 ...` 命令的输出会在对话里渲染成富文本报告。
 - **建造面板（ADR 0027）**：`view/panels/construction.tsx` 的共享 `ConstructionPanel` 同时挂在
-  御前面板与经济面板——「可建建筑」清单（19 类、按 6 族分组、`x*y` 下单按钮）+
+  御前面板与经济面板——「可建建筑」清单（23 类、按 6 族分组、`x*y` 下单按钮）+
   「国有建造队列」（`#index`/`id`、进度、取消/↑/↓/置顶；私人条目只读）。面板只读世界状态，
   只通过 `onControl(control, payload)` 抛出意图。
 
@@ -330,7 +330,7 @@ hooks/council.ts             推进/御前/托管/中断/停止/秘书 spawn/事
 hooks/render.tsx             ui.render 挂载（Panel / Band / Report）
 hooks/prompt.ts              系统提示拼装（narratorPrompt）与状态文本（statusText）
 hooks/commands.ts            /v3 命令分发（含 /v3 stop）
-types/index.d.ts             PluginState 契约与世界模型类型（world v13：建筑配方、逐建筑利润与四税基、
+types/index.d.ts             PluginState 契约与世界模型类型（world v14：建筑配方、逐建筑利润与四税基、
                              铁矿石/钢铁、ControlPayload；4 时代 / 16 节点科技树 TechState + techTier）
 engine/data/index.ts         桶：原样再导出全部公共符号，`./data` 导入路径不变
 engine/data/goods.ts         商品/资源禀赋/区域运输成本/消费需求参数
@@ -415,7 +415,7 @@ view/format.ts               数字、进度条、火花线、状态行
 view/panels/index.tsx        桶：原样再导出旧 view/panels.tsx 的全部公共符号，`./panels` 导入路径不变
 view/panels/shared.tsx       面板共享层：UiKit/控制类型、Heading/StatLine/Meter/TableRow、playerOf/pendingOf/partnerTotals、SituationCard、PanePlaceholder、helpText
 view/panels/panel.tsx        Panel 标签分发 + TABS
-view/panels/construction.tsx 共享建造面板：可建建筑（19 类/6 族、x*y 下单）+ 队列（取消/↑/↓/置顶）
+view/panels/construction.tsx 共享建造面板：可建建筑（23 类/6 族、x*y 下单）+ 队列（取消/↑/↓/置顶）
 view/panels/overview.tsx     概览面板
 view/panels/council.tsx      御前面板（含 ConstructionPanel）
 view/panels/market.tsx       市场面板

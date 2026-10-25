@@ -42,8 +42,8 @@ export type GoodId =
   // consume them to grow `military.navy`.
   | 'ships'
   // Plan 0015 S0: three new goods for the tier-2/3 buildings — `chemicals`
-  // (chemical works), `electricity` (power plants, non-tradable) and
-  // `locomotives` (locomotive works).
+  // (chemical works), `electricity` (power plants; not yet tradable-gated here,
+  // it joins NON_TRADABLE in S4) and `locomotives` (locomotive works).
   | 'chemicals'
   | 'electricity'
   | 'locomotives'

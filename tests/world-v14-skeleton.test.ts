@@ -27,12 +27,14 @@ import type { BuildingId, Country, GoodId, WorldState } from '../types'
 // ============================================================================
 // Plan 0015 §S0 + ADR 0031 — the World v14 structural slice.
 //
-// The type contract already carries the new `GoodId`/`BuildingId` ids and the
-// S0 placeholder fields; the value tables (`GOODS`, `BUILDINGS`, `BUILDING_IDS`,
-// `buildingTiers`, unlock gates, tool enums) and world seeds are still v13.
-// This file is the RED contract the GREEN slice must satisfy: it must fail on
-// the *missing structure*, not on a bare TypeError, so each scenario guards the
-// container it dereferences before the deep check.
+// The S0 structural contract: it pins the new `GoodId`/`BuildingId` ids and the
+// S0 placeholder fields, the exhaustive id-keyed value tables (`GOODS`,
+// `BUILDINGS`, `BUILDING_IDS`, `buildingTiers`, unlock gates, tool enums), the
+// three new buildings locked behind `unlock.techLevel`, the three new goods
+// inert (unused by any recipe), and the rejection of v13 saves.
+//
+// Each scenario guards the container it dereferences before the deep check, so
+// a missing structure fails on that assertion rather than a bare TypeError.
 // ============================================================================
 
 const NEW_GOODS: GoodId[] = ['chemicals', 'electricity', 'locomotives']
