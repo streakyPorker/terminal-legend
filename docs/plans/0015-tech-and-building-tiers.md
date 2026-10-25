@@ -156,32 +156,102 @@
 - 比例条与 `buildingTiers` 一致；
 - `panel-build.test.tsx`、`construction-layout.test.ts`、`game.test.tsx` 按新定位改写。
 
-## 附录 A：20 节点表（待落值）
+## 附录 A：20 节点表（已落值）
 
-> 评审 F1：数值必须先冻结，否则验收悬空。下表是**结构**，数值在 S3 开工前填满并做成测试 fixture。
+> 评审 F1：数值先冻结。本表是 **S3 的唯一真源**，并做成 `tests/tech-nodes.fixture.ts`。
+> 每节点至少一项解锁类效果；纯乘数只允许出现在 `general-1836` 这类垫底位。
+> 成本沿用 `TECH_ERA_COSTS`（160 / 360 / 720 / 1280），表内不重复写。
 
-| 分支 | era 1 | era 2 | era 3 | era 4 | 第 5 个 |
-| --- | --- | --- | --- | --- | --- |
-| 通用 | 传统农业 | 蒸汽时代 | 工业时代 | 电气时代 | **同代节点（era 4）** |
-| 工业 | 纺织机械化 | 蒸汽动力 | 钢铁工业 | 电气化 | 化工合成（解锁化工厂） |
-| 行政 | 文官制度 | 公共教育 | 财政改革 | 大众政治 | 统计与普查 |
-| 军事 | 线膛枪 | 铁路动员 | 后装火炮 | 总参谋部 | 铁甲舰队（navalQuality） |
+### 通用线（general，5 个）
 
-**通用线 era：1 / 1 / 2 / 3 / 4**（第 5 个与第 2 个同为 era 1 或独立定档，S3 前定死并加 `clampEra`）。
+| id | era | 名称 | 前置 | 效果 |
+| --- | ---: | --- | --- | --- |
+| `general-1836` | 1 | 传统农业 | — | `unlockTier` farms 2 |
+| `general-1840` | 1 | 度量衡与驿传 | general-1836 | modifier `marketAccess` percent +8 |
+| `general-1850` | 2 | 蒸汽时代 | general-1840 | modifier `techPoints` percent +5 |
+| `general-1865` | 3 | 工业时代 | general-1850；任一分支 ≥2 | `unlockTier` infrastructure 2 |
+| `general-1880` | 4 | 电气时代 | general-1865；任一分支 ≥3 | `unlockTier` infrastructure 3 |
 
-## 附录 B：分级配方（待落值）
+**era 序列 1 / 1 / 2 / 3 / 4**；`general-1840` 是新增的第二个 era 1 节点，完成路径必须 `clampEra`。
 
-> 每类建筑必须给出：I 级（现有 `BUILDING_RECIPES`，不动）、II 级、III 级的 output/input/labor；
-> 升级工程量比例（≤60%）。S1 开工前填满。
+### 工业线（industry，5 个）
 
-| 建筑 | II 级方向 | III 级方向 | 工程量 |
-| --- | --- | --- | --- |
-| steelMills | 产出 +35%，煤/矿投入 +15% | 转炉：产出再 +35% | ≤60% |
-| machineryWorks / arsenals | 同上 | 同上 | ≤60% |
-| coalMines / ironMines / lumberMills | 产出 +30% | 产出再 +30% | ≤60% |
-| infrastructure | `INFRA_SUPPLY` ×1.3 | ×1.6，需 `locomotives` | ≤60% |
-| navalYards / navalBases | 船只产出 / 编练率 ×1.25 | ×1.5 | ≤60% |
-| textileMills / furnitureWorks / distilleries / luxuryWorks | 产出 +30%，投入 +12% | 产出再 +30% | ≤60% |
+| id | era | 名称 | 前置 | 效果 |
+| --- | ---: | --- | --- | --- |
+| `industry-1` | 1 | 纺织机械化 | general-1836 | `unlockTier` textileMills 2、furnitureWorks 2、distilleries 2；modifier `fabricOutput` percent +10 |
+| `industry-2` | 2 | 蒸汽动力 | industry-1, general-1850 | `unlockTier` coalMines 2、ironMines 2、lumberMills 2；modifier `mineOutput` percent +10 |
+| `industry-3` | 3 | 钢铁工业 | industry-2, general-1865 | `unlockTier` steelMills 2、machineryWorks 2、luxuryWorks 2；modifier `factoryOutput` percent +8 |
+| `industry-5` | 3 | 化工合成 | industry-3 | `unlockBuilding` chemicalWorks；`demandShift` chemicals +100% |
+| `industry-4` | 4 | 电气化 | industry-5, general-1880 | `unlockTier` steelMills 3、machineryWorks 3、textileMills 3、furnitureWorks 3、distilleries 3、luxuryWorks 3、coalMines 3、ironMines 3、lumberMills 3；`unlockBuilding` powerPlants、locomotiveWorks |
+
+### 行政线（admin，5 个）
+
+| id | era | 名称 | 前置 | 效果 |
+| --- | ---: | --- | --- | --- |
+| `admin-1` | 1 | 文官制度 | general-1836 | modifier `bureaucracy` flat +5；`taxEfficiency` percent +5 |
+| `admin-2` | 2 | 公共教育 | admin-1, general-1850 | `unlockLaw` 教育改革；modifier `literacy` percent +5 |
+| `admin-3` | 3 | 财政改革 | admin-2, general-1865 | `unlockLaw` 保护关税、自由贸易；modifier `taxEfficiency` percent +8 |
+| `admin-5` | 3 | 统计与普查 | admin-3 | modifier `bureaucracy` flat +5；`income` percent +5 |
+| `admin-4` | 4 | 大众政治 | admin-5, general-1880 | `unlockLaw` 福利改革、宗教宽容；immediate `legitimacy` +3、`loyalists` +2、`radicals` -2 |
+
+### 军事线（military，5 个）
+
+| id | era | 名称 | 前置 | 效果 |
+| --- | ---: | --- | --- | --- |
+| `military-1` | 1 | 线膛枪 | general-1836 | modifier `armyStrength` percent +10 |
+| `military-2` | 2 | 铁路动员 | military-1, general-1850 | `unlockLaw` 征兵制；modifier `manpower` percent +10 |
+| `military-3` | 3 | 后装火炮 | military-2, general-1865 | `unlockTier` arsenals 2；modifier `armyStrength` percent +12 |
+| `military-5` | 3 | 铁甲舰队 | military-3 | `unlockTier` navalYards 2、navalBases 2；immediate `navalQuality` +0.10 |
+| `military-4` | 4 | 总参谋部 | military-5, general-1880 | `unlockTier` arsenals 3、navalYards 3、navalBases 3；immediate `navalQuality` +0.10、`morale` +5；modifier `armyStrength` percent +10 |
+
+### 覆盖检查（表驱动测试必须断言）
+
+- **六项法案**全部有解锁节点：教育改革（admin-2）、保护关税 / 自由贸易（admin-3）、
+  征兵制（military-2）、福利改革 / 宗教宽容（admin-4）。
+- **13 类分级建筑**的 II 级与 III 级都有解锁来源（见上表逐项）。
+- **3 座新建筑**：chemicalWorks（industry-5）、powerPlants / locomotiveWorks（industry-4）。
+- **每个节点至少一项解锁类效果**；`general-1840 / general-1850 / admin-1 / admin-5 / military-1 / military-2`
+  等以 modifier 为主的节点仍各自带至少一项 `unlockTier` / `unlockLaw` / `unlockBuilding` / `demandShift`。
+
+## 附录 B：分级配方（已落值）
+
+> I 级 = 现有 `BUILDING_RECIPES`，**不动**。以下只定义 II / III 级。
+> 系数按统一规则生成后取 3 位小数；表格给的是**乘数规则**，`recipeAt` 的 fixture 由规则展开，
+> 展开结果入库到 `engine/data/buildings.ts` 的 `tiers`。
+
+### 规则
+
+| 族 | II 级 | III 级 |
+| --- | --- | --- |
+| 重工业（steelMills / machineryWorks / arsenals） | output ×1.35，input ×1.15，labor ×1.10 | output ×1.35，input ×1.12，labor ×1.05 |
+| 采掘（coalMines / ironMines / lumberMills） | output ×1.30，input —，labor ×1.15 | output ×1.30，labor ×1.10 |
+| 轻工业（textileMills / furnitureWorks / distilleries / luxuryWorks） | output ×1.30，input ×1.12，labor ×1.10 | output ×1.30，input ×1.10，labor ×1.05 |
+| 船坞（navalYards） | ships ×1.25，machinery ×1.10，input ×1.10，labor ×1.10 | ships ×1.50，input ×1.08，labor ×1.05 |
+| 基础设施（infrastructure） | `INFRA_SUPPLY` ×1.30，input ×1.15 | `INFRA_SUPPLY` ×1.60，input ×1.20 + `locomotives` 0.4/座/月 |
+| 海军营地（navalBases） | 编练率 ×1.25，input ×1.10 | 编练率 ×1.50，input ×1.15 |
+
+### 关键校验值（基价下，用于 S1/S2 的 oracle）
+
+| 建筑 | I 级增值 | II 级增值 | III 级增值 |
+| --- | ---: | ---: | ---: |
+| steelMills | 5.08 | 7.92 | 12.10 |
+| machineryWorks | 1.35 | 2.39 | 3.97 |
+| arsenals | 3.26 | 4.84 | 7.13 |
+| textileMills | 2.26 | 3.36 | 4.89 |
+| furnitureWorks | 1.04 | 1.56 | 2.30 |
+| luxuryWorks | −0.03 | 0.83 | 2.16 |
+
+> 计算口径：基价、单座、每月。`增值 = Σ(产出×价) − Σ(投入×价)`，未扣工资。
+> 工资按 `WAGE_ALLOCATION='valueAdded'` 分摊，类内增值上升即毛利上升。
+
+> `luxuryWorks` 的 I 级在基价下略为负值——这正是「升级把不赚钱的厂变赚钱」的证据；
+> 实际价格偏离基价，验收以当期价为口径。
+
+### 升级工程量
+
+- 单位座数的升级工程量 = 同级新建工程量的 **50%**（规则值，落在 60% 上限内）。
+- 升级单价与新建一致（0.2 金/点）；升级计入 GDP 投资项。
+- 升级不消耗材料；营造所不可升级；升级不提高建造力。
 
 ## 2. 迁移与兼容
 
