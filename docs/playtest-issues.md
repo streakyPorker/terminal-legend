@@ -32,7 +32,7 @@
 | PT-069 | 基础粮食产量过高：产出是内需的约 4 倍，粮价长期贴底 | 0007-E1 / 0008 B5 | fixed（63ef04b，缓和调整） |
 | PT-070 | 私人资本一穷就停工，私人项目建得极慢 | 0007 / 0013 | fixed（e04979d） |
 | PT-071 | 无法一次性购舰（引擎无「买船」入口） | 0008 / 军事 | fixed（57f92e1） |
-| PT-072 | 提示条上的「打开议事」点了没反应 | 0006 / UI | fixed（待提交） |
+| PT-072 | 提示条上的「打开议事」点了没反应 | 0006 / UI | fixed（702a4d5） |
 
 <details><summary>已结（59 条，详情见 archive）</summary>
 
@@ -435,4 +435,4 @@
      后面板必须切回议事页；全量 **537 项通过**。
 - 关联：`view/panels/band.tsx`、`hooks/internal.ts`、`hooks/council.ts`、`hooks/commands.ts`。
 - 优先级：**P2**
-- 状态：**fixed（待提交）**
+- 状态：**fixed（702a4d5）**
