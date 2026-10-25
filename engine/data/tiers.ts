@@ -51,6 +51,38 @@ export function mixedRecipe(country: Country, id: BuildingId): BuildingRecipe {
   return { ...base, output, input, labor }
 }
 
+/**
+ * Plan 0015 S4 / appendix B: the seat-weighted per-tier multiplier for a
+ * building. `perTier[t]` is the multiplier for tier `t + 1` (index 0 = tier I).
+ * Reads the `buildingTiers[id]` distribution, so a mix of II/III seats is the
+ * average of their multipliers weighted by seat count.
+ *
+ * When `buildingTiers` is absent or out of sync with `buildings[id]` — legacy
+ * seeds and tests that write `buildings[id]` directly never touch the tier
+ * array — every seat is treated as tier I, so the result is `perTier[0]` and
+ * behaviour is unchanged.
+ */
+export function tierWeightedMultiplier(
+  country: Country,
+  id: BuildingId,
+  perTier: readonly number[],
+): number {
+  const base = perTier[0] ?? 1
+  const total = country.econ.buildings[id] ?? 0
+  const counts = country.econ.buildingTiers?.[id]
+  if (total <= 0 || counts === undefined) return base
+  let tierSum = 0
+  for (const count of counts) tierSum += count
+  if (Math.abs(tierSum - total) > 1e-9) return base
+  let weighted = 0
+  for (let tier = 0; tier < counts.length; tier += 1) {
+    const count = counts[tier] ?? 0
+    if (count <= 0) continue
+    weighted += count * (perTier[tier] ?? perTier[perTier.length - 1] ?? base)
+  }
+  return weighted / total
+}
+
 /** Rebuild `buildings[id]` as Σ tiers, preserving `Σ buildingTiers[id] === buildings[id]`. */
 const rebuildBuildingCount = (country: Country, id: BuildingId, tiers: readonly number[]): void => {
   country.econ.buildings[id] = tiers.reduce((total, n) => total + n, 0)

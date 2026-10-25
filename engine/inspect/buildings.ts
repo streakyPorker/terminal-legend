@@ -1,5 +1,5 @@
 import type { Country } from '../../types'
-import { BUILDING_IDS, BUILDINGS, mixedRecipe } from '../data'
+import { BUILDING_IDS, BUILDINGS, isBuildingUnlocked, mixedRecipe } from '../data'
 import { CAPACITY_COST, WORKLOAD_MULTIPLIER } from '../sim'
 import { basket, n, pct, signed } from './shared'
 
@@ -12,8 +12,8 @@ export function buildingsSection(country: Country): string[] {
     const capacity = CAPACITY_COST[id] ?? 1
     const workload = capacity * WORKLOAD_MULTIPLIER
     const extra: string[] = []
-    if (meta.unlock?.techLevel !== undefined) {
-      extra.push(`需科技层级 ${meta.unlock.techLevel}`)
+    if (!isBuildingUnlocked(country, id)) {
+      extra.push('需科技解锁')
     }
     if (meta.infrastructureNeed !== undefined) {
       extra.push(`基础设施需求 ${n(meta.infrastructureNeed)}`)
@@ -31,7 +31,7 @@ export function buildingsSection(country: Country): string[] {
     }
   }
   lines.push(
-    '说明：本版共 23 类建筑，其中 20 类开局解锁；新增的化工厂/发电厂/机车厂三类在 S0 以 `unlock: { techLevel: 99 }` 占位锁定，真实解锁在 S4 落地。`unlock.techLevel` 为 plan 0005 科技树的科技层级门槛，按派生科技层级判定，F6 已接入 `build` 校验；`infrastructureNeed`（F5）已落地并计入统一基础设施需求；plan 0014 把铁路/港口/电报合并为「基础设施」、删除运河。',
+    '说明：本版共 23 类建筑，其中 20 类开局解锁；化工厂/发电厂/机车厂由科技节点 `unlockBuilding` 解锁（S4 落地，见 `buildingUnlocked` / `isBuildingUnlocked`），未解锁前玩家、AI 与私人投资三条路径都不可建。`unlock.techLevel` 为 plan 0005 科技树的科技层级门槛（F6 保留），与 `unlockBuilding` 合并判定；`infrastructureNeed`（F5）计入统一基础设施需求；plan 0014 把铁路/港口/电报合并为「基础设施」、删除运河。',
   )
   return lines
 }

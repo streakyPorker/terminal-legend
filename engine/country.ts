@@ -14,6 +14,7 @@ import {
   techNode,
   techNodeName,
   techTier,
+  tierWeightedMultiplier,
 } from './data'
 import { debtPressure, nationalDebt } from './fiscal'
 import {
@@ -111,6 +112,7 @@ import {
   MORALE_MAX,
   MORALE_MIN,
   SHIPS_PER_NAVAL_BASE,
+  SHIPS_PER_NAVAL_BASE_TIER_MULTIPLIER,
 } from './config/military'
 import {
   RESEARCH_BASE,
@@ -189,7 +191,12 @@ export function simulateCountry(
     const shipDemand = snap.demand.ships ?? 0
     const shipSupply = snap.supply.ships ?? 0
     const deliveredRatio = shipDemand > 0 ? Math.min(1, shipSupply / shipDemand) : 0
-    country.military.navy += navalBases * SHIPS_PER_NAVAL_BASE * deliveredRatio
+    // Plan 0015 §S4 / appendix B: the training rate scales with the base's tier
+    // (II ×1.25, III ×1.50), blended across the seat distribution.
+    const rate =
+      SHIPS_PER_NAVAL_BASE *
+      tierWeightedMultiplier(country, 'navalBases', SHIPS_PER_NAVAL_BASE_TIER_MULTIPLIER)
+    country.military.navy += navalBases * rate * deliveredRatio
   }
   country.econ.goods = snap.production
   country.econ.laborShare = snap.laborShare

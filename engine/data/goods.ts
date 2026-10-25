@@ -1,4 +1,5 @@
-import type { GoodId, Region, ResourceId, SpendingCategory, WarGoal } from '../../types'
+import type { Country, GoodId, Region, ResourceId, SpendingCategory, WarGoal } from '../../types'
+import { demandShiftPercent } from './tech'
 
 /** Chinese display labels for the four war goals (plan 0004 §5). */
 export const WAR_GOAL_NAMES: Record<WarGoal, string> = {
@@ -32,10 +33,10 @@ export const GOODS: Record<GoodId, { name: string; basePrice: number }> = {
   // PT-066: a ship is a capital good, not a consumer good. Shipyards produce
   // it; naval bases consume it and convert it into `military.navy`.
   ships: { name: '船只', basePrice: 8 },
-  // plan 0015 S0 placeholder, semantics in S4; S4 may retune. Prices sit inside
-  // the existing 1..10 band: chemicals is a mid-tier industrial good (≈ steel),
-  // electricity is a cheap utility (≈ fabric), locomotives is a capital good
-  // (≈ ships). Real recipes/prices are finalised in S4.
+  // Plan 0015 S4: prices kept from the S0 placeholder. They sit inside the
+  // existing 1..10 band — chemicals a mid-tier industrial good (≈ steel),
+  // electricity a cheap utility (≈ fabric), locomotives a capital good
+  // (≈ ships). S4 did not retune them.
   chemicals: { name: '化工品', basePrice: 3 },
   electricity: { name: '电力', basePrice: 2 },
   locomotives: { name: '机车', basePrice: 8 },
@@ -122,8 +123,10 @@ export const SUBSISTENCE: Record<GoodId, number> = {
   machinery: 0,
   arms: 0,
   opium: 0,
-  // plan 0015 S0 placeholder, semantics in S4. The new goods are not consumer
-  // goods; `ships` was a pre-existing omission (also not a consumer good).
+  // Plan 0015 S4: the new goods have no Stone-Geary subsistence floor; `ships`
+  // was a pre-existing omission too. `chemicals` joins the basket (`consumerBasket`)
+  // via `industry-5`'s `demandShift` as a purely discretionary good, so its raw
+  // table entries stay 0.
   ships: 0,
   chemicals: 0,
   electricity: 0,
@@ -152,12 +155,51 @@ export const INCOME_ELASTICITY: Record<GoodId, number> = {
   machinery: 0,
   arms: 0,
   opium: 0,
-  // plan 0015 S0 placeholder, semantics in S4. Zero elasticity: the new goods
-  // are not consumer goods; `ships` was a pre-existing omission too.
+  // Plan 0015 S4: the raw elasticity of the new goods is 0. `chemicals`' active
+  // consumer-basket weight is synthesised by `consumerBasket` from the
+  // `demandShift` (see `DEMAND_SHIFT_ELASTICITY_BASE`), never written here.
   ships: 0,
   chemicals: 0,
   electricity: 0,
   locomotives: 0,
+}
+
+/**
+ * plan 0015 S4 derived (not in 附录 B); tunable. Base elasticity a good starts
+ * with when a completed node's `demandShift` first admits it to the consumer
+ * basket (only `chemicals`, via `industry-5`). Kept small so the shift perturbs
+ * the six calibrated consumer goods by well under the F7 margin bands.
+ */
+export const DEMAND_SHIFT_ELASTICITY_BASE = 0.05
+
+/**
+ * Plan 0015 §S4 / ADR 0031 §6: the Stone-Geary consumer basket for a country,
+ * grown by node-level `demandShift` effects. A good that is already a consumer
+ * good is always present; any other good with a nonzero `demandShiftPercent`
+ * joins the basket with `DEMAND_SHIFT_ELASTICITY_BASE × (1 + shift/100)` as its
+ * raw weight. The weights are renormalised so Σ elasticity === 1 — all
+ * supernumerary income is spent — which leaves the six baseline goods untouched
+ * while no shift is active (their raw weights already sum to 1).
+ */
+export function consumerBasket(country: Country): {
+  goods: GoodId[]
+  elasticity: Record<GoodId, number>
+} {
+  const goods = [...CONSUMER_GOODS]
+  const elasticity: Record<GoodId, number> = { ...INCOME_ELASTICITY }
+  for (const good of GOOD_IDS) {
+    if (goods.includes(good)) continue
+    const shift = demandShiftPercent(country, good)
+    if (shift <= 0) continue
+    goods.push(good)
+    elasticity[good] = DEMAND_SHIFT_ELASTICITY_BASE * (1 + shift / 100)
+  }
+  let total = 0
+  for (const good of goods) total += elasticity[good] ?? 0
+  if (total > 0 && Math.abs(total - 1) > 1e-12) {
+    for (const good of goods) elasticity[good] = (elasticity[good] ?? 0) / total
+  }
+  return { goods, elasticity }
 }
 
 /** Government purchases by spending category (plan 0003 §2.3). */

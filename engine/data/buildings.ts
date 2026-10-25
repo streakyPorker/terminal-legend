@@ -79,7 +79,10 @@ export const INVESTMENT_DEMAND: Record<BuildingId, Partial<Record<GoodId, number
   navalYards: { wood: 0.3, steel: 0.2, machinery: 0.1 },
   // PT-066: naval base — a dry dock plus barracks for the fleet.
   navalBases: { steel: 0.25, wood: 0.2 },
-  // plan 0015 S0 placeholder, semantics in S4: empty investment baskets until S4.
+  // Plan 0015 S4: the three new works keep an empty construction-investment
+  // basket. They are public/strategic works whose admission is gated by
+  // `isBuildingUnlocked`, so a new build consumes no goods — the added surface
+  // would otherwise perturb the calibrated aggregate construction demand.
   chemicalWorks: {},
   powerPlants: {},
   locomotiveWorks: {},
@@ -120,11 +123,13 @@ export const BUILDING_OUTPUT: Record<BuildingId, Partial<Record<GoodId, number>>
   schools: {},
   forts: {},
   navalYards: {},
-  // plan 0015 S0 placeholder, semantics in S4: empty output weights — private
-  // investment never picks these until S4 fills the real baskets.
-  chemicalWorks: {},
-  powerPlants: {},
-  locomotiveWorks: {},
+  // Plan 0015 S4: the three new works now carry a real shortage weight, so once
+  // a tech node unlocks them private investment can bid for them. The weights
+  // sit in the heavy-industry band (≈ steelMills 0.09) — the S4 baskets are
+  // `chemicals` 1.4 / `electricity` 2.2 / `locomotives` 0.6 per seat per month.
+  chemicalWorks: { chemicals: 0.08 },
+  powerPlants: { electricity: 0.12 },
+  locomotiveWorks: { locomotives: 0.03 },
 }
 
 // ---------------------------------------------------------------- building recipes
@@ -487,11 +492,37 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     // (~16 units of labour demand) instead of a zero-labour special case.
     labor: 0.8,
   },
-  // plan 0015 S0 placeholder, semantics in S4: empty recipes — real outputs,
-  // inputs and labour land in S4.
-  chemicalWorks: { output: {}, input: {}, labor: 0 },
-  powerPlants: { output: {}, input: {}, labor: 0 },
-  locomotiveWorks: { output: {}, input: {}, labor: 0 },
+  // Plan 0015 S4: the three new works. ADR 0031 §6 fixes the good sets (output
+  // and the input members); the coefficients are NOT in the frozen appendix, so
+  // they are derived here from the closest existing scale — the heavy-industry
+  // family (steelMills / machineryWorks / arsenals) — with a value-added /
+  // revenue ratio kept below the F7 heavyIndustry band ceiling (0.36) so the
+  // per-seat gross margin sits inside [0, 0.36] at the reference point.
+  // plan 0015 S4 derived (not in 附录 B); tunable.
+  chemicalWorks: {
+    // VA = 1.5×3 − (0.5×1.6 + 1.25×1 + 0.2×5.2) = 1.41 → 0.313 of revenue.
+    output: { chemicals: 1.5 },
+    input: { coal: 0.5, iron: 1.25, machinery: 0.2 },
+    labor: 1.0,
+    gates: { tech: true, industrial: true },
+    outputModifier: 'factoryOutput',
+  },
+  powerPlants: {
+    // VA = 2.8×2 − (0.6×1.6 + 0.2×5.2 + 0.7×2.6) = 1.78 → 0.318 of revenue.
+    output: { electricity: 2.8 },
+    input: { coal: 0.6, machinery: 0.2, steel: 0.7 },
+    labor: 1.0,
+    gates: { tech: true, industrial: true },
+    outputModifier: 'factoryOutput',
+  },
+  locomotiveWorks: {
+    // VA = 0.8×8 − (1.0×2.6 + 0.2×5.2 + 0.4×1.6) = 2.12 → 0.331 of revenue.
+    output: { locomotives: 0.8 },
+    input: { steel: 1.0, machinery: 0.2, coal: 0.4 },
+    labor: 1.0,
+    gates: { tech: true, industrial: true },
+    outputModifier: 'factoryOutput',
+  },
 }
 
 /**
@@ -566,12 +597,13 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   offices: { name: '官署', cost: 3, note: '行政能力与官僚效能上限', infrastructureNeed: 0.08 },
   workshops: { name: '营造所', cost: 3, note: '消耗木材、粮食与铁，产出建造点', infrastructureNeed: 0.12 },
   navalBases: { name: '海军营地', cost: 5, note: '消耗船只，编练为海军', infrastructureNeed: 0.12 },
-  // plan 0015 S0 placeholder, semantics in S4. `unlock.techLevel: 99` is an S0
-  // lock so the buildings are never buildable until S4 sets the real unlock;
-  // cost/infraNeed sit in the heavy-industry band (machineryWorks/steelMills).
-  chemicalWorks: { name: '化工厂', cost: 5, note: '化工品，钢铁与煤的化学工业', infrastructureNeed: 0.2, unlock: { techLevel: 99 } },
-  powerPlants: { name: '发电厂', cost: 5, note: '电力，工业与城市的动力来源', infrastructureNeed: 0.25, unlock: { techLevel: 99 } },
-  locomotiveWorks: { name: '机车厂', cost: 5, note: '机车，钢铁与机械的交通装备', infrastructureNeed: 0.22, unlock: { techLevel: 99 } },
+  // Plan 0015 S4: the three new works are gated by tech `unlockBuilding` effects
+  // (see `buildingUnlocked` / `isBuildingUnlocked` in data/tech.ts), not by the
+  // legacy `unlock.techLevel` field, which they leave absent. Costs sit in the
+  // heavy-industry band (machineryWorks/steelMills).
+  chemicalWorks: { name: '化工厂', cost: 5, note: '化工品，钢铁与煤的化学工业', infrastructureNeed: 0.2 },
+  powerPlants: { name: '发电厂', cost: 5, note: '电力，工业与城市的动力来源', infrastructureNeed: 0.25 },
+  locomotiveWorks: { name: '机车厂', cost: 5, note: '机车，钢铁与机械的交通装备', infrastructureNeed: 0.22 },
 }
 
 export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[]
@@ -622,6 +654,17 @@ export function isCostCentre(id: BuildingId): boolean {
  */
 export const INFRA_SUPPLY: Partial<Record<BuildingId, number>> = {
   infrastructure: 2.16,
+}
+
+/**
+ * Plan 0015 S4 / appendix B: the per-tier multiplier on `INFRA_SUPPLY`.
+ * Index 0 is tier I (1), 1 is II (×1.30), 2 is III (×1.60). `mixed` tiers blend
+ * the multiplier by seat share (`tierWeightedMultiplier`), so an upgrade adds
+ * supply without adding a seat — the only way a tiered infrastructure can pay
+ * for its extra input and labour.
+ */
+export const INFRA_SUPPLY_TIER_MULTIPLIER: Partial<Record<BuildingId, number[]>> = {
+  infrastructure: [1, 1.3, 1.6],
 }
 
 /** Shortfall-multiplier floor: a linear debuff cannot bite harder than this. */

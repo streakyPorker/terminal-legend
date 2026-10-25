@@ -7,9 +7,10 @@ import {
   INFRA_BUILDING_IDS,
   INFRA_MULT_FLOOR,
   INFRA_SUPPLY,
+  INFRA_SUPPLY_TIER_MULTIPLIER,
   INFRA_UPKEEP,
 } from './buildings'
-import { mixedRecipe } from './tiers'
+import { mixedRecipe, tierWeightedMultiplier } from './tiers'
 import { RESOURCE_IDS, RESOURCE_MAP } from './goods'
 import { UNEMPLOYMENT_LABOR_PENALTY, UNEMPLOYMENT_MAX, UNEMPLOYMENT_MIN } from '../config/society'
 
@@ -24,13 +25,20 @@ export type InfrastructureStats = {
   level: number
 }
 
-/** Σ provider buildings × supply coefficient, over the `INFRA_BUILDING_IDS` seam. */
+/**
+ * Σ provider buildings × supply coefficient, over the `INFRA_BUILDING_IDS` seam.
+ * Plan 0015 §S4 / appendix B: the coefficient is scaled by the provider's
+ * per-tier multiplier (II ×1.30, III ×1.60), seat-weighted, so a mix of tiers
+ * blends the supply and all-tier-I behaviour is unchanged.
+ */
 export function infrastructureSupply(country: Country): number {
   let supply = 0
   for (const id of INFRA_BUILDING_IDS) {
     const coefficient = INFRA_SUPPLY[id]
     if (coefficient === undefined) continue
-    supply += (country.econ.buildings[id] ?? 0) * coefficient
+    const perTier = INFRA_SUPPLY_TIER_MULTIPLIER[id] ?? [1]
+    const multiplier = tierWeightedMultiplier(country, id, perTier)
+    supply += (country.econ.buildings[id] ?? 0) * coefficient * multiplier
   }
   return supply
 }
@@ -84,6 +92,24 @@ export function infrastructureMultiplier(level: number): number {
 /** Writes the derived unified level back onto the country (month end / completion). */
 export function refreshInfrastructure(country: Country): void {
   country.econ.transportInfrastructure = infrastructureStats(country).level
+}
+
+/**
+ * plan 0015 S4 derived (not in 附录 B); tunable. Output bonus per power-plant
+ * seat and its cap.
+ */
+export const ELECTRICITY_BONUS_PER_PLANT = 0.02
+export const ELECTRICITY_BONUS_MAX = 0.2
+
+/**
+ * Plan 0015 §S4 / ADR 0031 §6: the global output multiplier a country earns from
+ * its OWN power plants. It reads the domestic seat count, so electricity that
+ * arrives by trade never contributes (ADR: imported electricity does not count)
+ * and a country with no plants gets exactly 1 — the calibration baseline.
+ */
+export function electricityOutputMultiplier(country: Country): number {
+  const plants = country.econ.buildings.powerPlants ?? 0
+  return 1 + Math.min(ELECTRICITY_BONUS_MAX, plants * ELECTRICITY_BONUS_PER_PLANT)
 }
 
 /** Goods the infrastructure network consumes this month. */

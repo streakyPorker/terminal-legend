@@ -1,5 +1,5 @@
 import type { ConstructionProject, Country, WorldState } from '../../types'
-import { BUILDINGS, buildOf, maxUnlockedTier, techTier } from '../data'
+import { BUILDINGS, buildOf, isBuildingUnlocked, maxUnlockedTier } from '../data'
 import {
   MAX_BUILDINGS_PER_SLOT,
   alreadyReserved,
@@ -103,15 +103,11 @@ export function actionBuild(
   const id = String(params.building ?? '')
   const building = buildOf(id)
   if (building === undefined) return { ok: false, text: `${tag} 未知建筑 ${id}` }
-  // Forward-compat tech gate (plan 0011 F6): a building is locked while its
-  // `unlock.techLevel` exceeds the country's derived tech tier. No building sets
-  // one yet.
-  const unlock = BUILDINGS[building].unlock
-  if (unlock?.techLevel !== undefined && techTier(country.tech) < unlock.techLevel) {
-    return {
-      ok: false,
-      text: `${tag} ${BUILDINGS[building].name}尚未解锁（需要科技层级 ${unlock.techLevel}，当前 ${techTier(country.tech).toFixed(1)}）`,
-    }
+  // Plan 0015 §S4 / ADR 0031 §9.2: the single buildability gate, covering both
+  // the legacy `unlock.techLevel` field and the derived `unlockBuilding` node
+  // (the three new works).
+  if (!isBuildingUnlocked(country, building)) {
+    return { ok: false, text: `${tag} ${BUILDINGS[building].name}尚未解锁（需科技解锁）` }
   }
   const count = clamp(Math.floor(num(params.count, 1)), 1, MAX_BUILDINGS_PER_SLOT)
   // Plan 0015 §S2: `tier` (1-based; default 1 = tier I) lets a new build land

@@ -21,6 +21,8 @@ export {
   SUBSISTENCE,
   CONSUMPTION_PROPENSITY,
   INCOME_ELASTICITY,
+  DEMAND_SHIFT_ELASTICITY_BASE,
+  consumerBasket,
   GOVERNMENT_DEMAND,
 } from './goods'
 
@@ -37,6 +39,7 @@ export {
   BUILDING_IDS,
   buildOf,
   INFRA_SUPPLY,
+  INFRA_SUPPLY_TIER_MULTIPLIER,
   INFRA_MULT_FLOOR,
   INFRA_UPKEEP,
   INFRA_BUILDING_IDS,
@@ -55,7 +58,13 @@ export type {
 } from './buildings'
 
 // ---------------------------------------------------------------- building tiers / mutator
-export { recipeAt, mixedRecipe, applyBuildingDelta, applyBuildingDecay } from './tiers'
+export {
+  recipeAt,
+  mixedRecipe,
+  applyBuildingDelta,
+  applyBuildingDecay,
+  tierWeightedMultiplier,
+} from './tiers'
 
 // ---------------------------------------------------------------- tech
 export {
@@ -72,6 +81,8 @@ export {
   clampEra,
   maxUnlockedTier,
   buildingUnlocked,
+  isBuildingUnlocked,
+  buildableBuildingIds,
   lawUnlocked,
   demandShiftPercent,
 } from './tech'
@@ -100,6 +111,9 @@ export {
   infrastructureDemand,
   infrastructureStats,
   infrastructureMultiplier,
+  electricityOutputMultiplier,
+  ELECTRICITY_BONUS_PER_PLANT,
+  ELECTRICITY_BONUS_MAX,
   refreshInfrastructure,
   infrastructureUpkeep,
   industrialBuildingCount,

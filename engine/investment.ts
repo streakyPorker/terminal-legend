@@ -6,7 +6,14 @@ import type {
   LogEntry,
   WorldState,
 } from '../types'
-import { BUILDINGS, BUILDING_OUTPUT, GOODS, INDUSTRIAL_BUILDING_IDS, resourceMultiplier } from './data'
+import {
+  BUILDINGS,
+  BUILDING_OUTPUT,
+  GOODS,
+  INDUSTRIAL_BUILDING_IDS,
+  buildableBuildingIds,
+  resourceMultiplier,
+} from './data'
 import { nationalDebt } from './fiscal'
 import { totalsFor } from './modifiers'
 import {
@@ -164,7 +171,7 @@ export function investPrivateCapital(
   // candidates (ADR 0022).
   const capitalCost = (building: BuildingId): number =>
     Math.max(CAPITAL_COST_FLOOR, constructionTotalCost(draftProject(building, 1)))
-  const scores = (Object.keys(BUILDINGS) as BuildingId[]).map(building => {
+  const scores = buildableBuildingIds(country).map(building => {
     const hasOutput = Object.keys(BUILDING_OUTPUT[building]).length > 0
     const profitable = snap.buildingProfits[building].profitPerBuilding > 0
     return {

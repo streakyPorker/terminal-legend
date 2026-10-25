@@ -1,4 +1,5 @@
 import type { BuildingId, Country, GoodId, TechBranch, TechNodeDef, TechState } from '../../types'
+import { BUILDING_IDS, BUILDINGS } from './buildings'
 import { TECH_MAX_ERA, TECH_TIER_BASE, TECH_TIER_ERA_COEF, TECH_TIER_UNLOCKED_COEF, techNodeCost } from '../config/tech'
 
 /**
@@ -370,6 +371,27 @@ export function buildingUnlocked(country: Country, building: BuildingId): boolea
 export function lawUnlocked(country: Country, law: string): boolean {
   if (!TECH_GATED_LAWS.has(law)) return true
   return unlockedNodeGrants(country, effect => effect.kind === 'unlockLaw' && effect.law === law)
+}
+
+/**
+ * Plan 0015 §S4 / ADR 0031 §9.2: the single buildability gate every path that
+ * can add a building calls — the player's `actionBuild`, the AI build list and
+ * validation, and private investment. Combines the legacy forward-compat
+ * `unlock.techLevel` field (plan 0011 F6) with the S4 derived
+ * `buildingUnlocked` (an `unlockBuilding` node), so both mechanisms are honoured
+ * and no caller reads `BUILDINGS[id].unlock` by hand.
+ */
+export function isBuildingUnlocked(country: Country, building: BuildingId): boolean {
+  const unlock = BUILDINGS[building].unlock
+  if (unlock?.techLevel !== undefined && techTier(country.tech) < unlock.techLevel) {
+    return false
+  }
+  return buildingUnlocked(country, building)
+}
+
+/** Every building the country may currently build (plan 0015 §S4). */
+export function buildableBuildingIds(country: Country): BuildingId[] {
+  return BUILDING_IDS.filter(building => isBuildingUnlocked(country, building))
 }
 
 /**

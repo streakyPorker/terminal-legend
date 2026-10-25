@@ -10,6 +10,7 @@ import {
   INVESTMENT_DEMAND,
   SUBSISTENCE,
   createWorld,
+  isBuildingUnlocked,
   makeRngForWorld,
 } from '../engine/data'
 import {
@@ -168,7 +169,7 @@ describe('World v14 structural skeleton (plan 0015 S0)', () => {
     }
   })
 
-  test('S6 edge — the three new buildings are LOCKED, not merely unknown', () => {
+  test('S6 edge — the three new buildings are LOCKED by tech, not merely unknown', () => {
     const world = newWorld(9103, 'QING')
     const qing = countryOf(world, 'QING')
     qing.econ.treasury = 100000
@@ -176,7 +177,8 @@ describe('World v14 structural skeleton (plan 0015 S0)', () => {
       expect(BUILDING_IDS, `BUILDING_IDS is missing ${id}`).toContain(id)
       const def = BUILDINGS[id]
       expect(def, `BUILDINGS is missing ${id}`).toBeDefined()
-      expect(def?.unlock?.techLevel, `${id} unlock.techLevel`).toBeDefined()
+      // S4: the gate is the derived `unlockBuilding`, not a `techLevel` field.
+      expect(isBuildingUnlocked(qing, id), `${id} is tech-locked`).toBe(false)
       const before = qing.econ.constructionQueue.length
       const result = applyDecision(
         world,
@@ -190,19 +192,23 @@ describe('World v14 structural skeleton (plan 0015 S0)', () => {
     }
   })
 
-  test('S7 edge — the three new buildings ship empty recipes and no signals', () => {
+  test('S7 edge — the three new buildings ship a real tier-I recipe and signal', () => {
     for (const id of NEW_BUILDINGS) {
       const recipe = BUILDING_RECIPES[id]
       expect(recipe, `BUILDING_RECIPES is missing ${id}`).toBeDefined()
-      expect(recipe?.output, `${id} recipe output`).toEqual({})
-      expect(recipe?.input, `${id} recipe input`).toEqual({})
+      expect(Object.keys(recipe?.output ?? {}).length, `${id} recipe output`).toBeGreaterThan(0)
+      expect(Object.keys(recipe?.input ?? {}).length, `${id} recipe input`).toBeGreaterThan(0)
+      // S4: private investment has a real shortage weight (its admission is still
+      // gated by `isBuildingUnlocked`).
       const outputSignal = BUILDING_OUTPUT[id]
       expect(outputSignal, `BUILDING_OUTPUT is missing ${id}`).toBeDefined()
-      expect(Object.keys(outputSignal ?? {}).length, `${id} output signal`).toBe(0)
-      const investment = INVESTMENT_DEMAND[id]
-      expect(investment, `INVESTMENT_DEMAND is missing ${id}`).toBeDefined()
-      expect(Object.keys(investment ?? {}).length, `${id} investment demand`).toBe(0)
+      expect(Object.keys(outputSignal ?? {}).length, `${id} output signal`).toBeGreaterThan(0)
+      expect(INVESTMENT_DEMAND[id], `INVESTMENT_DEMAND entry ${id}`).toBeDefined()
     }
+    // ADR 0031 §6 good sets.
+    expect(BUILDING_RECIPES.chemicalWorks.output).toHaveProperty('chemicals')
+    expect(BUILDING_RECIPES.powerPlants.output).toHaveProperty('electricity')
+    expect(BUILDING_RECIPES.locomotiveWorks.output).toHaveProperty('locomotives')
   })
 
   test('S8 regression — v13 is rejected and v14 round-trips', () => {

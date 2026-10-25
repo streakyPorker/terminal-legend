@@ -31,7 +31,7 @@ export const CAPACITY_COST: Record<BuildingId, number> = {
   offices: 1,
   workshops: 1.5,
   navalBases: 2,
-  // plan 0015 S0 placeholder, semantics in S4: heavy-industry band.
+  // Plan 0015 S4: the three new works sit in the heavy-industry band.
   chemicalWorks: 2.5,
   powerPlants: 3,
   locomotiveWorks: 2.5,
@@ -81,7 +81,7 @@ export const BUILDING_COST_MULTIPLIER: Record<BuildingId, number> = {
   offices: 1,
   workshops: 1,
   navalBases: 1,
-  // plan 0015 S0 placeholder, semantics in S4.
+  // Plan 0015 S4: unit gold multiplier is 1, like every other type.
   chemicalWorks: 1,
   powerPlants: 1,
   locomotiveWorks: 1,
@@ -108,7 +108,7 @@ export const BUILDING_COST_ADDEND: Record<BuildingId, number> = {
   offices: 0,
   workshops: 0,
   navalBases: 0,
-  // plan 0015 S0 placeholder, semantics in S4.
+  // Plan 0015 S4: fixed gold addend is 0, like every other type.
   chemicalWorks: 0,
   powerPlants: 0,
   locomotiveWorks: 0,

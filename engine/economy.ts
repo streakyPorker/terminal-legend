@@ -12,16 +12,16 @@ import {
   BUILDING_IDS,
   CAPITAL_LABOR_SCALE,
   CONSUMPTION_PROPENSITY,
-  CONSUMER_GOODS,
+  consumerBasket,
   GOODS,
   GOOD_IDS,
   GOVERNMENT_DEMAND,
-  INCOME_ELASTICITY,
   isCostCentre,
   SUBSISTENCE,
   WAGE_ALLOCATION,
   deriveLabor,
   effectiveCount,
+  electricityOutputMultiplier,
   infrastructureCount,
   infrastructureMultiplier,
   infrastructureStats,
@@ -211,6 +211,11 @@ function computeProduction(country: Country): Record<GoodId, number> {
     country.econ.transportInfrastructure,
   )
   const infra = infrastructureMultiplier(infraLevel)
+  // Plan 0015 §S4 / ADR 0031 §6: self-produced electricity is a second global
+  // output multiplier. It is derived from the country's OWN power-plant seats,
+  // so electricity that arrives by trade never contributes, and a country with
+  // no plants gets 1 (the behaviour-preserving baseline).
+  const electric = electricityOutputMultiplier(country)
   const b = country.econ.buildings
   const resources = resourceFactors(country)
   // Coal and iron are industrial inputs: a country poor in both runs its
@@ -254,6 +259,8 @@ function computeProduction(country: Country): Record<GoodId, number> {
       if (gates?.industrial) value *= industrial
       // The unified infrastructure debuff applies to every building's output.
       value *= infra
+      // Self-produced electricity (ADR 0031 §6) lifts every building's output.
+      value *= electric
       if (modifier !== undefined) value = applyModifiers(country, modifier, value)
       raw[good] += value
     }
@@ -336,14 +343,18 @@ function computeDemand(country: Country): DemandBreakdown {
   const taxTake = privateTaxBurden(country)
   const disposable = Math.max(0, wages + profits * (1 - savingsRate) - taxTake) + welfareTransfer
   const incomePerCapita = disposable / popFactor
+  // Plan 0015 §S4 / ADR 0031 §6: the consumer basket grows with node-level
+  // `demandShift` effects (chemicals after `industry-5`). With no shift active
+  // it is exactly the calibrated `CONSUMER_GOODS` basket.
+  const basket = consumerBasket(country)
   let subsistenceCost = 0
-  for (const id of CONSUMER_GOODS) subsistenceCost += SUBSISTENCE[id] * prices[id]
+  for (const id of basket.goods) subsistenceCost += SUBSISTENCE[id] * prices[id]
   const supernumerary =
     Math.max(0, incomePerCapita - subsistenceCost) * CONSUMPTION_PROPENSITY
-  for (const id of CONSUMER_GOODS) {
+  for (const id of basket.goods) {
     const subsistence = popFactor * SUBSISTENCE[id]
     const discretionary =
-      (popFactor * INCOME_ELASTICITY[id] * supernumerary) /
+      (popFactor * basket.elasticity[id] * supernumerary) /
       Math.max(PRICE_DISCRETIONARY_FLOOR, prices[id])
     // `consumption` scales discretionary spending, never the survival floor.
     consumer[id] = demand(
@@ -463,7 +474,7 @@ function computeDemand(country: Country): DemandBreakdown {
   // The consumption tax base values only the final consumer basket, never the
   // intermediate demand above (ADR 0023 de-duplication rule).
   let consumptionValue = 0
-  for (const id of CONSUMER_GOODS) consumptionValue += consumer[id] * prices[id]
+  for (const id of basket.goods) consumptionValue += consumer[id] * prices[id]
   return { demand: out, consumer, investment, government, consumptionValue }
 }
 

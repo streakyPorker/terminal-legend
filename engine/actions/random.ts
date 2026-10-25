@@ -1,10 +1,11 @@
-import type { Country, TaxBaseId, WorldState } from '../../types'
+import type { BuildingId, Country, TaxBaseId, WorldState } from '../../types'
 import {
   TAX_BASE_IDS,
   TAX_BASE_NAMES,
   nationalDebt,
   taxBaseRevenues,
 } from '../fiscal'
+import { isBuildingUnlocked } from '../data'
 import type { Decision } from '../internal'
 import type { Rng } from '../rng'
 
@@ -86,7 +87,7 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
     country.econ.constructionQueue.length < 6 &&
     rng.chance(0.45)
   ) {
-    const options = [
+    const options: BuildingId[] = [
       'textileMills',
       'furnitureWorks',
       'distilleries',
@@ -104,8 +105,16 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
       'lumberMills',
       'universities',
       'workshops',
-    ] as const
-    const building = rng.pick(options)
+      // Plan 0015 §S4: the new works become candidates once their tech node is
+      // unlocked; `tierWeightedMultiplier`-style gating is the shared seam.
+      'chemicalWorks',
+      'powerPlants',
+      'locomotiveWorks',
+    ]
+    // ADR 0031 §9.2: filter to buildable types so a locked new work can never be
+    // chosen (the legacy roster is always unlocked, so this is a no-op for it).
+    const buildable = options.filter(id => isBuildingUnlocked(country, id))
+    const building = rng.pick(buildable)
     return {
       countryId: country.id,
       action: 'build',

@@ -1,5 +1,5 @@
 import type { EngineInterface } from 'claude-code'
-import type { Country, GameDate, SituationStance, WorldState } from '../types'
+import type { BuildingId, Country, GameDate, SituationStance, WorldState } from '../types'
 import {
   BUILDINGS,
   BUILDING_IDS,
@@ -7,6 +7,7 @@ import {
   GOOD_IDS,
   SPENDING,
   WAR_GOAL_NAMES,
+  isBuildingUnlocked,
   techNodeName,
   techTier,
 } from './data'
@@ -28,7 +29,7 @@ const SYSTEM = `你是 19 世纪大战略游戏的世界决策引擎。你为每
 - 每个元素形如 {"country":"GBR","action":"build","params":{"building":"textileMills","count":1},"narrative":"一句符合该领袖性格的行动描述"}
 - 每个国家最多 1 条；只为他国（非玩家国）决策。
 - action 只能是：build, cancel, reorder, tax, tariff, spending, research, conscript, law, diplomacy, route, invest, situation。
-- build 的 building 只能是：farms, coalMines, ironMines, lumberMills, textileMills, furnitureWorks, distilleries, machineryWorks, steelMills, arsenals, luxuryWorks, schools, infrastructure, forts, navalYards, universities, barracks, offices, navalBases；params.count 为 1..20 的数字。官署提供行政能力与官僚上限；学校育才促识字；基础设施（铁路/港口/电报合一）供给统一基础设施与市场接入；要塞/船坞是军事建造。
+- build 的 building 只能是：farms, coalMines, ironMines, lumberMills, textileMills, furnitureWorks, distilleries, machineryWorks, steelMills, arsenals, luxuryWorks, schools, infrastructure, forts, navalYards, universities, barracks, offices, navalBases；化工厂（chemicalWorks）、发电厂（powerPlants）、机车厂（locomotiveWorks）须先解锁对应科技节点，未解锁时建造会被拒绝；params.count 为 1..20 的数字。官署提供行政能力与官僚上限；学校育才促识字；基础设施（铁路/港口/电报合一）供给统一基础设施与市场接入；要塞/船坞是军事建造。
 - cancel 用 params.index（简报「队列」里的 #N）取消本国的国有建造项目；私人项目（带「私」）不可取消。
 - reorder 用 params.index 与 params.position（head=插到队首 / tail=队尾 / before / after），把本国国有项目挪位；重排保留已投入进度。
 - route 需要 params.good（商品代码）、params.partner（伙伴国家代码）与 params.op（open/raise/lower/close）：
@@ -256,11 +257,17 @@ function validParams(
     return Number.isFinite(parsed) && parsed >= min && parsed <= max
   }
   switch (action) {
-    case 'build':
+    case 'build': {
+      const building = String(params.building ?? '') as BuildingId
+      const country = world.countries[countryId]
       return (
-        (BUILDING_IDS as string[]).includes(String(params.building ?? '')) &&
-        finite(params.count, 1, 20)
+        country !== undefined &&
+        (BUILDING_IDS as string[]).includes(building) &&
+        finite(params.count, 1, 20) &&
+        // Plan 0015 §S4 / ADR 0031 §9.2: the AI may not build a locked new work.
+        isBuildingUnlocked(country, building)
       )
+    }
     case 'cancel':
       return finite(params.index, 1, 99) || typeof params.projectId === 'string'
     case 'reorder':

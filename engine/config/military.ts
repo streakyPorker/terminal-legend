@@ -25,6 +25,14 @@ export const MORALE_MAX = 100
  */
 export const SHIPS_PER_NAVAL_BASE = 1
 
+/**
+ * Plan 0015 S4 / appendix B: the per-tier multiplier on the naval-base training
+ * rate (index 0 = tier I, 1 = II ×1.25, 2 = III ×1.50). Seat-weighted by
+ * `tierWeightedMultiplier`, so a base upgrade lifts commissioning without adding
+ * a seat.
+ */
+export const SHIPS_PER_NAVAL_BASE_TIER_MULTIPLIER = [1, 1.25, 1.5]
+
 /** Leader ageing. */
 export const LEADER_AGE_PER_MONTH = 1 / 12
 export const LEADER_DEATH_AGE = 82

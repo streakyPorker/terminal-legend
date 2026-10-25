@@ -51,10 +51,14 @@ export {
   MAX_MONTHLY_DEFICIT_SHARE,
 } from './config/trade'
 
-/** Services are the one good that never crosses a border (plan §0). */
-const NON_TRADABLE: GoodId[] = ['services']
+/**
+ * Goods that never cross a border (plan §0). Services always; plan 0015 S4 /
+ * ADR 0031 §6 adds electricity — 19th-century power cannot be cross-border
+ * priced, so a country only ever gets the output bonus from its own plants.
+ */
+const NON_TRADABLE: GoodId[] = ['services', 'electricity']
 
-/** Every good except services, in the canonical GOOD_IDS order. */
+/** Every good except the non-tradable pair, in the canonical GOOD_IDS order. */
 export const TRADABLE_GOODS: GoodId[] = GOOD_IDS.filter(id => !NON_TRADABLE.includes(id))
 
 /** Domestic production and demand for one country, snapshotted before clearing. */

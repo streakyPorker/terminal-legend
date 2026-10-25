@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { BUILDINGS, BUILDING_IDS, makeRngForWorld } from '../engine/data'
+import { BUILDINGS, BUILDING_IDS, isBuildingUnlocked, makeRngForWorld } from '../engine/data'
 import { applyDecision, newWorld, randomDecision } from '../engine/sim'
 import type { Decision } from '../engine/internal'
 import type { Rng } from '../engine/rng'
@@ -126,7 +126,8 @@ describe('F6 building unlock gate', () => {
       expect(BUILDING_IDS, `roster is missing ${id}`).toContain(id)
       const def = BUILDINGS[id]
       expect(def, `BUILDINGS is missing ${id}`).toBeDefined()
-      expect(def?.unlock?.techLevel, `${id} lock`).toBeDefined()
+      // Plan 0015 S4: the lock is the derived `unlockBuilding`, not `techLevel`.
+      expect(isBuildingUnlocked(qing, id), `${id} lock`).toBe(false)
       const before = qing.econ.constructionQueue.length
       const result = build(world, 'QING', id)
       expect(result.ok, `build ${id} is locked`).toBe(false)
