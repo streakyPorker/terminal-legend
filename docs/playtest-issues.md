@@ -35,7 +35,7 @@
 | PT-072 | 提示条上的「打开议事」点了没反应 | 0006 / UI | fixed（702a4d5） |
 | PT-073 | 消费税只有统一税率，无法按商品分级 | 0008 / ADR 0023 | open（需求已登记） |
 | PT-074 | 看不到他国的税率与基本经济数据 | 0006 / inspect | fixed（fffca38） |
-| PT-075 | AI 不会撤销/重排建造，也从不开贸易航线 | 0003 / AI | fixed（待提交） |
+| PT-075 | AI 不会撤销/重排建造，也从不开贸易航线 | 0003 / AI | fixed（90345e1） |
 
 <details><summary>已结（59 条，详情见 archive）</summary>
 
@@ -515,4 +515,4 @@
 - 未做（玩家明确暂不要求）：AI 使用 `v3_policy`；债务危重时强制替换 build 决策。
 - 关联：`engine/ai.ts`、`engine/actions/decision.ts`、`engine/actions/build.ts`、`engine/actions/route.ts`。
 - 优先级：**P1**（世界活力的核心）
-- 状态：**fixed（待提交）**
+- 状态：**fixed（90345e1）**
