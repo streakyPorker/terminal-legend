@@ -51,6 +51,11 @@ export function mixedRecipe(country: Country, id: BuildingId): BuildingRecipe {
   return { ...base, output, input, labor }
 }
 
+/** Rebuild `buildings[id]` as Σ tiers, preserving `Σ buildingTiers[id] === buildings[id]`. */
+const rebuildBuildingCount = (country: Country, id: BuildingId, tiers: readonly number[]): void => {
+  country.econ.buildings[id] = tiers.reduce((total, n) => total + n, 0)
+}
+
 /**
  * The ONE mutator for `buildingTiers`/`buildings` (plan 0015 §S1). `buildingTiers`
  * is the per-tier seat distribution and `buildings[id]` is always its Σ, so every
@@ -68,7 +73,7 @@ export function applyBuildingDelta(
   const tiers = country.econ.buildingTiers[id]
   while (tiers.length <= tier) tiers.push(0)
   tiers[tier] = Math.max(0, (tiers[tier] ?? 0) + delta)
-  country.econ.buildings[id] = tiers.reduce((total, n) => total + n, 0)
+  rebuildBuildingCount(country, id, tiers)
 }
 
 /**
@@ -81,5 +86,5 @@ export function applyBuildingDecay(country: Country, id: BuildingId, factor: num
   for (let tier = 0; tier < tiers.length; tier += 1) {
     tiers[tier] = (tiers[tier] ?? 0) * factor
   }
-  country.econ.buildings[id] = tiers.reduce((total, n) => total + n, 0)
+  rebuildBuildingCount(country, id, tiers)
 }

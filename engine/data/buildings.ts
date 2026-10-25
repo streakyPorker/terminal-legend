@@ -156,8 +156,8 @@ export type RecipeGates = {
 
 /**
  * Plan 0015 §S1: one unlocked tier's recipe deltas. `tiers[0]` is II, `tiers[1]`
- * is III; `BUILDING_RECIPES[id]` stays tier I. Empty in S0 — a later slice fills
- * `tiers` in `engine/data/buildings.ts`.
+ * is III; `BUILDING_RECIPES[id]` stays tier I. S1 filled these here — every
+ * tiered building below now carries its II/III recipes, per appendix B.
  */
 export type BuildTierDef = {
   output: Partial<Record<GoodId, number>>
@@ -186,8 +186,10 @@ export type BuildingRecipe = {
   /** Building-category output modifier seam (farmOutput/mineOutput/factoryOutput). */
   outputModifier?: ModifierStat
   /**
-   * S0 placeholder (plan 0015 §S1): tier II/III recipes beyond the tier-I
-   * `BUILDING_RECIPES[id]` baseline. Unset until a later slice fills it.
+   * Tier II/III recipes beyond the tier-I `BUILDING_RECIPES[id]` baseline
+   * (plan 0015 §S1, per appendix B). S1 filled these on every tiered building;
+   * an unset `tiers` means the building has no upgrade path, so `recipeAt`
+   * falls back to tier I.
    */
   tiers?: BuildTierDef[]
 }

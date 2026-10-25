@@ -46,7 +46,14 @@ export function infrastructureCount(country: Country): number {
   return total
 }
 
-/** Σ all buildings × `infrastructureNeed`. */
+/**
+ * Σ all buildings × `infrastructureNeed`.
+ *
+ * Caliber (plan 0015 §S1 / 评审 M1): the RAW seat count `buildings[id]` — no
+ * `effectiveCount` cap — and `infrastructureNeed` is tier-independent (no
+ * appendix-B rule scales it), so the tier MIX never changes infra demand; only
+ * the total building count does.
+ */
 export function infrastructureDemand(country: Country): number {
   let demand = 0
   for (const id of BUILDING_IDS) {
@@ -276,6 +283,9 @@ export function deriveLabor(country: Country): LaborStats {
   const b = country.econ.buildings
   let demand = 0
   for (const id of BUILDING_IDS) {
+    // Caliber (plan 0015 §S1 / 评审 M1): the RAW seat count `buildings[id]` —
+    // no `effectiveCount` cap — times `storedUtilization`, with the
+    // tier-weighted labour coefficient from `mixedRecipe`.
     demand += mixedRecipe(country, id).labor * (b[id] ?? 0) * storedUtilization(country, id)
   }
   const participation = laborParticipation(country)

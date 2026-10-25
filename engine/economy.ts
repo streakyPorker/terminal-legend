@@ -165,6 +165,11 @@ function storedUtilization(country: Country, id: BuildingId): number {
  * B5). The caller normalises by the summed weights and splits the national wage
  * bill by it, so the split stays exhaustive for every basis. `'labor'` returns
  * `labor × count` exactly as the pre-B5 baseline did.
+ *
+ * Caliber (plan 0015 §S1 / 评审 M1): the `labor` basis uses the tier-weighted
+ * labour coefficient `mixedRecipe(...).labor`; the `valueAdded` basis is
+ * automatically tier-aware because it reads the tier-weighted revenue/input
+ * already blended for this row.
  */
 function wageBasisWeight(
   country: Country,
@@ -226,9 +231,13 @@ function computeProduction(country: Country): Record<GoodId, number> {
       'production',
       applyModifiers(country, `${id}Output`, value * resources[id]),
     )
-  // Gated per-building output, summed by good (ADR 0021). BUILDING_RECIPES is
-  // the only source of the coefficients; the multiplier seams it names are the
-  // same `tech`/`infra`/`access`/`industrial` factors the code always applied.
+  // Gated per-building output, summed by good (ADR 0021). `mixedRecipe` is the
+  // source of the (tier-weighted) coefficients; the multiplier seams it names
+  // are the same `tech`/`infra`/`access`/`industrial` factors the code always
+  // applied. Caliber (plan 0015 §S1 / 评审 M1): the seat count is
+  // `effectiveCount(Σcount)`, capped ONCE for the whole building type — the tier
+  // mix only scales the per-building coefficient via `mixedRecipe`, never the
+  // cap per tier.
   const raw = zeroGoods()
   for (const id of BUILDING_IDS) {
     const recipe = mixedRecipe(country, id)
@@ -369,6 +378,9 @@ function computeDemand(country: Country): DemandBreakdown {
   // national, outside the recipes.
   const intermediate = zeroGoods()
   for (const id of BUILDING_IDS) {
+    // Caliber (plan 0015 §S1 / 评审 M1): intermediate input reads the RAW seat
+    // count `buildings[id]` — no `effectiveCount` cap — and only the
+    // per-building coefficient is tier-weighted through `mixedRecipe`.
     const count = b[id]
     if (count <= 0) continue
     const recipe = mixedRecipe(country, id)
@@ -575,6 +587,10 @@ export function computeEconomy(
   const rows = BUILDING_IDS.map((id) => {
     const recipe = mixedRecipe(country, id)
     const count = buildings[id]
+    // Caliber (plan 0015 §S1 / 评审 M1): the revenue/input row values the
+    // per-class count at `effectiveCount(Σcount)` — the same capped-once count
+    // the production loop uses — so only the tier-weighted coefficient moves
+    // with the mix, never the cap.
     const effCount = effectiveCount(count)
     let revenue = 0
     let inputCost = 0
@@ -588,6 +604,9 @@ export function computeEconomy(
   })
   // Weights come after every row's revenue/input cost so the `valueAdded` basis
   // can read them; the `labor` basis reproduces the old total exactly.
+  // Caliber (plan 0015 §S1 / 评审 M1): every basis is tier-aware — the `labor`
+  // basis reads the tier-weighted `mixedRecipe(...).labor`, and the
+  // `valueAdded` basis reads the tier-weighted revenue/input rows above.
   let wageWeightTotal = 0
   const wageWeights = {} as Record<BuildingId, number>
   for (const row of rows) {
