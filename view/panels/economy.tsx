@@ -1,4 +1,4 @@
-import type { WorldState } from '../../types'
+import type { BuildingId, Economy, WorldState } from '../../types'
 import {
   BUILDINGS,
   BUILDING_IDS,
@@ -17,6 +17,7 @@ import {
   fmtSigned,
   padEnd,
   sparkline,
+  tierName,
 } from '../format'
 import { ConstructionPanel } from './construction'
 import {
@@ -26,6 +27,29 @@ import {
   type ControlPayload,
   type UiKit,
 } from './shared'
+
+export type TierShare = { tier: number; count: number; total: number; percent: number }
+
+/**
+ * The per-tier seat distribution for one building class (plan 0015 §S1/§S6).
+ * `econ.buildingTiers[id]` is the single source; entries that only carry the
+ * seat count fall back to tier I, mirroring `engine/data/tiers.ts`.
+ */
+export function tierShares(econ: Economy, id: BuildingId): TierShare[] {
+  const counts = econ.buildingTiers?.[id] ?? [econ.buildings[id] ?? 0]
+  const total = counts.reduce((sum, count) => sum + count, 0)
+  if (total <= 0) return []
+  return counts
+    .map((count, index) => ({
+      tier: index + 1,
+      count,
+      total,
+      percent: Math.round((count / total) * 100),
+    }))
+    .filter(share => share.count > 0)
+}
+
+const TIER_COLORS = ['cyan', 'yellow', 'green']
 
 export function EconomyPanel(props: {
   ui: UiKit
@@ -64,14 +88,28 @@ export function EconomyPanel(props: {
       </Text>
 
       <Box flexDirection="column" marginTop={1}>
-        <Heading ui={props.ui} text="建筑与基础设施" />
-        {BUILDING_IDS.map(id => (
-          <Box flexDirection="row" columnGap={1}>
-            <Text wrap="truncate">{padEnd(BUILDINGS[id].name, 7)}</Text>
-            <Text>{padEnd(fmtNumber(econ.buildings[id]), 7)}</Text>
-            <Text dimColor wrap="wrap">{BUILDINGS[id].note}</Text>
-          </Box>
-        ))}
+        <Heading
+          ui={props.ui}
+          text="建筑与基础设施"
+          hint="各级座数占比；明细见 v3_inspect buildings"
+        />
+        {BUILDING_IDS.map(id => {
+          const shares = tierShares(econ, id)
+          if (shares.length === 0) return null
+          return (
+            <Box flexDirection="row" columnGap={1} key={`tiers:${id}`}>
+              <Text wrap="truncate">{padEnd(BUILDINGS[id].name, 7)}</Text>
+              {shares.map(share => (
+                <Box flexDirection="row" columnGap={1} key={`tier:${id}:${share.tier}`}>
+                  <Text color={TIER_COLORS[share.tier - 1] ?? 'cyan'}>
+                    {bar(share.count, share.total, 8)}
+                  </Text>
+                  <Text dimColor>{`${tierName(share.tier)} 级 ${share.percent}%`}</Text>
+                </Box>
+              ))}
+            </Box>
+          )
+        })}
         <Text dimColor>基础设施 {Math.round(econ.transportInfrastructure)}/100 · 行政能力 {Math.round(econ.administrativeCapacity)} · 市场接入 {fmtPercent(econ.marketAccess)} · 失业 {econ.unemployment.toFixed(1)}%</Text>
       </Box>
 

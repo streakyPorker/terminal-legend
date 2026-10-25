@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { BUILDINGS, BUILDING_IDS, makeRngForWorld, spawnEvent } from '../engine/data'
+import {
+  BUILDINGS,
+  BUILDING_IDS,
+  TECH_NODES,
+  canResearchNode,
+  makeRngForWorld,
+  spawnEvent,
+} from '../engine/data'
 import { advance, applyDecision, applyEventOption, newWorld } from '../engine/sim'
 import { Band, Panel, Report, type UiKit } from '../view/panels'
 import type { ControlAction, ControlPayload, TabId } from '../types'
@@ -396,7 +403,7 @@ describe('terminal-legend drawing', () => {
     await ui.unmount()
   })
 
-  test('the construction panel lists every building and forwards control payloads', async ($, on) => {
+  test('the construction panel is read-only and keeps queue management', async ($, on) => {
     const world = newWorld(3, 'QING')
     const qing = world.countries.QING
     expect(qing).toBeDefined()
@@ -456,11 +463,149 @@ describe('terminal-legend drawing', () => {
     // PT-062: the queue row is player-facing; internal project ids stay hidden.
     expect(await ui.find({ type: 'Text', text: /id:proj-abc/ })).toBeUndefined()
     expect(await ui.find({ type: 'Text', text: /农场×2/ })).toBeDefined()
-    expect(await ui.find({ type: 'Button', key: 'o:farms:1x1' })).toBeDefined()
-    expect(await ui.find({ type: 'Button', key: 'o:farms:5x1' })).toBeDefined()
+    // §S6: ordering left the panel — the dialogue is the only order entry.
+    expect(await ui.find({ type: 'Text', text: /下单请在对话中下令/ })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'o:farms:1x1' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', key: 'o:farms:5x1' })).toBeUndefined()
+    expect(await ui.find({ type: 'Button', key: 'o:farms:head' })).toBeUndefined()
+    // Queue management stays on the panel; its payload path is pressed for
+    // real in tests/panel-build.test.tsx (a hand-rendered pane is not pressable).
     expect(await ui.find({ type: 'Button', key: 'cancel:proj-abc' })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'head:proj-abc' })).toBeDefined()
     expect(calls).toHaveLength(0)
+    await ui.unmount()
+  })
+
+  test('the queue row shows an upgrade project as 钢铁厂 I→II ×12', async ($, on) => {
+    const world = newWorld(3, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.econ.constructionQueue = [
+      {
+        id: 'proj-upgrade',
+        building: 'steelMills',
+        count: 12,
+        kind: 'upgrade',
+        fromTier: 0,
+        toTier: 1,
+        owner: 'state',
+        monthsLeft: 3,
+        monthlyCost: 1,
+        lastSpend: 0,
+        progress: 0.25,
+        startedAt: { ...world.date },
+      },
+    ]
+    on('ui.render', { component: 'Pane', requestId: 'upgrade-pane' }, async ($hang, e) => {
+      const kit = ($hang as unknown as { ui: { resolve: (x: unknown) => UiKit } }).ui.resolve(e)
+      return (
+        <Panel
+          ui={kit}
+          world={world}
+          width={e.props.bodyColumns}
+          tab="council"
+          notice=""
+          onTab={() => undefined}
+          onControl={() => undefined}
+          onEvent={() => undefined}
+          council={{ isOpen: true, report: '', secretaryReport: '', isRunning: false }}
+          onCouncil={() => undefined}
+        />
+      )
+    })
+    const ui = await $.ui.mount({
+      plugin: 'terminal-legend',
+      surface: 'terminal',
+      component: 'Pane',
+      requestId: 'upgrade-pane',
+      props: PANE_PROPS,
+    })
+    expect(await ui.find({ type: 'Text', text: /钢铁厂 I→II ×12/ })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'cancel:proj-upgrade' })).toBeDefined()
+    await ui.unmount()
+  })
+
+  test('the economy tab draws tier proportion bars from buildingTiers', async ($, on) => {
+    const world = newWorld(3, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    // A 63/37 mix: the bar must report the buildingTiers distribution, not the
+    // raw seat count, and must not leak the per-tier recipe note.
+    qing.econ.buildings.steelMills = 100
+    qing.econ.buildingTiers.steelMills = [63, 37]
+    on('ui.render', { component: 'Pane', requestId: 'econ-pane' }, async ($hang, e) => {
+      const kit = ($hang as unknown as { ui: { resolve: (x: unknown) => UiKit } }).ui.resolve(e)
+      return (
+        <Panel
+          ui={kit}
+          world={world}
+          width={e.props.bodyColumns}
+          tab="economy"
+          notice=""
+          onTab={() => undefined}
+          onControl={() => undefined}
+          onEvent={() => undefined}
+          council={{ isOpen: true, report: '', secretaryReport: '', isRunning: false }}
+          onCouncil={() => undefined}
+        />
+      )
+    })
+    const ui = await $.ui.mount({
+      plugin: 'terminal-legend',
+      surface: 'terminal',
+      component: 'Pane',
+      requestId: 'econ-pane',
+      props: PANE_PROPS,
+    })
+    expect(await ui.find({ type: 'Text', text: /建筑与基础设施/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /钢铁厂/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /I 级 63%/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /II 级 37%/ })).toBeDefined()
+    expect(
+      await ui.find({ type: 'Text', text: /钢铁，铁矿石与煤的冶炼/ }),
+    ).toBeUndefined()
+    await ui.unmount()
+  })
+
+  test('the tech tab is read-only: researchable nodes are Text, not buttons', async ($, on) => {
+    const world = newWorld(3, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    const pickable = TECH_NODES.find(node => canResearchNode(qing.tech, node))
+    expect(pickable).toBeDefined()
+    if (pickable === undefined) return
+    on('ui.render', { component: 'Pane', requestId: 'tech-pane' }, async ($hang, e) => {
+      const kit = ($hang as unknown as { ui: { resolve: (x: unknown) => UiKit } }).ui.resolve(e)
+      return (
+        <Panel
+          ui={kit}
+          world={world}
+          width={e.props.bodyColumns}
+          tab="tech"
+          notice=""
+          onTab={() => undefined}
+          onControl={() => undefined}
+          onEvent={() => undefined}
+          council={{ isOpen: true, report: '', secretaryReport: '', isRunning: false }}
+          onCouncil={() => undefined}
+        />
+      )
+    })
+    const ui = await $.ui.mount({
+      plugin: 'terminal-legend',
+      surface: 'terminal',
+      component: 'Pane',
+      requestId: 'tech-pane',
+      props: PANE_PROPS,
+    })
+    expect(await ui.find({ type: 'Text', text: /v3_action research/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /可研究/ })).toBeDefined()
+    // Before §S6 a researchable node rendered its name as a Button; the Text
+    // lookup would then fail. Now the whole panel is a read-only dashboard.
+    expect(await ui.find({ type: 'Text', text: new RegExp(pickable.name) })).toBeDefined()
     await ui.unmount()
   })
 })

@@ -204,7 +204,7 @@ export function helpText(): string {
     '/v3 secretary         让秘书拟旨（报告稍后呈上）',
     '/v3 delegate internal|diplomacy on|off  切换委托',
     '/v3 panel             打开完整面板',
-    '　建造面板：x*y 下单（每槽座数 × 槽位数）、取消、插队/重排',
+    '　建造面板（只读）：下单请在对话中下令（v3_action build/upgrade），行内可取消/↑/↓/置顶',
     '/v3 events            查看待决事件',
     '/v3 resolve <事件> <选项>  处理事件',
     '/v3 play <国家>       切换扮演国家',

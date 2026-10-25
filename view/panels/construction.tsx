@@ -1,4 +1,4 @@
-import type { BuildingId, ControlPayload, WorldState } from '../../types'
+import type { BuildingId, ConstructionProject, ControlPayload, WorldState } from '../../types'
 import { BUILDINGS, BUILDING_IDS, INFRA_BUILDING_IDS } from '../../engine/data'
 import {
   CAPACITY_COST,
@@ -8,18 +8,32 @@ import {
   constructionLoad,
   constructionSchedule,
   constructionTotalCost,
+  projectKind,
   projectWorkload,
 } from '../../engine/sim'
-import { bar, fmtMoney, fmtNumber, padEnd } from '../format'
+import { bar, fmtMoney, fmtNumber, padEnd, tierName } from '../format'
 import { Heading, playerOf, type ControlAction, type UiKit } from './shared'
 
 /**
- * The construction panel (plan 0013): the buildable-building roster with `x*y`
- * order buttons, plus the queue where every entry exposes its id and carries
- * cancel / move-up / move-down / move-to-head controls. Shared by the council
- * and economy panels so the build surface is one implementation (resolves
- * PT-037 at the UI level). View-only: it never mutates world state, it only
- * emits `onControl` payloads.
+ * Player-facing queue-row label (plan 0015 §S6): a new build reads `农场×2`,
+ * an upgrade reads `钢铁厂 I→II ×12` from the project's `fromTier`/`toTier`.
+ */
+export function projectLabel(project: ConstructionProject): string {
+  const name = BUILDINGS[project.building].name
+  if (projectKind(project) === 'upgrade') {
+    return `${name} ${tierName((project.fromTier ?? 0) + 1)}→${tierName((project.toTier ?? 0) + 1)} ×${project.count}`
+  }
+  return `${name}×${project.count}`
+}
+
+/**
+ * The construction panel (plan 0013 §S6 / ADR 0031 §8): a read-only roster of
+ * the buildable buildings plus the queue, where every entry carries cancel /
+ * move-up / move-down / move-to-head controls. Ordering lives in the dialogue
+ * (`v3_action build` / `v3_action upgrade`); queue management stays. Shared by
+ * the council and economy panels so the build surface is one implementation
+ * (resolves PT-037 at the UI level). View-only: it never mutates world state,
+ * it only emits `onControl` payloads.
  */
 export type ConstructionPanelProps = {
   ui: UiKit
@@ -34,6 +48,13 @@ type BuildingGroup = { label: string; ids: BuildingId[] }
 export type StatCell = { key: string; width: number; text: string; color?: string }
 
 /**
+ * Cells a roster row's fixed columns occupy: the 8-cell name plus gaps and the
+ * tech-tier column. Orders left the panel (plan 0015 §S6), so three 4-cell
+ * buttons no longer have to be reserved.
+ */
+export const STAT_ROW_RESERVED = 12
+
+/**
  * Drops stat cells until the row fits `width` terminal cells (PT-059).
  *
  * Rendering every column into a narrow pane made the Text nodes shrink and
@@ -43,9 +64,8 @@ export type StatCell = { key: string; width: number; text: string; color?: strin
  */
 export function fitStatCells(cells: StatCell[], width: number): StatCell[] {
   const priority = ['upkeep', 'cost', 'volume', 'stock', 'profit']
-  // name column + the three order buttons + their gaps/margins. Generous on
-  // purpose: under-reserving is what truncated the numbers in the first place.
-  let available = Math.max(0, width - 8 - 12 - 4)
+  // Generous on purpose: under-reserving is what truncated the numbers first.
+  let available = Math.max(0, width - STAT_ROW_RESERVED)
   const keep = new Set<string>()
   for (const key of priority) {
     const cell = cells.find(entry => entry.key === key)
@@ -103,10 +123,10 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
           {econ.lastConstructionRent > 0 ? ` · 私人租用 +${fmtMoney(econ.lastConstructionRent)}` : ''}
         </Text>
         <Text dimColor>
-          新单默认入队尾，「⇤1×1」插入队首；私人项目可见、不可取消 · 私人流转建造力 自有 {fmtNumber(load.privateOwn)} · 租用国有 {fmtNumber(load.privateRented)} · 市场 {fmtNumber(load.privateMarket)} 点/月 · 租金 {fmtMoney((load.privateRented + load.privateMarket) * CONSTRUCTION_RENT_PER_POINT)}
+          下单请在对话中下令（v3_action build / upgrade）；行内只保留队列管理 · 私人项目可见、不可取消 · 私人流转建造力 自有 {fmtNumber(load.privateOwn)} · 租用国有 {fmtNumber(load.privateRented)} · 市场 {fmtNumber(load.privateMarket)} 点/月 · 租金 {fmtMoney((load.privateRented + load.privateMarket) * CONSTRUCTION_RENT_PER_POINT)}
         </Text>
         {stateQueue.length === 0 ? (
-          <Text dimColor>没有在建的国有项目。用下方「可建建筑」下令；项目按队列顺序消耗建造点。</Text>
+          <Text dimColor>没有在建的国有项目。下单请在对话中下令（v3_action build / upgrade）；项目按队列顺序消耗建造点。</Text>
         ) : (
           stateQueue.map((project, position) => {
             const prev = stateQueue[position - 1]
@@ -115,7 +135,7 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
             return (
               <Box flexDirection="row" columnGap={1} key={`queue:${project.id}`}>
                 <Text wrap="truncate">{padEnd(`#${position + 1}`, 4)}</Text>
-                <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 12)}</Text>
+                <Text wrap="truncate">{padEnd(projectLabel(project), 16)}</Text>
                 <Text color="cyan">{padEnd(bar(project.progress, 1, 8), 9)}</Text>
                 <Text dimColor>
                   剩余 {fmtNumber(workload * (1 - project.progress))}/{fmtNumber(workload)} 点 · 进度 {Math.round(project.progress * 100)}% · 本月投入 {fmtNumber(load.byProject[project.id] ?? 0)} 点 · 预计 {schedule[project.id]?.turns ?? '—'} 回合 · 造价 {constructionTotalCost(project).toFixed(1)} 金
@@ -151,7 +171,7 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
               return (
                 <Box flexDirection="row" columnGap={1} key={`private:${project.id}`}>
                   <Text color="magenta">{padEnd('私人', 4)}</Text>
-                  <Text wrap="truncate">{padEnd(`${BUILDINGS[project.building].name}×${project.count}`, 12)}</Text>
+                  <Text wrap="truncate">{padEnd(projectLabel(project), 16)}</Text>
                   <Text color="cyan">{padEnd(bar(project.progress, 1, 8), 9)}</Text>
                   <Text dimColor>
                     剩余 {fmtNumber(workload * (1 - project.progress))}/{fmtNumber(workload)} 点 · 进度 {Math.round(project.progress * 100)}% · 本月自有 {fmtNumber(byProject?.own ?? 0)} / 租用 {fmtNumber(byProject?.rented ?? 0)} 点 · 预计 {schedule[project.id]?.turns ?? '—'} 回合
@@ -167,7 +187,7 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
         <Heading
           ui={props.ui}
           text="可建建筑"
-          hint="x*y = 每槽 x 座 × y 槽；⇤ = 插入队首"
+          hint="只读清单；下单请在对话中下令（v3_action build / upgrade）"
         />
         {buildingGroups().map(group => (
           <Box flexDirection="column" key={`group:${group.label}`}>
@@ -208,9 +228,6 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
                   {tech === undefined ? null : (
                     <Text dimColor wrap="truncate">{padEnd(`层${tech}`, 3)}</Text>
                   )}
-                  <Button key={`o:${id}:1x1`} label="1×1" onPress={() => props.onControl('build', { building: id, perSlot: 1, slots: 1 })} />
-                  <Button key={`o:${id}:5x1`} label="5×1" onPress={() => props.onControl('build', { building: id, perSlot: 5, slots: 1 })} />
-                  <Button key={`o:${id}:head`} label="⇤" onPress={() => props.onControl('build', { building: id, perSlot: 1, slots: 1, position: 'head' })} />
                 </Box>
               )
             })}

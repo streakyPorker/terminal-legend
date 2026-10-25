@@ -1,9 +1,9 @@
-import type { ControlPayload, Country, TechNodeDef, WorldState } from '../../types'
+import type { Country, TechNodeDef, WorldState } from '../../types'
 import { BUILDINGS, GOODS, TECH_NODES, canResearchNode, techNode, techNodeName, techTier } from '../../engine/data'
 import { techDiffusionBonus, techSpillRate } from '../../engine/tech'
 import { MODIFIER_STAT_NAMES } from '../../engine/modifiers'
 import { bar, fmtNumber, fmtPercent, padEnd } from '../format'
-import { Heading, StatLine, playerOf, type ControlAction, type UiKit } from './shared'
+import { Heading, StatLine, playerOf, type UiKit } from './shared'
 
 const BRANCH_LABELS: Record<TechNodeDef['branch'], string> = {
   general: '通用时代线',
@@ -62,21 +62,15 @@ function NodeCard(props: {
   ui: UiKit
   player: Country
   node: TechNodeDef
-  onSelect: (id: string) => void
 }): any {
-  const { Box, Text, Button } = props.ui
+  const { Box, Text } = props.ui
   const { node, player } = props
   const status = statusOf(player, node)
   const progress = player.tech.nodes[node.id] ?? 0
-  const canPick = status.text === '可研究'
   return (
     <Box flexDirection="column">
       <Box flexDirection="row" columnGap={1}>
-        {canPick ? (
-          <Button plain label={padEnd(node.name, 10)} onPress={() => props.onSelect(node.id)} />
-        ) : (
-          <Text color={status.color} wrap="truncate">{padEnd(node.name, 10)}</Text>
-        )}
+        <Text color={status.color} wrap="truncate">{padEnd(node.name, 10)}</Text>
         <Text dimColor wrap="truncate">{padEnd(`时代${node.era}`, 5)}</Text>
         <Text dimColor wrap="truncate">{padEnd(`${node.cost}点`, 6)}</Text>
         <Text color={status.color}>{status.text}</Text>
@@ -95,14 +89,13 @@ function NodeCard(props: {
  * The tech tree page (plan 0005 §5, K3): era / rate / current research / spill
  * and diffusion up top, then the general era line and the industry / admin /
  * military columns. A narrow terminal degrades the three branches to one
- * column. Picking a researchable node emits an `onControl('research')`; the
- * panel never writes world state directly.
+ * column. Read-only since plan 0015 §S6: a researchable node is a status line,
+ * not a button — research is ordered through the dialogue (`v3_action research`).
  */
 export function TechPanel(props: {
   ui: UiKit
   world: WorldState
   width: number
-  onControl: (control: ControlAction, payload?: ControlPayload) => void
 }): any {
   const { Box, Text } = props.ui
   const player = playerOf(props.world)
@@ -113,19 +106,12 @@ export function TechPanel(props: {
   const spill = techSpillRate(player)
   const diffusion = techDiffusionBonus(props.world, player)
   const wide = props.width >= 96
-  const onSelect = (id: string): void => props.onControl('research', { tech: id })
 
   const branch = (branchId: TechNodeDef['branch']): any => (
     <Box flexDirection="column" key={`branch:${branchId}`}>
       <Heading ui={props.ui} text={BRANCH_LABELS[branchId]} />
       {TECH_NODES.filter(node => node.branch === branchId).map(node => (
-        <NodeCard
-          key={node.id}
-          ui={props.ui}
-          player={player}
-          node={node}
-          onSelect={onSelect}
-        />
+        <NodeCard key={node.id} ui={props.ui} player={player} node={node} />
       ))}
     </Box>
   )
@@ -149,6 +135,7 @@ export function TechPanel(props: {
       <StatLine ui={props.ui} label="跨分支溢出" value={fmtPercent(spill)} />
       <StatLine ui={props.ui} label="国际扩散" value={`+${fmtPercent(diffusion)}`} />
       <StatLine ui={props.ui} label="科技层级" value={techTier(tech).toFixed(2)} />
+      <Text dimColor>面板只读；研究请在对话中下令（v3_action research）。</Text>
 
       <Box flexDirection="column" marginTop={1}>{branch('general')}</Box>
       <Box flexDirection={wide ? 'row' : 'column'} columnGap={4} marginTop={1}>

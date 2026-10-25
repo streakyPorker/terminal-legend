@@ -107,6 +107,11 @@ export function bar(value: number, max: number, width: number, full = '█', emp
   return `${full.repeat(filled)}${empty.repeat(size - filled)}`
 }
 
+const ROMAN_TIERS = ['I', 'II', 'III']
+
+/** 1-based building tier → its roman numeral, matching `v3_inspect construction`. */
+export const tierName = (tier: number): string => ROMAN_TIERS[tier - 1] ?? String(tier)
+
 export function sparkline(values: number[], width = 12): string {
   const slice = values.slice(-Math.max(1, width))
   if (slice.length === 0) return ''

@@ -284,8 +284,9 @@ GLOSSARY（航线/到岸成本/软容量/禁运）。
      军事/科技/事件/日志）。「市场」只包含商品供需与对外贸易伙伴（贸易航路），其余经济内容留在
      「经济」；「排名」按经济、人口与社会、军事、科技与行政、外交与威望五维列出列强。
 - 另外 `/v3 ...` 命令的输出会在对话里渲染成富文本报告。
-- **建造面板（ADR 0027）**：`view/panels/construction.tsx` 的共享 `ConstructionPanel` 同时挂在
-  御前面板与经济面板——「可建建筑」清单（23 类、按 6 族分组、`x*y` 下单按钮）+
+- **建造面板（ADR 0027 / ADR 0031 §8）**：`view/panels/construction.tsx` 的共享 `ConstructionPanel`
+  同时挂在御前面板与经济面板——「可建建筑」只读清单（23 类、按 6 族分组，下单须在对话中
+  下令 `v3_action build`/`upgrade`）+
   「国有建造队列」（`#index`/`id`、进度、取消/↑/↓/置顶；私人条目只读）。面板只读世界状态，
   只通过 `onControl(control, payload)` 抛出意图。
 
@@ -415,7 +416,7 @@ view/format.ts               数字、进度条、火花线、状态行
 view/panels/index.tsx        桶：原样再导出旧 view/panels.tsx 的全部公共符号，`./panels` 导入路径不变
 view/panels/shared.tsx       面板共享层：UiKit/控制类型、Heading/StatLine/Meter/TableRow、playerOf/pendingOf/partnerTotals、SituationCard、PanePlaceholder、helpText
 view/panels/panel.tsx        Panel 标签分发 + TABS
-view/panels/construction.tsx 共享建造面板：可建建筑（23 类/6 族、x*y 下单）+ 队列（取消/↑/↓/置顶）
+view/panels/construction.tsx 共享建造面板：只读可建建筑（23 类/6 族）+ 队列（取消/↑/↓/置顶）
 view/panels/overview.tsx     概览面板
 view/panels/council.tsx      御前面板（含 ConstructionPanel）
 view/panels/market.tsx       市场面板
@@ -423,7 +424,7 @@ view/panels/economy.tsx      经济面板（含 ConstructionPanel）
 view/panels/pops.tsx         人口面板
 view/panels/diplomacy.tsx    外交面板
 view/panels/military.tsx     军事面板
-view/panels/tech.tsx         科技树面板（时代/点数/研究/溢出/扩散 + 通用线 + 三分支，窄屏单列，点节点经 onControl('research') 切换研究）
+view/panels/tech.tsx         科技树面板（时代/点数/研究/溢出/扩散 + 通用线 + 三分支，窄屏单列；只读，研究经对话 v3_action research）
 view/panels/events.tsx       事件面板
 view/panels/log.tsx          日志面板
 view/panels/rankings.tsx     排名面板
