@@ -3,6 +3,7 @@
 - Status: **planned**（决策见 `docs/adr/0031-tech-tiers-and-sea-control.md`；目标 World **v14**）
 - Depends on: ADR 0021（配方单一真源）、ADR 0022（利用率与利润）、ADR 0026（建筑扩张）、ADR 0030（科技树）
 - Supersedes: ADR 0027 的「面板下单」部分；ADR 0030 的 16 节点表
+- 评审：本计划已按 `critic` 评审修订（F1–F6 / M1–M16），修订点在各切片内标 **〔评审〕**。
 
 ## 0. 目标与边界
 
@@ -10,168 +11,198 @@
 
 **本轮做**：
 
-- 科技树 16 → **20 节点**，效果全部重写，新增五类「解锁型」效果；
-- **建筑分级**（同 id 内 1–3 级，混级共存，按座加权）；
-- **升级项目**（队列新类型，按座、可大批量、占建造力）；
+- 科技树 16 → **20 节点**，效果全部重写，新增四类「解锁型」效果；
+- **建筑分级**（同 id 内 1–3 级，混级共存，按座加权；`BUILDING_RECIPES` 即 I 级）；
+- **新建可选等级 + 升级项目**（升级省工程量、单价同新建、计入投资）；
 - **三座新建筑 + 三个新商品**（化工厂/发电厂/机车厂；化工品/电力/机车）；
-- **海军接上战争**（`navalQuality` + 制海权五档 + 每月分数累加 + 封锁）；
-- **面板改为只读仪表盘**（移除下单按钮，建筑页只显示等级比例条）。
+- **海军最简版**（`navalQuality` + 制海权五档 + 可结束战争的分数 + 封锁）；
+- **面板改为只读仪表盘**（移除下单按钮）。
 
 **本轮不做**：
 
-- 第五时代（1900）——留作后续；
-- 政策模板库——只做解锁门控，模板本身不建；
-- 完整 PT-068（需求随生活水平/识字率演进）——只做节点级 `demandShift`；
-- 陆海兵种/舰种细分——只做质量系数，不做编成。
+- 第五时代（1900）；
+- 政策模板库与 `policyGate`（没有可门控的注册表；评审 F5/M5）；
+- 完整 PT-068（只做节点级 `demandShift`）；
+- 完整战争线（海战损耗、海域分区、封锁外交代价）——本轮海军只到「最简可玩」。
 
 ## 1. 切片
 
-六个垂直切片，每片**可独立验收**、可单独提交。切片之间尽量走桶文件重导出，避免大面积改 import。
+七个切片，**按顺序提交**。S0 先让世界能编译、能存档、能跑全量测试。
 
-### S1 数据与版本：建筑分级表 + 20 节点骨架 + v14
-
-**做**
-
-1. `types/index.d.ts`：`CURRENT_WORLD_VERSION = 14`；新增 `BuildingTierDef`、`Country.econ.buildingTiers`、
-   `ConstructionProject.kind: 'build' | 'upgrade'`、`military.navalQuality`、三个新 `GoodId`、三个新 `BuildingId`。
-2. `engine/data/buildings.ts`：为覆盖范围内的建筑写 `tiers: BuildingTierDef[]`；其余建筑保留单级（隐式 I 级）。
-3. `engine/data/goods.ts`：新增 `chemicals` / `electricity` / `locomotives` 的 `name` / `basePrice`；
-   `chemicals` 进 `CONSUMER_GOODS` / `SUBSISTENCE` / `INCOME_ELASTICITY`。
-4. `engine/data/tech.ts`：20 节点表（效果先占位为 `modifier` 也行，但**结构**必须是新的）。
-5. `engine/save.ts` + `engine/data/world.ts`：v14 写盘，v13 拒绝。
-
-**验收**
-
-- `world.version === 14`；v13 存档被拒且报错文本明确；
-- 新建世界时每国 `buildingTiers` 全为 `[count, 0, 0]`（存量 === 建筑数）；
-- 每个 `GoodId` 有 price/production 初值；`CONSUMER_GOODS` 含 `chemicals`；
-- 20 个节点的 id 唯一、前置存在、无环（新增一条**表完整性测试**）；
-- 全量测试通过（此切片只加数据，经济数值应几乎不动）。
-
-### S2 建筑分级结算：按座加权
+### S0 结构片：v14 骨架一次到位 〔评审 F6〕
 
 **做**
 
-1. `computeProduction` / `computeDemand` 改读 `buildingTiers`：每类建筑的产出、投入、劳动需求
-   按各级座数加权求和（同级内仍是 `count × coefficient`）。
-2. `buildingProfits` 快照按级拆分（每类仍给一行，但内部按级加权；必要时新增逐级行）。
-3. `utilization` 门控按**类**生效（不按级），保持 ADR 0022 的语义。
-4. 私人投资 / 深度萎缩按**类**判断，不按级。
+1. `CURRENT_WORLD_VERSION = 14`；v13 拒绝。
+2. 所有新字段与占位一次加完（即使语义未启用）：
+   `Country.econ.buildingTiers`、`ConstructionProject.kind`、
+   `BuildTierDef`、`military.navalQuality`、`War.seaControl?`；
+   `GoodId += chemicals/electricity/locomotives`；`BuildingId += chemicalWorks/powerPlants/locomotiveWorks`。
+3. 所有 `Record<BuildingId, …>` / `Record<GoodId, …>` 补占位（`BUILDING_RECIPES`、`CAPACITY_COST`、
+   `INVESTMENT_DEMAND`、`BUILDING_OUTPUT`、`GOODS`、`SUBSISTENCE` 等），新建筑先给**空配方**。
+4. `view/panels/tech.tsx` 的 `effectText` 改为按 `effect.kind` 分支（否则新联合类型编译不过）。
+5. 工具 schema 的建筑枚举改为从 `BUILDING_IDS` 生成。
 
 **验收**
 
-- 全 I 级时，产出与 v13 **逐位等价**（用冻结的 v13 oracle 对照）；
-- 混合等级（如 5 座 I + 3 座 II）的产出 === 各级加权和；
-- 劳动需求、工资分摊、`Σ buildingProfits.wages === 全国 wages` 仍成立；
-- 60/120 月确定性与金币守恒不破。
+- 全量测试通过；`world.version === 14`；v13 存档被拒；
+- 新建筑在 v14 中**不可建**（空配方 + 未解锁），市场里三个新商品价格为基价、供需为 0；
+- 每国 `buildingTiers[id] === [buildings[id]]`（全部 I 级）。
 
-### S3 升级项目与科技解锁（钢铁链贯通）
+### S1 单一真源与分级结算 〔评审 F2/F3/M1/M2〕
 
 **做**
 
-1. `ConstructionProject.kind = 'upgrade'`：`building`、`fromTier`、`toTier`、`count`；
-   工程量 = `count × 升级单价`，**无材料投入**，造价 = 工程量 × 0.2 金。
-2. 建造力分配与普通项目同池；同月混合时按队列顺序。
-3. `v3_action upgrade`（新动作）：`building`、`fromTier`、`toTier`、`count`；
-   校验：等级上限已由科技解锁、`fromTier` 座数足够。
-4. 科技效果 `unlockTier` 安装：提升该国该类建筑的等级上限。
-5. **钢铁链垂直验收**：`industry-*` 节点解锁 `steelMills` II/III；升级后钢铁厂产出上升。
+1. `recipeAt(id, tier)` 访问器：`tier === 0` 返回 `BUILDING_RECIPES[id]`，`tier ≥ 1` 返回 `tiers[tier-1]`。
+2. 全部消费方改读 `recipeAt`（`economy.ts`、`derivations.ts`、`inspect/buildings.ts`、`investment.ts`）。
+3. `buildingTiers` 作为**座数分布**，与 `buildings` 恒等；四条写路径（建成/升级/折旧/天命）
+   走同一个 mutator `applyBuildingDelta(country, id, tier, delta)`。
+4. **口径写死**（评审 M1）：在生产、利润收入/投入、中间需求、劳动需求、基础设施需求、工资权重
+   六处，分别明确用「原始座数」还是 `effectiveCount` 后的座数，并在代码注释与测试里标明。
+5. `buildingProfits` **保持每类一行**（评审 M2）；逐级明细另开只读 `tierProfits?`，本轮可不做。
 
 **验收**
 
-- 钢铁厂从 I 升 II：产出提升符合配方表，投入按新配方；
-- 未解锁 II 级时 `upgrade` 被拒且给出中文原因；
-- 不可升级超过该国库存座数；
-- 升级占用建造力、当月扣费正确；存档往返后升级项目可继续；
-- 一条端到端测试：研究节点 → 解锁 → 升级 → 产出变化。
+- 全 I 级时输出与 v13 **冻结 oracle 逐位一致**；
+- 混合级（5 I + 3 II）的产出、投入、劳动需求等于**独立手算值**（不调用引擎 helper）；
+- 每次变更后 `Σ tiers === buildings`；60/120 月确定性与金币守恒不破。
 
-### S4 三座新建筑与三个新商品
+### S2 升级项目与钢铁链贯通 〔评审 M6/M7〕
 
 **做**
 
-1. `chemicalWorks`（1865）、`powerPlants`（1880）、`locomotiveWorks`（1880）；
-   配方、造价、工程量、`infrastructureNeed`、`unlock`。
-2. `chemicals` 进篮子后的 Stone-Geary 重校准（生存线、收入弹性）。
-3. `electricity` 作为若干建筑的中间投入 + 全局产出加成（系数待定）。
-4. `locomotives` 作为 III 级 `infrastructure` 的升级投入。
-5. AI 建造候选表更新（新建筑可被 AI 选择）。
+1. `kind === 'upgrade'` 在**全链路**分支：`normalizeConstructionQueue`（不按 5 座拆槽）、
+   `projectWorkload`、`settleConstruction` 的投资需求、`runProject` 完成、`completeUpgrade`
+   （**不调用 `completeBuilding`**，不触发市场接入/识字等副作用）、`cheat.finishProjects`、
+   `inspect/construction` 展示。
+2. `v3_action upgrade`：`building`、`fromTier`、`toTier`、`count`（无 5 上限）；`v3_action build` 增加 `tier`。
+3. **座数预约**：下单时校验「库存 − 已预约」，完成时再校验；不足则部分完成并回写剩余订单。
+4. 升级工程量 = 同级新建的 **≤60%**；单价与新建一致（0.2 金/点）；**计入投资**。
+5. **营造所不可升级**；升级项目不提高建造力。
 
 **验收**
 
-- 三个商品在市场中双向可交易（若设计为单侧，须在测试里显式断言）；
-- 化工厂进篮子后，1836 十国的生存线与生活水平**无跳变**（回归测试）；
-- 三座建筑在解锁前不可建、解锁后可建；
-- F7 毛利带对新增建筑有断言。
+- 钢铁厂 I→II 的产出、投入、利润符合 `recipeAt('steelMills', 1)`；
+- 未解锁 II 级时 `upgrade` 被拒；超过库存座数被拒；重复下单不超额；
+- 升级项目不触发建成副作用（市场接入不涨、学校识字不涨）；
+- 存档往返后可继续施工；端到端：研究节点 → 解锁 → 升级 → 产出变化。
 
-### S5 科技效果类型学与 20 节点落值
+### S3 20 节点与四类效果 〔评审 F1/M3/M16〕
 
 **做**
 
-1. 实现 `unlockTier` / `unlockBuilding` / `unlockLaw` / `policyGate` / `demandShift` 的安装与消费。
-2. 20 个节点的最终效果落值（每节点至少一项解锁类效果）。
-3. `v3_action law` 校验科技前置；`v3_policy` 校验 `policyGate`。
-4. 面板显示节点效果（新效果类型的中文文本）。
+1. 实现 `unlockTier` / `unlockBuilding` / `unlockLaw` / `demandShift` 的安装与消费。
+2. 20 个节点按**附录 A** 落值；每个节点至少一项解锁类效果。
+3. **种子节点安装效果**：世界创建时对 `tech.unlocked` 逐个安装（评审 M3）。
+4. 通用线第 5 个节点 era 明确（附录 A：1/1/2/3/4），完成路径加 `clampEra`。
+5. `v3_action law` 校验科技前置；面板显示新效果类型的中文文本。
 
 **验收**
 
-- 每个节点至少有一项 `unlock*` / `policyGate` / `demandShift`（表完整性测试）；
-- 法案与政策的解锁校验有正反用例；
-- `demandShift` 作用到需求后，价格与贸易有可解释的变化；
-- AI 科技选择在 20 节点下仍确定、仍按分支优先。
+- 节点表完整性：id 唯一、前置存在、无环、每节点至少一项解锁效果（**表驱动测试**）；
+- 开局国家的已解锁节点效果已生效（GBR 的 era 2 节点有实际差异）；
+- 法案解锁正反用例；`demandShift` 作用后价格与贸易有可解释变化。
 
-### S6 海军：舰船质量与制海权
+### S4 三座新建筑与三个新商品 〔评审 M4/M12/M13/M14〕
 
 **做**
 
-1. `navalQuality` 字段：种子初始值、科技节点提升、存档往返。
-2. `seaPower = navy × navalQuality × (1 + techTier × 系数)`；`navyStrength` 修正接上消费者。
-3. 制海权五档（全球比值），每月写入战争记录。
-4. 战争分数每月累加（优势 +0.4、完全控制 +0.8）。
-5. 封锁：默认切交战国海上贸易；可指定国家（含中立国）。
-6. `v3_inspect military` 显示 `seaPower`、`navalQuality`、当前制海权档位。
+1. `chemicalWorks`（1865）、`powerPlants`（1880）、`locomotiveWorks`（1880）：按附录 B 落配方。
+2. `chemicals` **1865 前需求为 0**；III 时代节点用 `demandShift` 开启需求（评审 M4）。
+3. `electricity` 加入 `NON_TRADABLE`；自产电力给全局产出乘数（进口不计）。
+4. `locomotives` 作为 III 级 `infrastructure` 的**持续投入**，并提高 III 级供给系数。
+5. `INFRA_SUPPLY` 与 `navalBases` 编练率改为**按级系数**（评审 M9）。
+6. AI 建筑列表、`isBuildingUnlocked`、私人投资解锁检查（ADR §9.2）。
 
 **验收**
 
-- 1839 基线（英 120 艘 vs 清 48.9 艘）下，英国取得制海权，分数按档位累加；
-- 同等海军但质量差悬殊时，结果按 `seaPower` 而非数量；
-- 封锁切断指定航线的当月运量，解除后恢复；
-- 海军不再"只有数字"：一场没有陆战、只有封锁的战争也能因分数累加结束；
-- 存档往返后制海权状态一致。
+- 化工品在 1865 前需求为 0，`demandShift` 后进入篮子且 `Σ INCOME_ELASTICITY === 1`；
+- 电力不可贸易；进口电力不给产出加成；
+- III 级基础设施供给 > II 级 > I 级；海军营地编练率同理；
+- 新建筑解锁前不可建（玩家、AI、私人投资三条路径都拒绝）；
+- 新建筑毛利用**解锁后的稳态 fixture** 断言（评审 M13）。
 
-### S7 界面：面板只读
+### S5 海军最简版 〔评审 F5/M11/M15〕
 
 **做**
 
-1. 建造页移除三个下单按钮，保留取消 / ↑ / ↓ / 置顶；说明文字改为「下单请在对话中下令」。
-2. 建筑页改为**等级比例条**（每类一行：名称 + 比例条 + 经营利润简项）。
-3. 队列行显示升级项目（`钢铁厂 I→II ×12`）。
-4. 面板其余页签保持可读，但**操作入口**统一改走对话（税率/研究/法案等按钮一并移除或改为提示）。
+1. `military.navalQuality` 种子值、`immediate` 提升、存档往返。
+2. `seaPower = navy × navalQuality × (1 + navyStrength/100)`；**不再乘 `techTier`**。
+3. 制海权五档（≥2.0 完全控制 / ≥1.25 优势 / 0.8–1.25 均势 / 其余劣势或丧失）。
+4. 分数：**优势 +0.75/月，完全控制 +1.5/月**；在贸易清算**之前**计算，当月生效。
+5. 封锁：切断**敌国与第三方**贸易；可指定国家（含中立国），附带关系与恶名代价。
+6. `v3_action blockade`（或 `v3_diplomacy move=blockade`）；`v3_inspect military` 显示 `seaPower` 与档位。
 
 **验收**
 
-- 面板上不存在任何写状态的下单按钮；队列管理按钮仍工作；
-- 建筑页比例条与 `buildingTiers` 一致；
-- 旧的面板测试（`panel-build.test.tsx` 等）按新定位改写，不再断言下单按钮。
+- 1839 基线用**可复现 fixture**（`newWorld(seed,'QING')` + 手工设定双方舰队与 `navalQuality`），
+  不依赖当前活档（评审 M15）；
+- 完全控制 50 个月可打到 75 分（纯封锁能结束战争）；
+- 数量相同、质量悬殊时按 `seaPower` 判定；
+- 封锁切断指定航线且当月生效；解除后恢复；和平时清理封锁记录。
+
+### S6 界面：面板只读
+
+**做**
+
+1. 建造页移除三个下单按钮，保留取消 / ↑ / ↓ / 置顶；`inspect`/提示改为「下单请在对话中下令」。
+2. **经济页「建筑与基础设施」段**改为等级比例条（无独立建筑页签——评审次要项）。
+3. 科技页研究按钮一并移除（面板只读），研究改走 `v3_action research`。
+4. 队列行显示升级项目（`钢铁厂 I→II ×12`）。
+
+**验收**
+
+- 面板上不存在任何写状态的按钮；队列管理仍工作；
+- 比例条与 `buildingTiers` 一致；
+- `panel-build.test.tsx`、`construction-layout.test.ts`、`game.test.tsx` 按新定位改写。
+
+## 附录 A：20 节点表（待落值）
+
+> 评审 F1：数值必须先冻结，否则验收悬空。下表是**结构**，数值在 S3 开工前填满并做成测试 fixture。
+
+| 分支 | era 1 | era 2 | era 3 | era 4 | 第 5 个 |
+| --- | --- | --- | --- | --- | --- |
+| 通用 | 传统农业 | 蒸汽时代 | 工业时代 | 电气时代 | **同代节点（era 4）** |
+| 工业 | 纺织机械化 | 蒸汽动力 | 钢铁工业 | 电气化 | 化工合成（解锁化工厂） |
+| 行政 | 文官制度 | 公共教育 | 财政改革 | 大众政治 | 统计与普查 |
+| 军事 | 线膛枪 | 铁路动员 | 后装火炮 | 总参谋部 | 铁甲舰队（navalQuality） |
+
+**通用线 era：1 / 1 / 2 / 3 / 4**（第 5 个与第 2 个同为 era 1 或独立定档，S3 前定死并加 `clampEra`）。
+
+## 附录 B：分级配方（待落值）
+
+> 每类建筑必须给出：I 级（现有 `BUILDING_RECIPES`，不动）、II 级、III 级的 output/input/labor；
+> 升级工程量比例（≤60%）。S1 开工前填满。
+
+| 建筑 | II 级方向 | III 级方向 | 工程量 |
+| --- | --- | --- | --- |
+| steelMills | 产出 +35%，煤/矿投入 +15% | 转炉：产出再 +35% | ≤60% |
+| machineryWorks / arsenals | 同上 | 同上 | ≤60% |
+| coalMines / ironMines / lumberMills | 产出 +30% | 产出再 +30% | ≤60% |
+| infrastructure | `INFRA_SUPPLY` ×1.3 | ×1.6，需 `locomotives` | ≤60% |
+| navalYards / navalBases | 船只产出 / 编练率 ×1.25 | ×1.5 | ≤60% |
+| textileMills / furnitureWorks / distilleries / luxuryWorks | 产出 +30%，投入 +12% | 产出再 +30% | ≤60% |
 
 ## 2. 迁移与兼容
 
 - **不做兼容层**（ADR 0005）：v13 存档拒绝载入，当前 1839 年活档作废。
-- `ensureGoodsFields` / `ensureConstructionFields` 仍保留（未来再加字段时用），但 v14 的**结构变动**
-  （`buildingTiers`、`project.kind`、`navalQuality`）不靠它们填补。
+- 保留 `ensureGoodsFields` / `ensureConstructionFields` 作为未来加字段的工具；v14 的结构变动不靠它们。
 
 ## 3. 风险与对策
 
 | 风险 | 对策 |
 | --- | --- |
-| 分级使产出/需求/劳动/利润四处按座加权，回归面巨大 | S2 用「全 I 级逐位等价 v13 oracle」守住基准，再测混合等级 |
-| `chemicals` 进篮子扰动 Stone-Geary | S4 必须跑 1836 十国生存线与生活水平回归 |
-| 制海权过强，1839 年战争一边倒 | S6 用 1839 基线校准五档阈值；必要时把封锁收益分期 |
-| 面板去操作后，新玩家不知道能下什么令 | 面板每页保留一行「可用的对话命令」提示；README 与手册同步 |
-| 20 节点 + 分级 + 新建筑在同一版本落地，迁移混乱 | 严格按 S1→S7 顺序提交，每片单独推送并跑全量 |
+| 分级使产出/需求/劳动/利润四处按座加权，回归面巨大 | S1 用「全 I 级逐位等价 v13 oracle」+ 独立手算混合级 |
+| 升级不消耗材料形成正反馈 | 营造所不可升级、升级不提高建造力、工程量 ≤60% |
+| 化工品进篮子扰动生存线 | 1865 前需求为 0，用 `demandShift` 开启 |
+| 制海权一边倒 | 用可复现 fixture 校准；完全控制 50 月可结束战争 |
+| 中间切片编译失败 | **S0 一次铺完结构**，后续切片只启用语义 |
+| 面板去操作后玩家不知道能下什么令 | 每页保留「可用对话命令」提示 |
 
 ## 4. 文档同步
 
-- `GLOSSARY.md`：新增「建筑等级」「建筑升级」「制海权」「舰船质量」「政策门控」；更新「时代」「科技节点」。
-- `docs/gm-handbook.md`：§4.3 配方表加分级说明；§6/§8 补制海权；§3 工具表加 `upgrade`。
+- `GLOSSARY.md`：建筑等级、建筑升级、舰船质量、制海权、海上贸易（政策门控**不做**，已移除）。
+- `docs/gm-handbook.md`：§4.3 配方表加分级；§6/§8 补制海权；§3 工具表加 `upgrade` / `blockade`。
 - `README.md`：面板定位改为仪表盘。
+- `hooks/prompt.ts`：GM 提示词补 `upgrade` / `tier` / `blockade` 的用法。
 - `docs/playtest-issues.md`：PT-068 标注「节点级需求修正已做，完整演进待定」。
