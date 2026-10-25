@@ -1,7 +1,7 @@
-import type { ModifierStack, ModifierStat, WorldState } from '../types'
+import type { ConstructionProject, ModifierStack, ModifierStat, WorldState } from '../types'
 import { BUILDINGS, buildOf, makeRngForWorld, spawnEvent } from './data'
 import { MODIFIER_STATS, MODIFIER_STAT_NAMES, addModifier } from './modifiers'
-import { clamp, completeBuilding } from './sim'
+import { clamp, completeBuilding, completeUpgrade, projectKind } from './sim'
 
 export type CheatParams = Record<string, string | number | undefined>
 
@@ -87,15 +87,28 @@ export function applyCheat(
       if (stateProjects.length === 0) {
         return { ok: false, text: '国有建造队列为空。' }
       }
-      const summary = stateProjects
-        .map(project => `${BUILDINGS[project.building].name}×${project.count}`)
-        .join('、')
+      const label = (project: ConstructionProject): string =>
+        projectKind(project) === 'upgrade'
+          ? `${BUILDINGS[project.building].name} ${(project.fromTier ?? 0) + 1}→${(project.toTier ?? 0) + 1}×${project.count}`
+          : `${BUILDINGS[project.building].name}×${project.count}`
+      const summary = stateProjects.map(label).join('、')
+      // Upgrades move seats and never trigger the build side effects; a source
+      // tier that shrank mid-queue leaves a remainder to keep (plan 0015 §S2).
+      const remainders: ConstructionProject[] = []
       for (const project of stateProjects) {
-        completeBuilding(subject, project.building, project.count)
+        if (projectKind(project) === 'upgrade') {
+          const remainder = completeUpgrade(subject, project)
+          if (remainder !== undefined) remainders.push(remainder)
+        } else {
+          completeBuilding(subject, project.building, project.count)
+        }
       }
-      subject.econ.constructionQueue = subject.econ.constructionQueue.filter(
-        project => (project.owner ?? 'state') === 'private',
-      )
+      subject.econ.constructionQueue = [
+        ...subject.econ.constructionQueue.filter(
+          project => (project.owner ?? 'state') === 'private',
+        ),
+        ...remainders,
+      ]
       text = `${subject.name}国有建造队列全部完成：${summary}`
       break
     }

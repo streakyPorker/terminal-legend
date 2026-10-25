@@ -1,8 +1,19 @@
-import type { Country } from '../../types'
+import type { ConstructionProject, Country } from '../../types'
 import { CONSTRUCTION_SUBSIDY_POINTS_PER_LEVEL } from '../fiscal'
 import { BUILDINGS } from '../data'
-import { constructionLoad, constructionSchedule, projectWorkload } from '../sim'
+import { constructionLoad, constructionSchedule, projectKind, projectWorkload } from '../sim'
 import { n } from './shared'
+
+const ROMAN_TIERS = ['I', 'II', 'III']
+const tierName = (tier: number): string => ROMAN_TIERS[tier - 1] ?? String(tier)
+
+const projectLabel = (project: ConstructionProject): string => {
+  const name = BUILDINGS[project.building].name
+  if (projectKind(project) === 'upgrade') {
+    return `${name} ${tierName((project.fromTier ?? 0) + 1)}→${tierName((project.toTier ?? 0) + 1)}`
+  }
+  return name
+}
 
 export function constructionSection(country: Country): string[] {
   const load = constructionLoad(country)
@@ -22,7 +33,7 @@ export function constructionSection(country: Country): string[] {
   ]
   for (const project of state.slice(0, 12)) {
     lines.push(
-      `- [#${queueIndex.get(project.id) ?? 0}] 国有 ${BUILDINGS[project.building].name}×${project.count}：剩余 ${n(projectWorkload(project) * (1 - project.progress))}/${n(projectWorkload(project))} 点，进度 ${n(project.progress * 100, 0)}%，本月 ${n(load.byProject[project.id] ?? 0)} 点，预计 ${schedule[project.id]?.turns ?? '—'} 回合  id=${project.id}`,
+      `- [#${queueIndex.get(project.id) ?? 0}] 国有 ${projectLabel(project)}×${project.count}：剩余 ${n(projectWorkload(project) * (1 - project.progress))}/${n(projectWorkload(project))} 点，进度 ${n(project.progress * 100, 0)}%，本月 ${n(load.byProject[project.id] ?? 0)} 点，预计 ${schedule[project.id]?.turns ?? '—'} 回合  id=${project.id}`,
     )
   }
   // Private projects cannot be cancelled or reordered, so they carry no
@@ -33,7 +44,7 @@ export function constructionSection(country: Country): string[] {
   }
   for (const project of privateProjects.slice(0, 8)) {
     lines.push(
-      `- 私人 ${BUILDINGS[project.building].name}×${project.count}：进度 ${n(project.progress * 100, 0)}%，自有 ${n(load.privateByProject[project.id]?.own ?? 0)} / 租用 ${n(load.privateByProject[project.id]?.rented ?? 0)} 点  id=${project.id}`,
+      `- 私人 ${projectLabel(project)}×${project.count}：进度 ${n(project.progress * 100, 0)}%，自有 ${n(load.privateByProject[project.id]?.own ?? 0)} / 租用 ${n(load.privateByProject[project.id]?.rented ?? 0)} 点  id=${project.id}`,
     )
   }
   if (state.length + privateProjects.length === 0) lines.push('- 队列：空')

@@ -70,6 +70,7 @@ export {
   canResearchNode,
   defaultResearchNode,
   clampEra,
+  maxUnlockedTier,
 } from './tech'
 
 // ---------------------------------------------------------------- leaders

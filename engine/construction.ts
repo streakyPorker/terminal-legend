@@ -42,6 +42,7 @@ import {
   PRIVATE_OWN_CAPACITY_SHARE,
   SCHOOL_LITERACY_GAIN,
   UNIVERSITY_ADMIN_CAPACITY,
+  UPGRADE_WORKLOAD_SHARE,
   WORKLOAD_MULTIPLIER,
   WORKSHOP_CAPACITY_OUTPUT,
 } from './config/construction'
@@ -68,9 +69,40 @@ export {
 export const capacityCost = (project: ConstructionProject): number =>
   (CAPACITY_COST[project.building] ?? 1) * project.count
 
-/** Total points of work a project must complete. */
+/** Plan 0015 §S2: an absent `kind` (every pre-S2 project and every new build)
+ *  is treated as `'build'`. */
+export const projectKind = (project: ConstructionProject): 'build' | 'upgrade' =>
+  project.kind === 'upgrade' ? 'upgrade' : 'build'
+
+/**
+ * Plan 0015 §S2 / ADR 0031 §5: seats at `fromTier` already claimed by OTHER
+ * pending upgrade projects of the same building, so repeat orders cannot
+ * over-reserve. `fromTier` is the 0-based `buildingTiers` index stored on the
+ * project (tier I = 0), matching `recipeAt` / `applyBuildingDelta`.
+ */
+export function alreadyReserved(
+  country: Country,
+  id: BuildingId,
+  fromTier: number,
+): number {
+  let reserved = 0
+  for (const project of country.econ.constructionQueue) {
+    if (projectKind(project) !== 'upgrade') continue
+    if (project.building !== id) continue
+    if ((project.fromTier ?? 0) !== fromTier) continue
+    reserved += project.count
+  }
+  return reserved
+}
+
+/** Total points of work a project must complete. An upgrade retrofits existing
+ *  seats, so it needs only `UPGRADE_WORKLOAD_SHARE` of the same-tier new-build
+ *  workload; the per-point price is unchanged, so the saving is time and total
+ *  points, never a discount (plan 0015 §S2 / ADR 0031 §5). */
 export const projectWorkload = (project: ConstructionProject): number =>
-  capacityCost(project) * WORKLOAD_MULTIPLIER
+  capacityCost(project) *
+  WORKLOAD_MULTIPLIER *
+  (projectKind(project) === 'upgrade' ? UPGRADE_WORKLOAD_SHARE : 1)
 
 export const maxSlotCapacity = (building: BuildingId): number =>
   MAX_BUILDINGS_PER_SLOT * (CAPACITY_COST[building] ?? 1)
@@ -326,12 +358,18 @@ export function constructionLoad(country: Country): ConstructionLoad {
 }
 
 /** Adds built structures and their side effects. */
-export function completeBuilding(country: Country, building: BuildingId, count: number): void {
+export function completeBuilding(
+  country: Country,
+  building: BuildingId,
+  count: number,
+  tier = 0,
+): void {
   ensureConstructionFields(country)
-  // Negative counts remove buildings (天命); never go below zero. All new/removed
-  // buildings are tier I in S1, so the delta lands in the tier-I bucket and the
-  // mutator keeps `Σ buildingTiers[id] === buildings[id]` true.
-  applyBuildingDelta(country, building, 0, count)
+  // Negative counts remove buildings (天命); never go below zero. A 天命 or a
+  // legacy project lands at tier I (index 0); a tier-II new build passes its
+  // target index so the delta lands in the right bucket — the mutator keeps
+  // `Σ buildingTiers[id] === buildings[id]` true either way.
+  applyBuildingDelta(country, building, tier, count)
   // Plan 0014 / ADR 0029: the merged infrastructure building keeps the providers'
   // market-access completion side effect; iterate `INFRA_BUILDING_IDS` and read
   // the per-building coefficient table so a future re-split stays data-only.
@@ -368,9 +406,47 @@ export function completeBuilding(country: Country, building: BuildingId, count: 
 }
 
 /**
+ * Plan 0015 §S2 / ADR 0031 §5: completes an upgrade project by MOVING `count`
+ * seats from `fromTier` to `toTier` (0-based indices). Unlike
+ * {@link completeBuilding} it is a retrofit — it adds no new seats, fires no
+ * completion side effects (market access / literacy / administrative capacity)
+ * and does NOT refresh infrastructure. Seat availability is re-validated here:
+ * if the source tier shrank since the order, only the seats that remain move and
+ * a remainder project is returned for the caller to write back onto the queue
+ * (undefined when fully done).
+ */
+export function completeUpgrade(
+  country: Country,
+  project: ConstructionProject,
+): ConstructionProject | undefined {
+  ensureConstructionFields(country)
+  const from = project.fromTier ?? 0
+  const to = project.toTier ?? from + 1
+  const available = Math.max(0, country.econ.buildingTiers[project.building]?.[from] ?? 0)
+  const moved = Math.min(project.count, available)
+  if (moved > 0) {
+    applyBuildingDelta(country, project.building, from, -moved)
+    applyBuildingDelta(country, project.building, to, moved)
+  }
+  if (moved >= project.count) return undefined
+  const remainder: ConstructionProject = {
+    ...project,
+    id: `${project.id}-rem`,
+    count: project.count - moved,
+    monthsLeft: 1,
+    lastSpend: 0,
+    lastCapacity: 0,
+    progress: 0,
+  }
+  remainder.monthlyCost = constructionMonthlyCost(remainder)
+  return remainder
+}
+
+/**
  * Brings legacy projects onto the current workload rules (ADR 0012/0013):
  * cost priced per workload point, and at most five buildings per slot
- * (oversized slots are split).
+ * (oversized slots are split). Upgrade projects are never split — they claim
+ * an arbitrary number of seats that already exist (plan 0015 §S2).
  */
 export function normalizeConstructionQueue(country: Country): void {
   const queue = country.econ.constructionQueue
@@ -387,7 +463,7 @@ export function normalizeConstructionQueue(country: Country): void {
       project.monthlyCost = expectedMonthly
       changed = true
     }
-    if (project.count > MAX_BUILDINGS_PER_SLOT) {
+    if (projectKind(project) === 'build' && project.count > MAX_BUILDINGS_PER_SLOT) {
       let remaining = project.count
       let index = 0
       while (remaining > 0) {
@@ -448,6 +524,9 @@ export function settleConstruction(
   let privateSpent = 0
   let rentalIncome = 0
   const nextConstructionDemand: Partial<Record<GoodId, number>> = {}
+  // Upgrade projects that had to complete partially; written back after both
+  // passes so the same-month loop never re-processes them (plan 0015 §S2).
+  const remainders: ConstructionProject[] = []
   // A fully funded slot finishes in one month; `constructionSpeed` policies
   // and the debt-pressure penalty are the only modifiers on that pace.
   const constructionSpeed = applyModifiers(country, 'constructionSpeed', 1)
@@ -487,11 +566,17 @@ export function settleConstruction(
       }
       const funded =
         project.monthlyCost > 0 ? spend / project.monthlyCost : inputShare
-      for (const [id, coefficient] of Object.entries(
-        INVESTMENT_DEMAND[project.building],
-      ) as [GoodId, number][]) {
-        nextConstructionDemand[id] =
-          (nextConstructionDemand[id] ?? 0) + coefficient * project.count * funded
+      // ADR 0031 §5 / plan 0015 §S2: an upgrade draws NO materials — its only
+      // costs are capacity and gold. So the intermediate-good investment demand
+      // is new builds only; the upgrade's gold still lands in `stateSpent`
+      // above (the construction-spend channel counted as GDP investment I).
+      if (projectKind(project) !== 'upgrade') {
+        for (const [id, coefficient] of Object.entries(
+          INVESTMENT_DEMAND[project.building],
+        ) as [GoodId, number][]) {
+          nextConstructionDemand[id] =
+            (nextConstructionDemand[id] ?? 0) + coefficient * project.count * funded
+        }
       }
     }
     const goldShare = goldNeed > 0 ? spend / goldNeed : 1
@@ -514,7 +599,26 @@ export function settleConstruction(
       }
     }
     if (project.progress >= 1 - 1e-9) {
-      completeBuilding(country, project.building, project.count)
+      if (projectKind(project) === 'upgrade') {
+        const from = (project.fromTier ?? 0) + 1
+        const to = (project.toTier ?? (project.fromTier ?? 0) + 1) + 1
+        const remainder = completeUpgrade(country, project)
+        const done = project.count - (remainder?.count ?? 0)
+        log.push({
+          date: { ...world.date },
+          kind: 'economy',
+          countryId: country.id,
+          text:
+            remainder === undefined
+              ? `[${country.flag}] ${country.name}将 ${done} 座${BUILDINGS[project.building].name}从 ${from} 级升级到 ${to} 级`
+              : `[${country.flag}] ${country.name}将 ${done} 座${BUILDINGS[project.building].name}从 ${from} 级升级到 ${to} 级，${remainder.count} 座因存量不足顺延`,
+        })
+        // A partially-completed upgrade whose source tier shrank goes back onto
+        // the queue with its remaining seat count (plan 0015 §S2).
+        if (remainder !== undefined) remainders.push(remainder)
+        return
+      }
+      completeBuilding(country, project.building, project.count, project.toTier ?? 0)
       log.push({
         date: { ...world.date },
         kind: 'economy',
@@ -608,6 +712,10 @@ export function settleConstruction(
     }
   }
 
+  for (const remainder of remainders) {
+    queue.push(remainder)
+    kept.add(remainder.id)
+  }
   country.econ.constructionQueue = queue.filter(project => kept.has(project.id))
   country.econ.privateCapital = privateBudget
   country.econ.lastConstructionSpend = stateSpent + privateSpent

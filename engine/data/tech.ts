@@ -1,4 +1,4 @@
-import type { TechBranch, TechNodeDef, TechState } from '../../types'
+import type { BuildingId, Country, TechBranch, TechNodeDef, TechState } from '../../types'
 import { TECH_MAX_ERA, TECH_TIER_BASE, TECH_TIER_ERA_COEF, TECH_TIER_UNLOCKED_COEF, techNodeCost } from '../config/tech'
 
 /**
@@ -207,6 +207,28 @@ export function techTier(state: TechState): number {
     state.era * TECH_TIER_ERA_COEF +
     state.unlocked.length * TECH_TIER_UNLOCKED_COEF
   )
+}
+
+/**
+ * Plan 0015 §S2 / ADR 0031 §4: the highest tier a building may be upgraded to.
+ * Pure derivation over the country's unlocked node ids and the node table:
+ * every `unlockTier{building, tier}` effect on an unlocked node raises the
+ * ceiling. Tier numbering is 1-based (1 = tier I), so the default is 1 — with
+ * today's node table carrying no `unlockTier`, every II/III upgrade is rejected
+ * until S3 installs the effects.
+ */
+export function maxUnlockedTier(country: Country, building: BuildingId): number {
+  let max = 1
+  for (const nodeId of country.tech.unlocked) {
+    const node = TECH_NODE_BY_ID.get(nodeId)
+    if (node === undefined) continue
+    for (const effect of node.effects) {
+      if (effect.kind === 'unlockTier' && effect.building === building && effect.tier > max) {
+        max = effect.tier
+      }
+    }
+  }
+  return max
 }
 
 /** How many unlocked nodes belong to one branch. */

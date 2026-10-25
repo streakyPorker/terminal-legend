@@ -191,7 +191,7 @@ export const TOOL_SPECS: {
   {
     name: 'v3_action',
     description:
-      '终末传奇：对指定国家（缺省为玩家国）执行一项内政行动。action 取值：build（建造，需 building/count；可选 position=head/tail/before/after，默认 tail，before 为 before/after 的锚点项目 id）、cancel（取消国有项目，需 projectId 或 index（1-based 队列序号））、reorder（调整建造队列顺位，需 projectId 或 index，配 position/before）、tax（调整某一税基的税率，需 base（land=土地/profit=企业所得税/consumption=消费税/tariff=关税）与 rate；缺省 base 返回税菜单）、tariff（关税：rate 为进口税率，可选 exportRate 单独设出口税率；省略则进出口同率）、spending（支出，需 category/amount）、research（选择科技节点，需 tech=节点 id，如 industry-1；需前置与时代门槛满足）、conscript（征兵，需 amount）、law（法案，需 name）、route（贸易路线：op 取 open/raise/lower/close，需 good 与 partner）。country 可选，用于多国变更场景（如 AI 国家建造/加税）。',
+      '终末传奇：对指定国家（缺省为玩家国）执行一项内政行动。action 取值：build（新建，需 building/count；可选 tier（1-based，默认 1 = I 级）；可选 position=head/tail/before/after，默认 tail，before 为 before/after 的锚点项目 id）、upgrade（升级存量，需 building/fromTier/toTier/count；fromTier/toTier 为 1-based 等级，如钢铁厂 I→II 为 1→2；count 无 5 座上限，但不得超过来源等级未被预约的存量座数；可选 position/before）、cancel（取消国有项目，需 projectId 或 index（1-based 队列序号））、reorder（调整建造队列顺位，需 projectId 或 index，配 position/before）、tax（调整某一税基的税率，需 base（land=土地/profit=企业所得税/consumption=消费税/tariff=关税）与 rate；缺省 base 返回税菜单）、tariff（关税：rate 为进口税率，可选 exportRate 单独设出口税率；省略则进出口同率）、spending（支出，需 category/amount）、research（选择科技节点，需 tech=节点 id，如 industry-1；需前置与时代门槛满足）、conscript（征兵，需 amount）、law（法案，需 name）、route（贸易路线：op 取 open/raise/lower/close，需 good 与 partner）。country 可选，用于多国变更场景（如 AI 国家建造/加税）。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -199,6 +199,7 @@ export const TOOL_SPECS: {
           type: 'string',
           enum: [
             'build',
+            'upgrade',
             'cancel',
             'reorder',
             'tax',
@@ -232,9 +233,32 @@ export const TOOL_SPECS: {
         building: {
           type: 'string',
           enum: [...BUILDING_IDS],
-          description: 'build 时必填。',
+          description: 'build/upgrade 时必填。',
         },
-        count: { type: 'integer', minimum: 1, maximum: 5 },
+        count: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 999,
+          description: 'build 时最多 5 座（每槽上限）；upgrade 时无 5 座上限，但不得超过来源等级未被预约的存量座数。',
+        },
+        tier: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 3,
+          description: 'build 时可选，目标等级（1-based，默认 1 = I 级）；未解锁的等级会被拒绝。',
+        },
+        fromTier: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 2,
+          description: 'upgrade 时必填，来源等级（1-based，1 = I 级）。',
+        },
+        toTier: {
+          type: 'integer',
+          minimum: 2,
+          maximum: 3,
+          description: 'upgrade 时必填，目标等级（1-based，须高于 fromTier 且已解锁）。',
+        },
         rate: { type: 'number', minimum: 0, maximum: 60, description: '进口关税税率（tariff 时）或税基税率（tax 时，0..60）。' },
         base: {
           type: 'string',
@@ -603,6 +627,9 @@ export const handleV3Action = async ($: EngineInterface, e: any) => {
     for (const key of [
       'building',
       'count',
+      'tier',
+      'fromTier',
+      'toTier',
       'rate',
       'base',
       'exportRate',

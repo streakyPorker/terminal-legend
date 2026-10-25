@@ -49,6 +49,9 @@ export {
   constructionSchedule,
   constructionLoad,
   completeBuilding,
+  completeUpgrade,
+  alreadyReserved,
+  projectKind,
   normalizeConstructionQueue,
 } from './construction'
 export type { ConstructionSchedule, ConstructionLoad } from './construction'

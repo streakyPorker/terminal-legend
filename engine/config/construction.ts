@@ -45,6 +45,18 @@ export const CONSTRUCTION_RENT_PER_POINT = 0.3
 export const MAX_BUILDINGS_PER_SLOT = 5
 /** Total workload per unit of monthly point requirement. */
 export const WORKLOAD_MULTIPLIER = 30
+/**
+ * Plan 0015 §S2 / ADR 0031 §5: an UPGRADE (`kind: 'upgrade'`) is a
+ * retrofit of existing seats, so it needs this share of the same-tier new-build
+ * workload. The ADR caps it at 60%; the frozen rule value is 50%. The unit price
+ * is unchanged (still `CONSTRUCTION_COST_PER_POINT`), so an upgrade is cheaper
+ * only because it is smaller, never because it is discounted.
+ */
+export const UPGRADE_WORKLOAD_SHARE = 0.5
+/** Plan 0015 §S2 / ADR 0031 §5: buildings with no upgrade path at all. `workshops`
+ *  is excluded (评审 F4): allowing it would let construction capacity compound
+ *  itself (upgrade workshops → more points → faster upgrades). */
+export const NON_UPGRADABLE_BUILDINGS: BuildingId[] = ['workshops']
 /** Base gold paid per construction-workload point. */
 export const CONSTRUCTION_COST_PER_POINT = 0.2
 /** Per-building gold tuning; v1 is 1 for every type. */

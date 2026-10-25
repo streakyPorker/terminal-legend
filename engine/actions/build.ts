@@ -1,12 +1,14 @@
 import type { ConstructionProject, Country, WorldState } from '../../types'
-import { BUILDINGS, buildOf, techTier } from '../data'
+import { BUILDINGS, buildOf, maxUnlockedTier, techTier } from '../data'
 import {
   MAX_BUILDINGS_PER_SLOT,
+  alreadyReserved,
   constructionGoldPerPoint,
   constructionMonthlyCost,
   constructionTotalCost,
   projectWorkload,
 } from '../construction'
+import { NON_UPGRADABLE_BUILDINGS } from '../config/construction'
 import { clamp, num } from '../internal'
 import type { ActionParams, ActionResult } from './types'
 
@@ -112,12 +114,88 @@ export function actionBuild(
     }
   }
   const count = clamp(Math.floor(num(params.count, 1)), 1, MAX_BUILDINGS_PER_SLOT)
+  // Plan 0015 §S2: `tier` (1-based; default 1 = tier I) lets a new build land
+  // directly on an unlocked higher tier. A tier > 1 needs `maxUnlockedTier` to
+  // reach it, and the project records its target index so completion files the
+  // seats in the right `buildingTiers` bucket.
+  const tier = Math.max(1, Math.floor(num(params.tier, 1)))
+  const ceiling = maxUnlockedTier(country, building)
+  if (tier > ceiling) {
+    return {
+      ok: false,
+      text: `${tag} ${BUILDINGS[building].name}的 ${tier} 级尚未解锁（当前上限 ${ceiling} 级）`,
+    }
+  }
   // Orders per month are unlimited: every slot holds at most five buildings.
   // Gold is paid per workload point; duration falls out of the points.
   const draft: ConstructionProject = {
     id: `proj-${world.tick}-${country.id}-${country.econ.constructionQueue.length}`,
     building,
     count,
+    owner: 'state',
+    monthsLeft: 1,
+    monthlyCost: 0,
+    lastSpend: 0,
+    progress: 0,
+    startedAt: { ...world.date },
+    ...(tier > 1 ? { toTier: tier - 1 } : {}),
+  }
+  draft.monthlyCost = constructionMonthlyCost(draft)
+  const placement = resolveInsertPosition(country, params)
+  if ('error' in placement) return { ok: false, text: `${tag} ${placement.error}` }
+  country.econ.constructionQueue.splice(placement.at, 0, draft)
+  return {
+    ok: true,
+    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列${placement.note}（工程量 ${projectWorkload(draft).toFixed(1)} 点；按队列顺序取用闲置建造力，一次最多投入剩余工程量；总造价 ${constructionTotalCost(draft).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft).toFixed(2)} 金）`,
+  }
+}
+
+/**
+ * Plan 0015 §S2 / ADR 0031 §5: order an upgrade project that retrofits existing
+ * seats from one tier to a higher one. `fromTier`/`toTier` are 1-based (tier I =
+ * 1); the project stores 0-based indices so it matches `buildingTiers` /
+ * `recipeAt`. The order is UNBOUNDED in `count` (no five-seat slot cap) but may
+ * not claim more than the seats at `fromTier` that no other pending upgrade has
+ * already reserved.
+ */
+export function actionUpgrade(
+  world: WorldState,
+  country: Country,
+  params: ActionParams,
+): ActionResult {
+  const tag = tagOf(country)
+  const id = String(params.building ?? '')
+  const building = buildOf(id)
+  if (building === undefined) return { ok: false, text: `${tag} 未知建筑 ${id}` }
+  if (NON_UPGRADABLE_BUILDINGS.includes(building)) {
+    return { ok: false, text: `${tag} ${BUILDINGS[building].name}不可升级` }
+  }
+  const fromTier = Math.max(1, Math.floor(num(params.fromTier, 1)))
+  const toTier = Math.max(fromTier + 1, Math.floor(num(params.toTier, fromTier + 1)))
+  const ceiling = maxUnlockedTier(country, building)
+  if (toTier > ceiling) {
+    return {
+      ok: false,
+      text: `${tag} ${BUILDINGS[building].name}的 ${toTier} 级尚未解锁（当前上限 ${ceiling} 级）`,
+    }
+  }
+  const count = Math.max(1, Math.floor(num(params.count, 1)))
+  const fromIndex = fromTier - 1
+  const seats = country.econ.buildingTiers[building]?.[fromIndex] ?? 0
+  const reserved = alreadyReserved(country, building, fromIndex)
+  if (count > seats - reserved) {
+    return {
+      ok: false,
+      text: `${tag} ${BUILDINGS[building].name} ${fromTier} 级座数不足：现存 ${seats}，已预约 ${reserved}，可升级 ${Math.max(0, seats - reserved)}，请求 ${count}`,
+    }
+  }
+  const draft: ConstructionProject = {
+    id: `proj-${world.tick}-${country.id}-${country.econ.constructionQueue.length}`,
+    building,
+    count,
+    kind: 'upgrade',
+    fromTier: fromIndex,
+    toTier: toTier - 1,
     owner: 'state',
     monthsLeft: 1,
     monthlyCost: 0,
@@ -131,7 +209,7 @@ export function actionBuild(
   country.econ.constructionQueue.splice(placement.at, 0, draft)
   return {
     ok: true,
-    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列${placement.note}（工程量 ${projectWorkload(draft).toFixed(1)} 点；按队列顺序取用闲置建造力，一次最多投入剩余工程量；总造价 ${constructionTotalCost(draft).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft).toFixed(2)} 金）`,
+    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}从 ${fromTier} 级升级到 ${toTier} 级列入升级队列${placement.note}（工程量 ${projectWorkload(draft).toFixed(1)} 点；总造价 ${constructionTotalCost(draft).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft).toFixed(2)} 金）`,
   }
 }
 

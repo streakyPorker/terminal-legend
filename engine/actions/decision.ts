@@ -1,7 +1,7 @@
 import type { WorldState } from '../../types'
 import type { Decision } from '../internal'
 import type { Rng } from '../rng'
-import { actionBuild, actionCancel, actionReorder } from './build'
+import { actionBuild, actionCancel, actionReorder, actionUpgrade } from './build'
 import { actionTax } from './tax'
 import { actionTariff } from './tariff'
 import { actionSpending } from './spending'
@@ -32,6 +32,8 @@ export function applyDecision(
   switch (decision.action) {
     case 'build':
       return actionBuild(world, country, params)
+    case 'upgrade':
+      return actionUpgrade(world, country, params)
     case 'tax':
       return actionTax(country, params)
     case 'tariff':
