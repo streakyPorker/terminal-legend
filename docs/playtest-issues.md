@@ -34,7 +34,7 @@
 | PT-071 | 无法一次性购舰（引擎无「买船」入口） | 0008 / 军事 | fixed（57f92e1） |
 | PT-072 | 提示条上的「打开议事」点了没反应 | 0006 / UI | fixed（702a4d5） |
 | PT-073 | 消费税只有统一税率，无法按商品分级 | 0008 / ADR 0023 | open（需求已登记） |
-| PT-074 | 看不到他国的税率与基本经济数据 | 0006 / inspect | fixed（待提交） |
+| PT-074 | 看不到他国的税率与基本经济数据 | 0006 / inspect | fixed（fffca38） |
 
 <details><summary>已结（59 条，详情见 archive）</summary>
 
@@ -487,4 +487,4 @@
      未知 id、缺省本国），全量 **541 项通过**。
 - 关联：`engine/inspect/index.ts`、`hooks/tools.ts`、`docs/gm-handbook.md` §3、PT-073。
 - 优先级：**P2**
-- 状态：**fixed（待提交）**
+- 状态：**fixed（fffca38）**
