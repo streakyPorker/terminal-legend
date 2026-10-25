@@ -216,6 +216,10 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     labor: 0.6,
     gates: { tech: true },
     outputModifier: 'mineOutput',
+    tiers: [
+      { output: { coal: 1.248 }, input: {}, labor: 0.69 },
+      { output: { coal: 1.622 }, input: {}, labor: 0.759 },
+    ],
   },
   ironMines: {
     output: { iron: 0.96 },
@@ -223,6 +227,10 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     labor: 0.6,
     gates: { tech: true },
     outputModifier: 'mineOutput',
+    tiers: [
+      { output: { iron: 1.248 }, input: {}, labor: 0.69 },
+      { output: { iron: 1.622 }, input: {}, labor: 0.759 },
+    ],
   },
   lumberMills: {
     output: { wood: 0.96 },
@@ -230,6 +238,10 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     labor: 0.4,
     gates: { tech: true },
     outputModifier: 'mineOutput',
+    tiers: [
+      { output: { wood: 1.248 }, input: {}, labor: 0.46 },
+      { output: { wood: 1.622 }, input: {}, labor: 0.506 },
+    ],
   },
   // Plan 0011 F3: the bundled `factories` row is split into seven single/few-
   // output industrial buildings. Outputs are `old_factory_output / valueShare`
@@ -252,6 +264,18 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     labor: 0.9,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
+    tiers: [
+      {
+        output: { fabric: 2.6, clothes: 0.26 },
+        input: { grain: 1.12, coal: 0.202, wood: 0.112, machinery: 0.202 },
+        labor: 0.99,
+      },
+      {
+        output: { fabric: 3.38, clothes: 0.338 },
+        input: { grain: 1.232, coal: 0.222, wood: 0.123, machinery: 0.222 },
+        labor: 1.04,
+      },
+    ],
   },
   furnitureWorks: {
     // B5-r2: scaled to 0.45 of the F7 recipe (output × input together) so the
@@ -262,6 +286,18 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     labor: 0.7,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
+    tiers: [
+      {
+        output: { furniture: 0.901 },
+        input: { wood: 0.03, coal: 0.05, fabric: 0.353, steel: 0.091, machinery: 0.05 },
+        labor: 0.77,
+      },
+      {
+        output: { furniture: 1.171 },
+        input: { wood: 0.033, coal: 0.055, fabric: 0.388, steel: 0.1, machinery: 0.055 },
+        labor: 0.809,
+      },
+    ],
   },
   distilleries: {
     // B5-r2: scaled to 0.45 of the F7 recipe (output × input together). Cutting
@@ -275,6 +311,18 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     // The old bundled factory gated liquor by `industrial` alone (plan 0011 F3).
     outputGates: { liquor: { industrial: true } },
     outputModifier: 'factoryOutput',
+    tiers: [
+      {
+        output: { liquor: 1.112 },
+        input: { grain: 0.68, coal: 0.101, wood: 0.055, machinery: 0.096 },
+        labor: 0.66,
+      },
+      {
+        output: { liquor: 1.445 },
+        input: { grain: 0.748, coal: 0.111, wood: 0.061, machinery: 0.105 },
+        labor: 0.693,
+      },
+    ],
   },
   machineryWorks: {
     output: { machinery: 0.8 },
@@ -282,6 +330,18 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     labor: 1.0,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
+    tiers: [
+      {
+        output: { machinery: 1.08 },
+        input: { steel: 0.633, coal: 0.23, wood: 0.115, machinery: 0.207 },
+        labor: 1.1,
+      },
+      {
+        output: { machinery: 1.458 },
+        input: { steel: 0.708, coal: 0.258, wood: 0.129, machinery: 0.232 },
+        labor: 1.155,
+      },
+    ],
   },
   steelMills: {
     output: { steel: 4.0 },
@@ -290,6 +350,17 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     labor: 1.0,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
+    // Plan 0015 S1 / 附录 B (heavy industry), expanded from the I-level row:
+    // II = output ×1.35, input ×1.15, labor ×1.10; III = II × output ×1.35,
+    // input ×1.12, labor ×1.05 (cumulative, rounded to 3 decimals only here).
+    tiers: [
+      { output: { steel: 5.4 }, input: { iron: 3.68, coal: 1.15, machinery: 0.115 }, labor: 1.1 },
+      {
+        output: { steel: 7.29 },
+        input: { iron: 4.122, coal: 1.288, machinery: 0.129 },
+        labor: 1.155,
+      },
+    ],
   },
   arsenals: {
     output: { arms: 1.0 },
@@ -297,6 +368,18 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     labor: 0.9,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
+    tiers: [
+      {
+        output: { arms: 1.35 },
+        input: { steel: 0.414, machinery: 0.207, coal: 0.138, iron: 0.207 },
+        labor: 0.99,
+      },
+      {
+        output: { arms: 1.823 },
+        input: { steel: 0.464, machinery: 0.232, coal: 0.155, iron: 0.232 },
+        labor: 1.04,
+      },
+    ],
   },
   luxuryWorks: {
     output: { luxury: 0.48 },
@@ -304,6 +387,18 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     labor: 0.8,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
+    tiers: [
+      {
+        output: { luxury: 0.624 },
+        input: { fabric: 1.68, coal: 0.291, wood: 0.157, machinery: 0.269 },
+        labor: 0.88,
+      },
+      {
+        output: { luxury: 0.811 },
+        input: { fabric: 1.848, coal: 0.32, wood: 0.172, machinery: 0.296 },
+        labor: 0.924,
+      },
+    ],
   },
   // Plan 0011 F4. `schools` is the one new service producer (primary education);
   // `forts`/`navalYards` produce a small military good (arms / machinery).
@@ -325,6 +420,10 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     output: {},
     input: { steel: 0.2, wood: 0.16 },
     labor: 0.54,
+    tiers: [
+      { output: {}, input: { steel: 0.23, wood: 0.184 }, labor: 0.54 },
+      { output: {}, input: { steel: 0.276, wood: 0.221, locomotives: 0.4 }, labor: 0.54 },
+    ],
   },
   forts: {
     output: { arms: 0.08 },
@@ -339,6 +438,18 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     input: { steel: 0.18, wood: 0.12, machinery: 0.04 },
     labor: 0.8,
     gates: { tech: true, industrial: true },
+    tiers: [
+      {
+        output: { ships: 0.375, machinery: 0.033 },
+        input: { steel: 0.198, wood: 0.132, machinery: 0.044 },
+        labor: 0.88,
+      },
+      {
+        output: { ships: 0.563, machinery: 0.033 },
+        input: { steel: 0.214, wood: 0.143, machinery: 0.048 },
+        labor: 0.924,
+      },
+    ],
   },
   navalBases: {
     // Consumes one hull a month; the settlement grows the navy by the number
@@ -347,6 +458,10 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     input: { ships: 1 },
     labor: 0.6,
     gates: { tech: true },
+    tiers: [
+      { output: {}, input: { ships: 1.1 }, labor: 0.6 },
+      { output: {}, input: { ships: 1.265 }, labor: 0.6 },
+    ],
   },
   universities: {
     output: { services: 0.2 },

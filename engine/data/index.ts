@@ -54,6 +54,9 @@ export type {
   BuildingDef,
 } from './buildings'
 
+// ---------------------------------------------------------------- building tiers / mutator
+export { recipeAt, applyBuildingDelta, applyBuildingDecay } from './tiers'
+
 // ---------------------------------------------------------------- tech
 export {
   TECH_NODES,
