@@ -19,6 +19,12 @@ export const MODIFIER_STAT_NAMES: Record<ModifierStat, string> = {
   luxuryOutput: '奢侈品产出',
   opiumOutput: '鸦片产出',
   servicesOutput: '服务产出',
+  // plan 0015 S0 placeholder, semantics in S4. `ships` was a pre-existing
+  // omission (PT-066 added the good); the three new goods land in S4.
+  shipsOutput: '船只产出',
+  chemicalsOutput: '化工品产出',
+  electricityOutput: '电力产出',
+  locomotivesOutput: '机车产出',
   farmOutput: '农业产出',
   mineOutput: '矿业产出',
   factoryOutput: '工厂产出',
@@ -37,6 +43,11 @@ export const MODIFIER_STAT_NAMES: Record<ModifierStat, string> = {
   luxuryDemand: '奢侈品需求',
   opiumDemand: '鸦片需求',
   servicesDemand: '服务需求',
+  // plan 0015 S0 placeholder, semantics in S4 (see the output block above).
+  shipsDemand: '船只需求',
+  chemicalsDemand: '化工品需求',
+  electricityDemand: '电力需求',
+  locomotivesDemand: '机车需求',
   gdp: '国内生产总值',
   income: '收入',
   expense: '支出',

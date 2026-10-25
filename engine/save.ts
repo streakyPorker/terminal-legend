@@ -4,7 +4,7 @@ import { BUILDING_IDS, DEFAULT_TAX_RATES, emptyBuildingProfits, emptyTaxBaseQty 
 import { normalizeConstructionQueue } from './sim'
 
 /** Current world shape; older in-memory worlds are discarded like old saves. */
-export const CURRENT_WORLD_VERSION = 13
+export const CURRENT_WORLD_VERSION = 14
 
 const safeName = (name: string | undefined): string => {
   const cleaned = (name ?? 'save').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 32)

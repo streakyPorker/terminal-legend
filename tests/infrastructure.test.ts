@@ -80,7 +80,7 @@ describe('unified infrastructure pool (plan 0011 F5 / plan 0014 merge)', () => {
     for (const gone of ['railroads', 'ports', 'canals', 'telegraphs']) {
       expect(BUILDING_IDS as string[]).not.toContain(gone)
     }
-    expect(BUILDING_IDS.length).toBe(20)
+    expect(BUILDING_IDS.length).toBe(23)
   })
 
   test('every building type declares an infrastructureNeed', () => {

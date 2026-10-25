@@ -40,7 +40,7 @@ const close = (actual: number, expected: number, eps = 1e-9): void => {
 
 describe('F4 building expansion (schools / forts / navalYards) + plan 0014 merge', () => {
   test('the surviving F4 ids and the merged infrastructure id live in every BuildingId table', () => {
-    expect(BUILDING_IDS.length).toBe(20)
+    expect(BUILDING_IDS.length).toBe(23)
     const tables: Record<string, Record<string, unknown>> = {
       BUILDINGS: BUILDINGS as unknown as Record<string, unknown>,
       BUILDING_RECIPES: BUILDING_RECIPES as unknown as Record<string, unknown>,
@@ -160,8 +160,8 @@ describe('F4 building expansion (schools / forts / navalYards) + plan 0014 merge
 
   test('the world carries the merged roster at version 12', () => {
     const world = newWorld(9100, 'QING')
-    expect(world.version).toBe(13)
-    expect(BUILDING_IDS.length).toBe(20)
+    expect(world.version).toBe(14)
+    expect(BUILDING_IDS.length).toBe(23)
     for (const gone of ['railroads', 'ports', 'canals', 'telegraphs']) {
       expect(BUILDING_IDS as string[]).not.toContain(gone)
     }

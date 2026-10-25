@@ -56,7 +56,7 @@ describe('tech tree (plan 0005 K1)', () => {
       expect(tech.unlocked).toContain('general-1836')
       expect(tech.researching).not.toBe('')
     }
-    expect(world.version).toBe(13)
+    expect(world.version).toBe(14)
   })
 
   test('techTier follows 1 + era×1.5 + unlocked×0.05', () => {
@@ -149,7 +149,7 @@ describe('tech tree (plan 0005 K1)', () => {
   })
 
   test('old v12 saves are rejected; the current shape loads', () => {
-    expect(CURRENT_WORLD_VERSION).toBe(13)
+    expect(CURRENT_WORLD_VERSION).toBe(14)
     const fresh = newWorld(9103, 'AUS')
     expect(parseWorld(JSON.parse(JSON.stringify(fresh)))).toBeDefined()
 

@@ -79,6 +79,10 @@ export const INVESTMENT_DEMAND: Record<BuildingId, Partial<Record<GoodId, number
   navalYards: { wood: 0.3, steel: 0.2, machinery: 0.1 },
   // PT-066: naval base — a dry dock plus barracks for the fleet.
   navalBases: { steel: 0.25, wood: 0.2 },
+  // plan 0015 S0 placeholder, semantics in S4: empty investment baskets until S4.
+  chemicalWorks: {},
+  powerPlants: {},
+  locomotiveWorks: {},
 }
 
 /**
@@ -116,6 +120,11 @@ export const BUILDING_OUTPUT: Record<BuildingId, Partial<Record<GoodId, number>>
   schools: {},
   forts: {},
   navalYards: {},
+  // plan 0015 S0 placeholder, semantics in S4: empty output weights — private
+  // investment never picks these until S4 fills the real baskets.
+  chemicalWorks: {},
+  powerPlants: {},
+  locomotiveWorks: {},
 }
 
 // ---------------------------------------------------------------- building recipes
@@ -146,6 +155,17 @@ export type RecipeGates = {
 }
 
 /**
+ * Plan 0015 §S1: one unlocked tier's recipe deltas. `tiers[0]` is II, `tiers[1]`
+ * is III; `BUILDING_RECIPES[id]` stays tier I. Empty in S0 — a later slice fills
+ * `tiers` in `engine/data/buildings.ts`.
+ */
+export type BuildTierDef = {
+  output: Partial<Record<GoodId, number>>
+  input: Partial<Record<GoodId, number>>
+  labor: number
+}
+
+/**
  * The single source of truth for building production and intermediate inputs
  * (ADR 0021, plan 0008 B1). `output` is the per-building monthly basket before
  * gates and per-good modifiers; `input` is the per-building monthly
@@ -165,6 +185,11 @@ export type BuildingRecipe = {
   outputGates?: Partial<Record<GoodId, RecipeGates>>
   /** Building-category output modifier seam (farmOutput/mineOutput/factoryOutput). */
   outputModifier?: ModifierStat
+  /**
+   * S0 placeholder (plan 0015 §S1): tier II/III recipes beyond the tier-I
+   * `BUILDING_RECIPES[id]` baseline. Unset until a later slice fills it.
+   */
+  tiers?: BuildTierDef[]
 }
 
 /**
@@ -345,6 +370,11 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     // (~16 units of labour demand) instead of a zero-labour special case.
     labor: 0.8,
   },
+  // plan 0015 S0 placeholder, semantics in S4: empty recipes — real outputs,
+  // inputs and labour land in S4.
+  chemicalWorks: { output: {}, input: {}, labor: 0 },
+  powerPlants: { output: {}, input: {}, labor: 0 },
+  locomotiveWorks: { output: {}, input: {}, labor: 0 },
 }
 
 /**
@@ -419,6 +449,12 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   offices: { name: '官署', cost: 3, note: '行政能力与官僚效能上限', infrastructureNeed: 0.08 },
   workshops: { name: '营造所', cost: 3, note: '消耗木材、粮食与铁，产出建造点', infrastructureNeed: 0.12 },
   navalBases: { name: '海军营地', cost: 5, note: '消耗船只，编练为海军', infrastructureNeed: 0.12 },
+  // plan 0015 S0 placeholder, semantics in S4. `unlock.techLevel: 99` is an S0
+  // lock so the buildings are never buildable until S4 sets the real unlock;
+  // cost/infraNeed sit in the heavy-industry band (machineryWorks/steelMills).
+  chemicalWorks: { name: '化工厂', cost: 5, note: '化工品，钢铁与煤的化学工业', infrastructureNeed: 0.2, unlock: { techLevel: 99 } },
+  powerPlants: { name: '发电厂', cost: 5, note: '电力，工业与城市的动力来源', infrastructureNeed: 0.25, unlock: { techLevel: 99 } },
+  locomotiveWorks: { name: '机车厂', cost: 5, note: '机车，钢铁与机械的交通装备', infrastructureNeed: 0.22, unlock: { techLevel: 99 } },
 }
 
 export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[]

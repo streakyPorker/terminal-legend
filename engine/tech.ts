@@ -130,51 +130,61 @@ export function techDiffusionBonus(world: WorldState, country: Country): number 
  */
 export function installTechNodeEffects(country: Country, node: TechNodeDef): void {
   node.effects.forEach((effect, index) => {
-    if (effect.kind === 'modifier') {
-      addModifier(country, {
-        id: `tech:${node.id}:${index}`,
-        label: effect.label ?? `${node.name}·${MODIFIER_STAT_NAMES[effect.stat]}`,
-        stat: effect.stat,
-        stack: effect.stack,
-        value: effect.value,
-        source: `tech:${node.id}`,
-      })
-      return
-    }
-    if (effect.morale !== undefined) {
-      country.military.morale = clampValue(
-        country.military.morale + effect.morale,
-        MORALE_MIN,
-        MORALE_MAX,
-      )
-    }
-    if (effect.loyalists !== undefined) {
-      country.pops.loyalists = clampValue(
-        country.pops.loyalists + effect.loyalists,
-        0,
-        LOYALISTS_MAX,
-      )
-    }
-    if (effect.radicals !== undefined) {
-      country.pops.radicals = clampValue(
-        country.pops.radicals + effect.radicals,
-        0,
-        RADICALS_MAX,
-      )
-    }
-    if (effect.legitimacy !== undefined) {
-      country.government.legitimacy = clampValue(
-        country.government.legitimacy + effect.legitimacy,
-        0,
-        LEGITIMACY_MAX,
-      )
-    }
-    if (effect.prestige !== undefined) {
-      country.diplo.prestige = clampValue(
-        country.diplo.prestige + effect.prestige,
-        0,
-        PRESTIGE_MAX,
-      )
+    switch (effect.kind) {
+      case 'modifier': {
+        addModifier(country, {
+          id: `tech:${node.id}:${index}`,
+          label: effect.label ?? `${node.name}·${MODIFIER_STAT_NAMES[effect.stat]}`,
+          stat: effect.stat,
+          stack: effect.stack,
+          value: effect.value,
+          source: `tech:${node.id}`,
+        })
+        return
+      }
+      case 'unlockTier':
+      case 'unlockBuilding':
+      case 'unlockLaw':
+      case 'demandShift':
+        // plan 0015 S0: installed by S3/S4
+        return
+      case 'immediate':
+        if (effect.morale !== undefined) {
+          country.military.morale = clampValue(
+            country.military.morale + effect.morale,
+            MORALE_MIN,
+            MORALE_MAX,
+          )
+        }
+        if (effect.loyalists !== undefined) {
+          country.pops.loyalists = clampValue(
+            country.pops.loyalists + effect.loyalists,
+            0,
+            LOYALISTS_MAX,
+          )
+        }
+        if (effect.radicals !== undefined) {
+          country.pops.radicals = clampValue(
+            country.pops.radicals + effect.radicals,
+            0,
+            RADICALS_MAX,
+          )
+        }
+        if (effect.legitimacy !== undefined) {
+          country.government.legitimacy = clampValue(
+            country.government.legitimacy + effect.legitimacy,
+            0,
+            LEGITIMACY_MAX,
+          )
+        }
+        if (effect.prestige !== undefined) {
+          country.diplo.prestige = clampValue(
+            country.diplo.prestige + effect.prestige,
+            0,
+            PRESTIGE_MAX,
+          )
+        }
+        return
     }
   })
 }

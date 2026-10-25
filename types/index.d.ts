@@ -41,6 +41,12 @@ export type GoodId =
   // PT-066: ships are a tradeable good. Shipyards make them, naval bases
   // consume them to grow `military.navy`.
   | 'ships'
+  // Plan 0015 S0: three new goods for the tier-2/3 buildings — `chemicals`
+  // (chemical works), `electricity` (power plants, non-tradable) and
+  // `locomotives` (locomotive works).
+  | 'chemicals'
+  | 'electricity'
+  | 'locomotives'
 
 /** Transport-cost region of a country (plan 0004 §1.2). */
 export type Region = 'europe' | 'eastAsia' | 'americas' | 'middleEast'
@@ -193,6 +199,10 @@ export type BuildingId =
   | 'workshops'
   // PT-066: naval base — consumes `ships` and turns them into `military.navy`.
   | 'navalBases'
+  // Plan 0015 S0: three new buildings (unlocked by tech nodes in a later slice).
+  | 'chemicalWorks'
+  | 'powerPlants'
+  | 'locomotiveWorks'
 
 export type SpendingCategory =
   | 'army'
@@ -498,6 +508,15 @@ export type ConstructionProject = {
   id: string
   building: BuildingId
   count: number
+  /**
+   * S0 placeholder (plan 0015 §S2): `'build'` (default) or `'upgrade'`. A later
+   * slice wires the upgrade behaviour; nothing reads it yet.
+   */
+  kind?: 'build' | 'upgrade'
+  /** S0 placeholder: the tier an upgrade project starts from (plan 0015 §S2). */
+  fromTier?: number
+  /** S0 placeholder: the tier an upgrade project targets (plan 0015 §S2). */
+  toTier?: number
   /** State projects draw on the treasury; private ones on private capital. */
   owner: 'state' | 'private'
   monthsLeft: number
@@ -540,6 +559,10 @@ export type Economy = {
   exportTariff?: number
   spending: Spending
   buildings: Record<BuildingId, number>
+  /**
+   * 每级座数分布；恒满足 Σ buildingTiers[id] === buildings[id]（语义见 plan 0015 S1）。
+   */
+  buildingTiers: Record<BuildingId, number[]>
   goods: Record<GoodId, number>
   prices: Record<GoodId, number>
   /**
@@ -668,9 +691,46 @@ export type TechNodeImmediate = {
   radicals?: number
   legitimacy?: number
   prestige?: number
+  /** Plan 0015 §S5: one-off fleet-quality bump (0–1). */
+  navalQuality?: number
 }
 
-export type TechNodeEffect = TechNodeModifier | TechNodeImmediate
+export type TechNodeEffect =
+  | TechNodeModifier
+  | TechNodeImmediate
+  | TechNodeUnlockTier
+  | TechNodeUnlockBuilding
+  | TechNodeUnlockLaw
+  | TechNodeDemandShift
+
+/**
+ * Plan 0015 / ADR 0031 §3: raise a building type's tier ceiling to `tier`
+ * (2 or 3). Stored in S0; installed and consumed in a later slice.
+ */
+export type TechNodeUnlockTier = {
+  kind: 'unlockTier'
+  building: BuildingId
+  tier: number
+}
+
+/** Plan 0015 / ADR 0031 §3: unlock a brand-new building (previously unbuildable). */
+export type TechNodeUnlockBuilding = {
+  kind: 'unlockBuilding'
+  building: BuildingId
+}
+
+/** Plan 0015 / ADR 0031 §3: unlock a law (`v3_action law` prerequisite). */
+export type TechNodeUnlockLaw = {
+  kind: 'unlockLaw'
+  law: string
+}
+
+/** Plan 0015 / ADR 0031 §3: node-level demand shift for a good (minimal PT-068). */
+export type TechNodeDemandShift = {
+  kind: 'demandShift'
+  good: GoodId
+  percent: number
+}
 
 /**
  * One node of the 4-era tech tree (plan 0005 §1). `era` is a tier (I–IV), not a
@@ -720,6 +780,11 @@ export type Military = {
   manpower: number
   /** 0..1 */
   quality: number
+  /**
+   * S0 placeholder (plan 0015 §S5): 0..1 fleet quality. Real per-country
+   * seeding and the `seaPower` formula land in a later slice.
+   */
+  navalQuality: number
   /** 0..100 */
   morale: number
   /** 0..100 */
@@ -784,6 +849,11 @@ export type War = {
   goal: WarGoal
   /** The declaring country; its side's win/loss decides which column applies. */
   goalOwner: string
+  /**
+   * S0 placeholder (plan 0015 §S5): sea-control share per country. Nothing
+   * reads it yet; the sea-control slice fills and consumes it.
+   */
+  seaControl?: Record<string, number>
 }
 
 /**

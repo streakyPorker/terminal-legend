@@ -32,6 +32,13 @@ export const GOODS: Record<GoodId, { name: string; basePrice: number }> = {
   // PT-066: a ship is a capital good, not a consumer good. Shipyards produce
   // it; naval bases consume it and convert it into `military.navy`.
   ships: { name: '船只', basePrice: 8 },
+  // plan 0015 S0 placeholder, semantics in S4; S4 may retune. Prices sit inside
+  // the existing 1..10 band: chemicals is a mid-tier industrial good (≈ steel),
+  // electricity is a cheap utility (≈ fabric), locomotives is a capital good
+  // (≈ ships). Real recipes/prices are finalised in S4.
+  chemicals: { name: '化工品', basePrice: 3 },
+  electricity: { name: '电力', basePrice: 2 },
+  locomotives: { name: '机车', basePrice: 8 },
 }
 
 export const GOOD_IDS = Object.keys(GOODS) as GoodId[]
@@ -115,6 +122,12 @@ export const SUBSISTENCE: Record<GoodId, number> = {
   machinery: 0,
   arms: 0,
   opium: 0,
+  // plan 0015 S0 placeholder, semantics in S4. The new goods are not consumer
+  // goods; `ships` was a pre-existing omission (also not a consumer good).
+  ships: 0,
+  chemicals: 0,
+  electricity: 0,
+  locomotives: 0,
 }
 
 /**
@@ -139,6 +152,12 @@ export const INCOME_ELASTICITY: Record<GoodId, number> = {
   machinery: 0,
   arms: 0,
   opium: 0,
+  // plan 0015 S0 placeholder, semantics in S4. Zero elasticity: the new goods
+  // are not consumer goods; `ships` was a pre-existing omission too.
+  ships: 0,
+  chemicals: 0,
+  electricity: 0,
+  locomotives: 0,
 }
 
 /** Government purchases by spending category (plan 0003 §2.3). */

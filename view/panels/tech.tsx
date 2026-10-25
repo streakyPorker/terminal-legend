@@ -16,13 +16,23 @@ const BRANCH_LABELS: Record<TechNodeDef['branch'], string> = {
 function effectText(node: TechNodeDef): string {
   const text = node.effects
     .map(effect => {
-      if (effect.kind === 'immediate') {
-        return Object.entries(effect)
-          .filter(([key, value]) => key !== 'kind' && typeof value === 'number')
-          .map(([key, value]) => `${key}${(value as number) >= 0 ? '+' : ''}${value}`)
-          .join(' ')
+      switch (effect.kind) {
+        case 'modifier':
+          return `${MODIFIER_STAT_NAMES[effect.stat]}${effect.value >= 0 ? '+' : ''}${effect.value}${effect.stack === 'flat' ? '' : '%'}`
+        case 'immediate':
+          return Object.entries(effect)
+            .filter(([key, value]) => key !== 'kind' && typeof value === 'number')
+            .map(([key, value]) => `${key}${(value as number) >= 0 ? '+' : ''}${value}`)
+            .join(' ')
+        case 'unlockTier':
+          return `解锁 ${effect.building} 等级 ${effect.tier}`
+        case 'unlockBuilding':
+          return `解锁新建筑 ${effect.building}`
+        case 'unlockLaw':
+          return `解锁法案 ${effect.law}`
+        case 'demandShift':
+          return `${effect.good} 需求 ${effect.percent >= 0 ? '+' : ''}${effect.percent}%`
       }
-      return `${MODIFIER_STAT_NAMES[effect.stat]}${effect.value >= 0 ? '+' : ''}${effect.value}${effect.stack === 'flat' ? '' : '%'}`
     })
     .join('，')
   return text === '' ? '无额外效果' : text

@@ -1,7 +1,7 @@
 import type { EngineInterface } from 'claude-code'
 import type { PolicyProposal } from '../types'
 import { MODIFIER_STATS } from '../engine/modifiers'
-import { GOOD_IDS, makeRngForWorld } from '../engine/data'
+import { BUILDING_IDS, GOOD_IDS, makeRngForWorld } from '../engine/data'
 import { applyDecision, applyPolicy, clamp, clone } from '../engine/sim'
 import { saveGame } from '../engine/save'
 import { forecastWorld, inspectWorld, INSPECT_SECTIONS, type InspectOptions } from '../engine/inspect'
@@ -167,28 +167,7 @@ export const TOOL_SPECS: {
         amount: { type: 'number' },
         building: {
           type: 'string',
-          enum: [
-            'farms',
-            'coalMines',
-            'ironMines',
-            'lumberMills',
-            'textileMills',
-            'furnitureWorks',
-            'distilleries',
-            'machineryWorks',
-            'steelMills',
-            'arsenals',
-            'luxuryWorks',
-            'schools',
-            'infrastructure',
-            'forts',
-            'navalYards',
-            'universities',
-            'barracks',
-            'offices',
-            'workshops',
-            'navalBases',
-          ],
+          enum: [...BUILDING_IDS],
         },
         count: { type: 'integer', minimum: -20, maximum: 20 },
         country: { type: 'string' },
@@ -252,28 +231,7 @@ export const TOOL_SPECS: {
         },
         building: {
           type: 'string',
-          enum: [
-            'farms',
-            'coalMines',
-            'ironMines',
-            'lumberMills',
-            'textileMills',
-            'furnitureWorks',
-            'distilleries',
-            'machineryWorks',
-            'steelMills',
-            'arsenals',
-            'luxuryWorks',
-            'schools',
-            'infrastructure',
-            'forts',
-            'navalYards',
-            'universities',
-            'barracks',
-            'offices',
-            'workshops',
-            'navalBases',
-          ],
+          enum: [...BUILDING_IDS],
           description: 'build 时必填。',
         },
         count: { type: 'integer', minimum: 1, maximum: 5 },

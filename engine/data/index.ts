@@ -49,6 +49,7 @@ export type {
   RecipeIO,
   RecipeGates,
   BuildingRecipe,
+  BuildTierDef,
   BuildingUnlock,
   BuildingDef,
 } from './buildings'

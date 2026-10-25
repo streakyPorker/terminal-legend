@@ -31,6 +31,10 @@ export const CAPACITY_COST: Record<BuildingId, number> = {
   offices: 1,
   workshops: 1.5,
   navalBases: 2,
+  // plan 0015 S0 placeholder, semantics in S4: heavy-industry band.
+  chemicalWorks: 2.5,
+  powerPlants: 3,
+  locomotiveWorks: 2.5,
 }
 
 /** Private builders do this share of a slot's work with their own organisation. */
@@ -65,6 +69,10 @@ export const BUILDING_COST_MULTIPLIER: Record<BuildingId, number> = {
   offices: 1,
   workshops: 1,
   navalBases: 1,
+  // plan 0015 S0 placeholder, semantics in S4.
+  chemicalWorks: 1,
+  powerPlants: 1,
+  locomotiveWorks: 1,
 }
 /** Per-building fixed gold addend; v1 is 0 for every type. */
 export const BUILDING_COST_ADDEND: Record<BuildingId, number> = {
@@ -88,6 +96,10 @@ export const BUILDING_COST_ADDEND: Record<BuildingId, number> = {
   offices: 0,
   workshops: 0,
   navalBases: 0,
+  // plan 0015 S0 placeholder, semantics in S4.
+  chemicalWorks: 0,
+  powerPlants: 0,
+  locomotiveWorks: 0,
 }
 
 /** Workshop capacity access curve: base + marketAccess × slope (retired gate). */

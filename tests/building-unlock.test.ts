@@ -31,6 +31,9 @@ const setTier = (country: Country, tier: number): void => {
   country.tech.unlocked = Array.from({ length: count }, (_, i) => `tier-node-${i}`)
 }
 
+// Plan 0015 S0: the three new buildings arrive LOCKED behind `unlock.techLevel`.
+const NEW_BUILDINGS: BuildingId[] = ['chemicalWorks', 'powerPlants', 'locomotiveWorks']
+
 // Plan 0011 F6: forward-compatible building unlock. A building is gated while
 // `unlock.techLevel` exceeds the country's level; no building sets one today, so
 // every build stays bit-for-bit buildable.
@@ -106,16 +109,29 @@ describe('F6 building unlock gate', () => {
     expect(result.text).toContain('未知建筑')
   })
 
-  test('the current roster is entirely unlocked and every type queues', () => {
-    for (const id of BUILDING_IDS) {
+  test('the legacy roster is ungated and buildable; the three new buildings are locked', () => {
+    const legacy = (BUILDING_IDS as BuildingId[]).filter(id => !NEW_BUILDINGS.includes(id))
+    for (const id of legacy) {
       expect(BUILDINGS[id].unlock?.techLevel, `${id} tech gate`).toBeUndefined()
     }
     const world = newWorld(9100, 'QING')
     const qing = countryOf(world, 'QING')
     qing.econ.treasury = 10000
     setTier(qing, 0)
-    for (const id of BUILDING_IDS) {
+    for (const id of legacy) {
       expect(build(world, 'QING', id).ok, `build ${id}`).toBe(true)
+    }
+
+    for (const id of NEW_BUILDINGS) {
+      expect(BUILDING_IDS, `roster is missing ${id}`).toContain(id)
+      const def = BUILDINGS[id]
+      expect(def, `BUILDINGS is missing ${id}`).toBeDefined()
+      expect(def?.unlock?.techLevel, `${id} lock`).toBeDefined()
+      const before = qing.econ.constructionQueue.length
+      const result = build(world, 'QING', id)
+      expect(result.ok, `build ${id} is locked`).toBe(false)
+      expect(result.text).toContain('未解锁')
+      expect(qing.econ.constructionQueue.length).toBe(before)
     }
   })
 
@@ -142,7 +158,7 @@ describe('F6 building unlock gate', () => {
     expect(applied.ok).toBe(true)
   })
 
-  test('the world stays at version 13', () => {
-    expect(newWorld(9100, 'QING').version).toBe(13)
+  test('the world stays at version 14', () => {
+    expect(newWorld(9100, 'QING').version).toBe(14)
   })
 })

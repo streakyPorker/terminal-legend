@@ -44,7 +44,7 @@ describe('T1a world schema (v11)', () => {
   test('the world is version 11 and carries region, trade and opium', async () => {
     const world = newWorld(9001, 'QING')
     const qing = world.countries.QING
-    expect(world.version).toBe(13)
+    expect(world.version).toBe(14)
     expect(qing).toBeDefined()
     if (qing === undefined) return
     expect(qing.region).toBe('eastAsia')
@@ -59,7 +59,7 @@ describe('T1a world schema (v11)', () => {
   })
 
   test('opium is a tradable good and services is not', async () => {
-    expect(Object.keys(GOODS).length).toBe(15)
+    expect(Object.keys(GOODS).length).toBe(18)
     expect(GOODS.opium.basePrice).toBe(2.5)
     expect(GOODS.steel.basePrice).toBeGreaterThan(GOODS.iron.basePrice)
     expect(GOODS.iron.name).toBe('铁矿石')

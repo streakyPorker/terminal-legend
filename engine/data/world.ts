@@ -21,6 +21,9 @@ import { TECH_NODES, clampEra, defaultResearchNode } from './tech'
 export const START_YEAR = 1836
 export const START_MONTH = 1
 
+/** plan 0015 S0 placeholder; real per-country seeding is S5. */
+const NAVAL_QUALITY_SEED = 0.5
+
 const zeroGoods = (): Record<GoodId, number> => {
   const out = {} as Record<GoodId, number>
   for (const id of GOOD_IDS) out[id] = 0
@@ -45,6 +48,19 @@ export function emptyTradeState(): TradeState {
     capacity: 0,
     history: { exportValue: [], importValue: [], nx: [], tariffRevenue: [] },
   }
+}
+
+/**
+ * Seeds each building class at tier I: one entry per level, so
+ * `Σ initialBuildingTiers(buildings)[id] === buildings[id]` holds by
+ * construction (plan 0015 S0).
+ */
+const initialBuildingTiers = (
+  buildings: Record<BuildingId, number>,
+): Record<BuildingId, number[]> => {
+  const out = {} as Record<BuildingId, number[]>
+  for (const id of BUILDING_IDS) out[id] = [buildings[id]]
+  return out
 }
 
 /** A zeroed per-building profit snapshot, before the first monthly settlement. */
@@ -176,6 +192,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         tariff: seedRow.tariff,
         spending: { ...seedRow.spending },
         buildings: { ...seedRow.buildings },
+        buildingTiers: initialBuildingTiers(seedRow.buildings),
         goods: zeroGoods(),
         prices: basePrices(),
         transportInfrastructure: 100,
@@ -242,6 +259,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         navy: seedRow.navy,
         manpower: seedRow.manpower,
         quality: seedRow.quality,
+        navalQuality: NAVAL_QUALITY_SEED,
         morale: seedRow.morale,
         exhaustion: 0,
       },
@@ -269,7 +287,7 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
   }
 
   return {
-    version: 13,
+    version: 14,
     seed,
     date: { year: START_YEAR, month: START_MONTH },
     tick: 0,
