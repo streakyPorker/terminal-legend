@@ -71,6 +71,9 @@ export {
   defaultResearchNode,
   clampEra,
   maxUnlockedTier,
+  buildingUnlocked,
+  lawUnlocked,
+  demandShiftPercent,
 } from './tech'
 
 // ---------------------------------------------------------------- leaders

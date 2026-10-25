@@ -42,6 +42,7 @@ describe('buff/debuff stacking', () => {
     const qing = world.countries.QING
     expect(qing).toBeDefined()
     if (qing === undefined) return
+    qing.modifiers = []
     addModifier(qing, {
       id: 'timed',
       label: '短暂繁荣',
@@ -99,6 +100,7 @@ describe('buff/debuff stacking', () => {
     expect(aus).toBeDefined()
     if (aus === undefined) return
     aus.government.authority = 100
+    aus.tech.unlocked.push('admin-2')
     applyDecision(
       world,
       { countryId: 'AUS', action: 'law', params: { name: '教育改革' } },

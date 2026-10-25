@@ -279,6 +279,8 @@ describe('war-goal migration equivalence (C6, ADR 0024)', () => {
 
   test('the openMarket modifier tuples keep the pre-C6 id/source shape', () => {
     const worldNew = newWorld(8420, 'QING')
+    countryOf(worldNew, 'QING').modifiers = []
+    countryOf(worldNew, 'GBR').modifiers = []
     declareWar(worldNew, 'QING', 'GBR', 'openMarket', '测试')
     const war = worldNew.wars[0]
     if (war === undefined) throw new Error('no war')
@@ -296,6 +298,8 @@ describe('war-goal migration equivalence (C6, ADR 0024)', () => {
 
   test('the sphere modifier tuple keeps the pre-C6 id/source shape', () => {
     const worldNew = newWorld(8421, 'QING')
+    countryOf(worldNew, 'QING').modifiers = []
+    countryOf(worldNew, 'GBR').modifiers = []
     declareWar(worldNew, 'QING', 'GBR', 'sphere', '测试')
     const war = worldNew.wars[0]
     if (war === undefined) throw new Error('no war')

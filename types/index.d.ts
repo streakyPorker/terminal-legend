@@ -733,9 +733,10 @@ export type TechNodeDemandShift = {
 }
 
 /**
- * One node of the 4-era tech tree (plan 0005 §1). `era` is a tier (I–IV), not a
- * calendar year; the optional `year` (years since 1836) is a soft historical
- * pace hint. `effects` is stored in K1 and wired by K2.
+ * One node of the 4-era / 20-node tech tree (plan 0015 §S3). `era` is a tier
+ * (I–IV), not a calendar year. `effects` carries the node's unlock-class effects
+ * plus its modifier / immediate parts; the dead `unlocks` / `year` fields were
+ * removed in v14 (ADR 0031 §3).
  */
 export type TechNodeDef = {
   id: string
@@ -745,9 +746,6 @@ export type TechNodeDef = {
   cost: number
   prerequisites: string[]
   effects: TechNodeEffect[]
-  /** Feature flags recorded for later slices, e.g. `electrification`. */
-  unlocks?: string[]
-  year?: number
   /**
    * Extra gate: at least N unlocked nodes in ANY single non-general branch
    * (`general-1865` needs 2, `general-1880` needs 3 — plan 0005 §1.1).

@@ -1,5 +1,6 @@
 import type { Country } from '../../types'
 import { FREE_TRADE_TARIFF_FLOOR } from '../config/tax'
+import { lawUnlocked } from '../data'
 import {
   compileLawBlock,
   lawBlockFor,
@@ -102,6 +103,9 @@ export function actionLaw(country: Country, params: ActionParams): ActionResult 
   }
   const apply = legal[name]
   if (apply === undefined) return { ok: false, text: `${tag} 未知法案 ${name}` }
+  if (!lawUnlocked(country, name)) {
+    return { ok: false, text: `${tag} 无法推行${name}：科技前置未解锁` }
+  }
   const cost = LAW_AUTHORITY_COST[name] ?? 8
   if (country.government.authority < cost) {
     return {

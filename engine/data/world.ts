@@ -16,7 +16,8 @@ import { BUILDING_IDS } from './buildings'
 import { COUNTRY_SEEDS } from './countries'
 import { administrativeCapacityFor, deriveBureaucracy, refreshInfrastructure } from './derivations'
 import { GOODS, GOOD_IDS } from './goods'
-import { TECH_NODES, clampEra, defaultResearchNode } from './tech'
+import { TECH_NODES, clampEra, defaultResearchNode, techNode } from './tech'
+import { installTechNodeEffects } from '../tech'
 
 export const START_YEAR = 1836
 export const START_MONTH = 1
@@ -275,6 +276,15 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
     }
     country.bureaucracy = deriveBureaucracy(country, false)
     refreshInfrastructure(country)
+    // Plan 0015 §S3 / ADR 0031 §9.1 (M3): `techStateFromLevel` pre-unlocks the
+    // general nodes up to the country's era but never installed their effects.
+    // Install each unlocked node's modifier / immediate parts so a seeded
+    // era-2/3 country (GBR/FRA) actually has them at t0. The four
+    // unlock/demand kinds are derived, so nothing is installed for them.
+    for (const nodeId of country.tech.unlocked) {
+      const node = techNode(nodeId)
+      if (node !== undefined) installTechNodeEffects(country, node)
+    }
     countries[seedRow.id] = country
   }
 

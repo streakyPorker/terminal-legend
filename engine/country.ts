@@ -4,6 +4,7 @@ import {
   GOOD_IDS,
   isCostCentre,
   applyBuildingDecay,
+  clampEra,
   deriveBureaucracy,
   deriveUnemployment,
   industrialBuildingCount,
@@ -530,7 +531,7 @@ export function simulateCountry(
       country.tech.unlocked.push(node.id)
       installTechNodeEffects(country, node)
       if (node.branch === 'general' && node.era > country.tech.era) {
-        country.tech.era = node.era
+        country.tech.era = clampEra(node.era)
       }
       country.tech.researching = ''
       log.push({

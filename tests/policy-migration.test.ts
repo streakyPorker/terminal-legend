@@ -219,7 +219,7 @@ describe('policy migration equivalence (C2, ADR 0024)', () => {
     })
   })
 
-  test('upkeep matches cost/48/effects and is present on every modifier', () => {
+  test('upkeep matches cost/48/effects and is present on every policy modifier', () => {
     const worldNew = newWorld(5005, 'QING')
     const cNew = qing(worldNew)
     cNew.government.authority = 100
@@ -239,7 +239,7 @@ describe('policy migration equivalence (C2, ADR 0024)', () => {
     expect(got).toEqual(want)
     expect(tuples(cNew)).toEqual(tuples(cRef))
     const spent = 100 - cNew.government.authority
-    for (const m of cNew.modifiers) {
+    for (const m of cNew.modifiers.filter(one => one.source.startsWith('policy:'))) {
       expect(Math.abs((m.upkeep ?? 0) - spent / 48 / 3)).toBeLessThan(1e-12)
     }
   })

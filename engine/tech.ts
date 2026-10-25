@@ -146,7 +146,12 @@ export function installTechNodeEffects(country: Country, node: TechNodeDef): voi
       case 'unlockBuilding':
       case 'unlockLaw':
       case 'demandShift':
-        // plan 0015 S0: installed by S3/S4
+        // Plan 0015 §S3 / ADR 0031 §9.1: these four kinds are DERIVED from
+        // `country.tech.unlocked` at read time — `maxUnlockedTier`,
+        // `buildingUnlocked`, `lawUnlocked`, `demandShiftPercent` (data/tech.ts)
+        // — so a completed node installs nothing here. Deriving (rather than
+        // writing state) is the one mechanism chosen for S3: seeded and
+        // researched nodes then behave identically and no migration is needed.
         return
       case 'immediate':
         if (effect.morale !== undefined) {

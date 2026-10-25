@@ -3,6 +3,7 @@ import type { Country, TradeFlow, War, WorldState } from '../types'
 import {
   TECH_NODES,
   makeRngForWorld,
+  maxUnlockedTier,
   techNode,
 } from '../engine/data'
 import type { Decision } from '../engine/internal'
@@ -74,32 +75,33 @@ describe('tech node effects (plan 0005 K2 §4)', () => {
     installTechNodeEffects(qing, industry1)
 
     const fabric = qing.modifiers.filter(m => m.source === 'tech:industry-1')
-    expect(fabric.length).toBe(2)
-    expect(fabric[0]?.id).toBe('tech:industry-1:0')
+    expect(fabric.length).toBe(1)
+    expect(fabric[0]?.id.startsWith('tech:industry-1:')).toBe(true)
     expect(fabric[0]?.stat).toBe('fabricOutput')
-    expect(fabric[1]?.stat).toBe('factoryOutput')
     close(applyModifiers(qing, 'fabricOutput', 100), 110)
 
     const military4 = techNode('military-4')
     expect(military4).toBeDefined()
     if (military4 === undefined) return
     const moraleBefore = qing.military.morale
+    const navalBefore = qing.military.navalQuality
     installTechNodeEffects(qing, military4)
     close(qing.military.morale, moraleBefore + 5)
+    close(qing.military.navalQuality, navalBefore + 0.1)
     expect(qing.modifiers.filter(m => m.source === 'tech:military-4').length).toBe(1)
   })
 
-  test('military-3 installs the navyStrength seam alongside armyStrength', () => {
+  test('the unlock-class kinds install no modifier: they are derived from unlocked nodes', () => {
     const world = newWorld(9311, 'QING')
     const qing = countryOf(world, 'QING')
-    const military3 = techNode('military-3')
-    expect(military3).toBeDefined()
-    if (military3 === undefined) return
-    installTechNodeEffects(qing, military3)
-    expect(
-      qing.modifiers.some(m => m.source === 'tech:military-3' && m.stat === 'navyStrength'),
-    ).toBe(true)
-    close(applyModifiers(qing, 'navyStrength', 100), 105)
+    const before = qing.modifiers.length
+    const industry1 = techNode('industry-1')
+    if (industry1 === undefined) return
+    qing.tech.unlocked.push('industry-1')
+    installTechNodeEffects(qing, industry1)
+    // Only the node's one modifier lands; its three `unlockTier` effects add none.
+    expect(qing.modifiers.length).toBe(before + 1)
+    expect(maxUnlockedTier(qing, 'textileMills')).toBe(2)
   })
 
   test('completing a node installs its effects through the engine exactly once', () => {
@@ -117,12 +119,14 @@ describe('tech node effects (plan 0005 K2 §4)', () => {
     moraleQing.tech.era = 4
     moraleQing.tech.unlocked = [
       'general-1836',
+      'general-1840',
       'general-1850',
       'general-1865',
       'general-1880',
       'military-1',
       'military-2',
       'military-3',
+      'military-5',
     ]
     research(moraleWorld, 'QING', 'military-4')
     const military4 = techNode('military-4')
@@ -143,7 +147,7 @@ describe('tech node effects (plan 0005 K2 §4)', () => {
     advance(controlWorld, 1, [], makeRngForWorld(controlWorld))
 
     expect(qing.tech.unlocked).toContain('industry-1')
-    expect(qing.modifiers.filter(m => m.source === 'tech:industry-1').length).toBe(2)
+    expect(qing.modifiers.filter(m => m.source === 'tech:industry-1').length).toBe(1)
     expect(qing.tech.unlocked.filter(id => id === 'industry-1').length).toBe(1)
     expect(research(world, 'QING', 'industry-1').ok).toBe(false)
 

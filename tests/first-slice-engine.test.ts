@@ -166,6 +166,7 @@ describe('M2 construction queue and economy fixes', () => {
     if (aus === undefined) return
 
     aus.government.authority = 3
+    aus.tech.unlocked.push('admin-2')
     const denied = applyDecision(
       world,
       { countryId: 'AUS', action: 'law', params: { name: '教育改革' } },
@@ -191,6 +192,7 @@ describe('M2 construction queue and economy fixes', () => {
     if (qing === undefined) return
 
     qing.econ.tariff = 12
+    qing.tech.unlocked.push('admin-3')
     expect(
       applyDecision(
         world,

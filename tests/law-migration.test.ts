@@ -27,6 +27,20 @@ const LAWS = [
   '宗教宽容',
 ] as const
 
+/**
+ * The tech node that unlocks each law (plan 0015 §S3). `expectLawEquivalent`
+ * unlocks it first so the engine's tech gate passes and the pre-C6 oracle, which
+ * predates the gate, matches.
+ */
+const LAW_PREREQ: Record<(typeof LAWS)[number], string> = {
+  教育改革: 'admin-2',
+  福利改革: 'admin-4',
+  自由贸易: 'admin-3',
+  保护关税: 'admin-3',
+  征兵制: 'military-2',
+  宗教宽容: 'admin-4',
+}
+
 const clone = (c: Country): Country => JSON.parse(JSON.stringify(c)) as Country
 
 const countryOf = (world: WorldState, id: string): Country => {
@@ -168,10 +182,11 @@ function referenceApplyLaw(country: Country, name: string): { ok: boolean; text:
   return { ok: true, text: apply() }
 }
 
-function expectLawEquivalent(seed: number, name: string): void {
+function expectLawEquivalent(seed: number, name: (typeof LAWS)[number]): void {
   const world = newWorld(seed, 'QING')
   const live = countryOf(world, 'QING')
   live.government.authority = 100
+  live.tech.unlocked.push(LAW_PREREQ[name])
   const ref = clone(live)
 
   const expected = referenceApplyLaw(ref, name)
@@ -200,6 +215,7 @@ describe('law migration equivalence (C6, ADR 0024)', () => {
     const world = newWorld(8207, 'QING')
     const qing = countryOf(world, 'QING')
     qing.government.authority = 100
+    qing.tech.unlocked.push(LAW_PREREQ['自由贸易'])
     applyDecision(
       world,
       { countryId: 'QING', action: 'law', params: { name: '自由贸易' } },
@@ -218,6 +234,7 @@ describe('law migration equivalence (C6, ADR 0024)', () => {
     const world = newWorld(8208, 'QING')
     const qing = countryOf(world, 'QING')
     qing.government.authority = 100
+    qing.tech.unlocked.push(LAW_PREREQ['教育改革'])
     applyDecision(
       world,
       { countryId: 'QING', action: 'law', params: { name: '教育改革' } },

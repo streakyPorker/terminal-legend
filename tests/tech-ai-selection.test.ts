@@ -38,7 +38,7 @@ const war = (a: string, b: string): War => ({
  */
 function clean(world: WorldState, country: Country): void {
   country.tech.era = 2
-  country.tech.unlocked = ['general-1836', 'general-1850']
+  country.tech.unlocked = ['general-1836', 'general-1840', 'general-1850']
   country.tech.nodes = {}
   country.tech.researching = ''
   country.tech.points = 0
@@ -111,7 +111,7 @@ describe('deterministic AI selection (plan 0005 §2.5, K3)', () => {
     fra.leader.traits = ['军事', '扩张']
     fra.military.army = 5
     world.wars.push(war('FRA', 'GBR'))
-    expect(choice(world, fra)).toBe('general-1850')
+    expect(choice(world, fra)).toBe('general-1840')
   })
 
   test('the whole world keeps one research path per seed over 120 months', () => {

@@ -175,10 +175,10 @@ describe('T4 openMarket: structural access and a timed income buff (plan §5)', 
 
     expect(close(usa.econ.tariff, Math.max(0, lTariff - 10))).toBe(true)
     expect(close(usa.government.legitimacy, lLegit - 4)).toBe(true)
-    const access = usa.modifiers.find(one => one.stat === 'marketAccess')
+    const access = usa.modifiers.find(one => one.stat === 'marketAccess' && one.monthsLeft !== undefined)
     expect(access?.value).toBe(0.15)
     expect(access?.monthsLeft).toBe(24)
-    const income = qing.modifiers.find(one => one.stat === 'income')
+    const income = qing.modifiers.find(one => one.stat === 'income' && one.monthsLeft !== undefined)
     expect(income?.value).toBe(5)
     expect(income?.monthsLeft).toBe(24)
   })
@@ -193,7 +193,7 @@ describe('T4 sphere: the loser enters the winner sphere (plan §5)', () => {
     makePeace(world, 'GBR', 50)
 
     expect(qing.diplo.sphere).toContain('GBR')
-    const access = qing.modifiers.find(one => one.stat === 'marketAccess')
+    const access = qing.modifiers.find(one => one.stat === 'marketAccess' && one.monthsLeft !== undefined)
     expect(access?.value).toBe(0.05)
     expect(access?.monthsLeft).toBe(24)
     // -15 seed −50 declaration −10 goal −20 belligerent.

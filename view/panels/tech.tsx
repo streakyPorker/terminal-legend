@@ -1,5 +1,5 @@
 import type { ControlPayload, Country, TechNodeDef, WorldState } from '../../types'
-import { TECH_NODES, canResearchNode, techNode, techNodeName, techTier } from '../../engine/data'
+import { BUILDINGS, GOODS, TECH_NODES, canResearchNode, techNode, techNodeName, techTier } from '../../engine/data'
 import { techDiffusionBonus, techSpillRate } from '../../engine/tech'
 import { MODIFIER_STAT_NAMES } from '../../engine/modifiers'
 import { bar, fmtNumber, fmtPercent, padEnd } from '../format'
@@ -25,13 +25,13 @@ function effectText(node: TechNodeDef): string {
             .map(([key, value]) => `${key}${(value as number) >= 0 ? '+' : ''}${value}`)
             .join(' ')
         case 'unlockTier':
-          return `解锁 ${effect.building} 等级 ${effect.tier}`
+          return `解锁${BUILDINGS[effect.building].name}等级${effect.tier}`
         case 'unlockBuilding':
-          return `解锁新建筑 ${effect.building}`
+          return `解锁新建筑：${BUILDINGS[effect.building].name}`
         case 'unlockLaw':
-          return `解锁法案 ${effect.law}`
+          return `解锁法案：${effect.law}`
         case 'demandShift':
-          return `${effect.good} 需求 ${effect.percent >= 0 ? '+' : ''}${effect.percent}%`
+          return `${GOODS[effect.good].name}需求 ${effect.percent >= 0 ? '+' : ''}${effect.percent}%`
       }
     })
     .join('，')

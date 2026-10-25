@@ -197,6 +197,7 @@ describe('event migration equivalence (C3, ADR 0024)', () => {
 
   test('the installed tuple keeps the pre-C3 id/source shape', () => {
     const world = newWorld(7008, 'QING')
+    qing(world).modifiers = []
     const event = forceEvent(world, 'harvest')
     applyEventOption(world, event, 'celebrate')
     const c = qing(world)
@@ -214,6 +215,7 @@ describe('event migration equivalence (C3, ADR 0024)', () => {
   test('synthetic options outside the registry still install via a compiled block', () => {
     const world = newWorld(7009, 'QING')
     const c = qing(world)
+    c.modifiers = []
     const event: GameEvent = {
       id: 'ev-synthetic',
       date: { ...world.date },
