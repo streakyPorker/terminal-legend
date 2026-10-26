@@ -190,6 +190,44 @@ describe('v3_inspect (plan 0006)', () => {
     expect(text).toContain('结算后国库约')
   })
 
+  test('the forecast prices construction at the country per-point gold (PT-092)', async () => {
+    const world = newWorld(9105, 'QING')
+    const qing = world.countries.QING
+    if (qing === undefined) throw new Error('missing QING')
+    qing.econ.buildings.workshops = 10
+    qing.econ.constructionQueue = [
+      {
+        id: 'forecast-1',
+        building: 'textileMills',
+        count: 2,
+        owner: 'state',
+        monthsLeft: 4,
+        monthlyCost: 2,
+        lastSpend: 0,
+        progress: 0,
+        startedAt: { ...world.date },
+      },
+    ]
+    const priceOf = (text: string): number => {
+      const match = /×均价 ([\d.]+)/.exec(text)
+      if (match === null) throw new Error('forecast line missing the per-point price')
+      return Number(match[1])
+    }
+    const plain = priceOf(forecastWorld(world))
+    qing.modifiers.push({
+      id: 'test:construction-cost',
+      label: '测试建造折扣',
+      stat: 'constructionCost',
+      stack: 'percent',
+      value: -50,
+      source: 'test',
+    })
+    const discounted = priceOf(forecastWorld(world))
+    // The estimate must move with the modifier; the old flat 0.2 did not.
+    expect(plain).toBeGreaterThan(0)
+    expect(Math.abs(discounted - plain / 2)).toBeLessThan(1e-6)
+  })
+
   test('an unknown section names every available one', async () => {
     const world = newWorld(9103, 'QING')
     const text = inspectWorld(world, 'nope')

@@ -1,7 +1,11 @@
 import type { WorldState } from '../../types'
 import { fiscalLedger } from '../fiscal'
 import { infrastructureStats } from '../data'
-import { constructionLoad } from '../sim'
+import {
+  CONSTRUCTION_RENT_PER_POINT,
+  constructionGoldPerPoint,
+  constructionLoad,
+} from '../sim'
 import { n, pct, signed, warFor } from './shared'
 
 /**
@@ -18,9 +22,18 @@ export function forecastWorld(world: WorldState): string {
   })
   const load = constructionLoad(country)
   const subsidy = Math.max(0, country.econ.spending.construction) * 0.45
-  const construction = load.allocated * 0.2
-  const rent =
-    (load.privateRented + load.privateMarket) * 0.3
+  // PT-092: price each state project's allocated points at its own per-point
+  // gold (building multiplier × workshop tier × the `constructionCost`
+  // modifier). The old flat 0.2 ignored the modifier and doubled the estimate
+  // whenever a cost buff was live.
+  let construction = 0
+  for (const project of country.econ.constructionQueue) {
+    if ((project.owner ?? 'state') === 'private') continue
+    const points = load.byProject[project.id] ?? 0
+    if (points > 0) construction += points * constructionGoldPerPoint(project, country)
+  }
+  const perPoint = load.allocated > 0 ? construction / load.allocated : 0
+  const rent = (load.privateRented + load.privateMarket) * CONSTRUCTION_RENT_PER_POINT
   const income =
     ledger.income.total - ledger.income.other + rent
   const expense =
@@ -35,7 +48,7 @@ export function forecastWorld(world: WorldState): string {
   const lines = [
     `[${country.flag}] ${country.name} · 下月现金流预估（${world.date.year}.${String(world.date.month).padStart(2, '0')} 结算后）`,
     `收入约 ${n(income)} = 上月的 ${n(ledger.income.total)} − 上月「其他」${n(ledger.income.other)} + 预计租金 ${n(rent)}`,
-    `支出约 ${n(expense)} = 上月 ${n(ledger.expense.total)} − 上月国有建设 ${n(ledger.expense.construction)} − 补贴 ${n(ledger.expense.constructionSubsidy)} + 本月建造点 ${n(load.allocated)}×0.2 + 补贴 ${n(subsidy)}`,
+    `支出约 ${n(expense)} = 上月 ${n(ledger.expense.total)} − 上月国有建设 ${n(ledger.expense.construction)} − 补贴 ${n(ledger.expense.constructionSubsidy)} + 本月建造点 ${n(load.allocated)}×均价 ${n(perPoint, 2)} = ${n(construction)} + 补贴 ${n(subsidy)}`,
     `净额约 ${signed(net)} 金；结算后国库约 ${signed(treasury)}${treasury < 0 ? '（转国债）' : treasury > 0 ? '（主权基金）' : ''}`,
     `统一基础设施：水平 ${n(inf.level, 0)}/100，供给 ${n(inf.supply)} ÷ 需求 ${n(inf.demand)} = ${n(inf.ratio, 2)}，下月产出乘数约 ${pct(inf.multiplier)}`,
     `建造力 ${n(load.capacity)}，已分配 ${n(load.allocated)}，私人租用 ${n(load.privateRented + load.privateMarket)}，闲置 ${n(load.remaining)}`,
