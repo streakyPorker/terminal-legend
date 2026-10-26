@@ -13,6 +13,7 @@ import {
 import { applyModifiers } from '../engine/modifiers'
 import { techNodeCost } from '../engine/config/tech'
 import { advance, applyDecision, newWorld } from '../engine/sim'
+import { TOOL_SPECS } from '../hooks/tools'
 
 // ============================================================================
 // Plan 0015 §S3 — the 20-node table (appendix A), extended by plan 0016 §S2
@@ -378,5 +379,107 @@ describe('S3 general-line completion clamps the era (ADR 0031 §9.4)', () => {
 
   test('no node declares an era above the modelled maximum of 4', () => {
     for (const node of TECH_NODES) expect(node.era).toBeLessThanOrEqual(4)
+  })
+})
+
+// ============================================================================
+// Plan 0016 appendix C.2 — the mid-tier `unlockTier` sources that S3/S7 never
+// wired into the node table (implementation-review blocker). Without these,
+// `maxUnlockedTier` for workshops / farms / chemicalWorks / powerPlants /
+// locomotiveWorks stays at I–II until `industry-6` (era 4) jumps to IV, so e.g.
+// workshops are not upgradable at all before era 4, defeating S7.
+// ============================================================================
+
+describe('plan 0016 appendix C.2 mid-tier unlockTier sources (review blocker)', () => {
+  const freshQing = (seed: number): Country => {
+    const world = newWorld(seed, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.tech.unlocked = ['general-1836']
+    return qing
+  }
+
+  test('the C.2 nodes carry exactly the appended unlockTier effects', () => {
+    const tierOf = (nodeId: string, building: BuildingId): number | undefined =>
+      techNode(nodeId)?.effects.find(
+        effect => effect.kind === 'unlockTier' && effect.building === building,
+      )?.tier
+    expect(tierOf('industry-1', 'workshops')).toBe(2)
+    expect(tierOf('industry-3', 'workshops')).toBe(3)
+    expect(tierOf('general-1865', 'farms')).toBe(3)
+    expect(tierOf('industry-5', 'chemicalWorks')).toBe(2)
+    expect(tierOf('industry-4', 'chemicalWorks')).toBe(3)
+    expect(tierOf('industry-4', 'powerPlants')).toBe(3)
+    expect(tierOf('industry-4', 'locomotiveWorks')).toBe(3)
+  })
+
+  test('workshops reach II at industry-1 and III at industry-3', () => {
+    const qing = freshQing(7910)
+    expect(maxUnlockedTier(qing, 'workshops')).toBe(1)
+    qing.tech.unlocked.push('industry-1')
+    expect(maxUnlockedTier(qing, 'workshops')).toBe(2)
+    qing.tech.unlocked.push('industry-3')
+    expect(maxUnlockedTier(qing, 'workshops')).toBe(3)
+  })
+
+  test('farms reach III at general-1865 (II stays from the pre-existing nodes)', () => {
+    const qing = freshQing(7911)
+    expect(maxUnlockedTier(qing, 'farms')).toBe(2)
+    qing.tech.unlocked.push('general-1865')
+    expect(maxUnlockedTier(qing, 'farms')).toBe(3)
+  })
+
+  test('chemicalWorks reach II at industry-5 and III at industry-4', () => {
+    const qing = freshQing(7912)
+    expect(maxUnlockedTier(qing, 'chemicalWorks')).toBe(1)
+    qing.tech.unlocked.push('industry-5')
+    expect(maxUnlockedTier(qing, 'chemicalWorks')).toBe(2)
+    qing.tech.unlocked.push('industry-4')
+    expect(maxUnlockedTier(qing, 'chemicalWorks')).toBe(3)
+  })
+
+  test('powerPlants and locomotiveWorks reach III at industry-4', () => {
+    const qing = freshQing(7913)
+    expect(maxUnlockedTier(qing, 'powerPlants')).toBe(1)
+    expect(maxUnlockedTier(qing, 'locomotiveWorks')).toBe(1)
+    qing.tech.unlocked.push('industry-4')
+    expect(maxUnlockedTier(qing, 'powerPlants')).toBe(3)
+    expect(maxUnlockedTier(qing, 'locomotiveWorks')).toBe(3)
+  })
+
+  test('a default world keeps the pre-C.2 ceilings (no silent early unlock)', () => {
+    const world = newWorld(7914, 'QING')
+    const qing = countryOf(world, 'QING')
+    // QING seeds with only the general line up to era 1 (farms II); none of the
+    // C.2 industry sources fire, so these stay at their pre-these-nodes value.
+    expect(qing.tech.unlocked).not.toContain('industry-1')
+    expect(maxUnlockedTier(qing, 'workshops')).toBe(1)
+    expect(maxUnlockedTier(qing, 'farms')).toBe(2)
+    expect(maxUnlockedTier(qing, 'chemicalWorks')).toBe(1)
+    expect(maxUnlockedTier(qing, 'powerPlants')).toBe(1)
+    expect(maxUnlockedTier(qing, 'locomotiveWorks')).toBe(1)
+  })
+
+  test('a seeded era-3 country reflects general-1865\'s farms III', () => {
+    const world = newWorld(7915, 'QING')
+    const gbr = countryOf(world, 'GBR')
+    expect(gbr.tech.unlocked).toContain('general-1865')
+    expect(maxUnlockedTier(gbr, 'farms')).toBe(3)
+  })
+})
+
+describe('v3_action tier schema accepts I–V (plan 0016)', () => {
+  test('tier / fromTier / toTier maxima are 5 (1-based)', () => {
+    const action = TOOL_SPECS.find(spec => spec.name === 'v3_action')
+    expect(action).toBeDefined()
+    const schema = action?.inputSchema as
+      | { properties?: Record<string, { minimum?: number; maximum?: number }> }
+      | undefined
+    const properties = schema?.properties ?? {}
+    for (const key of ['tier', 'fromTier', 'toTier']) {
+      expect(properties[key]?.maximum, `${key} maximum`).toBe(5)
+    }
+    expect(properties.tier?.minimum).toBe(1)
+    expect(properties.fromTier?.minimum).toBe(1)
+    expect(properties.toTier?.minimum).toBe(2)
   })
 })

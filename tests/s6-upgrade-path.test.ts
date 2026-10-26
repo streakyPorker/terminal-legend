@@ -72,13 +72,17 @@ describe('S6 AI fallback upgrade path (plan 0016 §S6)', () => {
 
   test('below the mid/late tiers the fallback still builds (no premature retrofit)', () => {
     const world = newWorld(SEED, 'QING')
-    const gbr = countryOf(world, 'GBR')
-    gbr.econ.treasury = 1000
-    gbr.econ.constructionQueue = []
-    // The seed world unlocks farms II only (a tier-II ceiling), which the S6 AI
-    // path deliberately leaves to the private-investment step.
-    expect(maxUnlockedTier(gbr, 'textileMills')).toBe(1)
-    const decision = randomDecision(world, gbr, scriptedRng(0.45))
+    // Plan 0016 appendix C.2 gives `general-1865` a `farms 3` ceiling, and the
+    // era-3 seed pre-unlocks that node — so GBR (era 3) now has a tier-III
+    // ceiling and legitimately retrofits, no longer the below-mid case. Use an
+    // era-2 power (FRA) whose only ceilings are tier II: the below-mid case the
+    // S6 gate deliberately leaves to the private-investment step.
+    const fra = countryOf(world, 'FRA')
+    fra.econ.treasury = 1000
+    fra.econ.constructionQueue = []
+    expect(maxUnlockedTier(fra, 'textileMills')).toBe(1)
+    expect(maxUnlockedTier(fra, 'farms')).toBe(2)
+    const decision = randomDecision(world, fra, scriptedRng(0.45))
     expect(decision?.action).toBe('build')
   })
 })

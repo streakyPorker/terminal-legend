@@ -244,19 +244,19 @@ export const TOOL_SPECS: {
         tier: {
           type: 'integer',
           minimum: 1,
-          maximum: 3,
+          maximum: 5,
           description: 'build 时可选，目标等级（1-based，默认 1 = I 级）；未解锁的等级会被拒绝。',
         },
         fromTier: {
           type: 'integer',
           minimum: 1,
-          maximum: 2,
+          maximum: 5,
           description: 'upgrade 时必填，来源等级（1-based，1 = I 级）。',
         },
         toTier: {
           type: 'integer',
           minimum: 2,
-          maximum: 3,
+          maximum: 5,
           description: 'upgrade 时必填，目标等级（1-based，须高于 fromTier 且已解锁）。',
         },
         rate: { type: 'number', minimum: 0, maximum: 60, description: '进口关税税率（tariff 时）或税基税率（tax 时，0..60）。' },
