@@ -346,6 +346,13 @@ export type ModifierStat =
    * gold cost of a project.
    */
   | 'constructionCost'
+  /**
+   * Tariff bargaining power in [0, 0.9], read as a direct value (default 0).
+   * `b` damps the price wedge of the country's posted import/export duties to
+   * `1 − b` of their nominal size: the foreign side absorbs more of the tax, so
+   * raising a tariff moves prices (and raises duty revenue) less.
+   */
+  | 'tariffBargaining'
   | 'marketAccess'
   | 'transportInfrastructure'
   | 'administrativeCapacity'

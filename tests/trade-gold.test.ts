@@ -2,6 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import { GOODS, GOOD_IDS, makeRngForWorld, infrastructureCount } from '../engine/data'
 import { advance, clone, computeEconomy, inspectEconomy, newWorld } from '../engine/sim'
 import { nationalDebt } from '../engine/fiscal'
+import { addModifier } from '../engine/modifiers'
 import {
   applyCapacity,
   applyPaymentCapacity,
@@ -15,6 +16,7 @@ import {
   paymentCapacity,
   RELATION_CUTOFF,
   settleTrade,
+  tariffPassThrough,
   TRADABLE_GOODS,
   type MarketSnapshot,
 } from '../engine/trade'
@@ -604,5 +606,68 @@ describe('T1b baseline and determinism', () => {
     expect(exportDutyRate(gbr)).toBe(7)
     gbr.econ.exportTariff = 2
     expect(exportDutyRate(gbr)).toBe(2)
+  })
+
+  test('tariff bargaining damps the import wedge and the duty bill', async () => {
+    const world = newWorld(7018, 'QING')
+    const qing = countryOf(world, 'QING')
+    const gbr = countryOf(world, 'GBR')
+    qing.econ.tariff = 20
+    gbr.econ.tariff = 0
+    gbr.econ.exportTariff = 0
+    const base = landedPrice(gbr, qing, 'coal')
+    addModifier(qing, {
+      id: 'test:bargain:import',
+      label: '关税议价能力',
+      stat: 'tariffBargaining',
+      stack: 'flat',
+      value: 0.5,
+    })
+    // Half the posted 20% wedges through: 1.1 instead of 1.2.
+    expect(
+      Math.abs(landedPrice(gbr, qing, 'coal') - (base * 1.1) / 1.2),
+    ).toBeLessThan(1e-9)
+    const flow: TradeFlow = {
+      good: 'coal',
+      from: 'GBR',
+      to: 'QING',
+      quantity: 10,
+      unitPrice: 1,
+      landedPrice: 1,
+      tariffPaid: 0,
+      exportDuty: 0,
+      value: 10,
+    }
+    // 10 gold of border value × a 10% effective rate (half of the posted 20%).
+    expect(Math.abs(settleTrade(qing, [flow], 0).importDuty - 1)).toBeLessThan(1e-9)
+  })
+
+  test('tariff bargaining damps the export wedge too and clamps at 0.9', async () => {
+    const world = newWorld(7019, 'QING')
+    const qing = countryOf(world, 'QING')
+    const gbr = countryOf(world, 'GBR')
+    qing.econ.tariff = 0
+    gbr.econ.tariff = 0
+    gbr.econ.exportTariff = 20
+    const base = landedPrice(gbr, qing, 'coal')
+    addModifier(gbr, {
+      id: 'test:bargain:export',
+      label: '关税议价能力',
+      stat: 'tariffBargaining',
+      stack: 'flat',
+      value: 0.5,
+    })
+    expect(
+      Math.abs(landedPrice(gbr, qing, 'coal') - (base * 1.1) / 1.2),
+    ).toBeLessThan(1e-9)
+    // The domain floors the value at 0.9, so at most a tenth of the duty lands.
+    addModifier(gbr, {
+      id: 'test:bargain:export:clamp',
+      label: '关税议价能力',
+      stat: 'tariffBargaining',
+      stack: 'flat',
+      value: 2,
+    })
+    expect(Math.abs(tariffPassThrough(gbr) - 0.1)).toBeLessThan(1e-9)
   })
 })

@@ -8,6 +8,7 @@ import type {
 } from '../types'
 import { GOODS, GOOD_IDS, REGION_COST, infrastructureCount } from './data'
 import { RESOURCE_IMPORT_GOOD } from './endowment'
+import { applyModifiers } from './modifiers'
 import {
   ACCESS_FACTOR_BASE,
   ACCESS_FACTOR_COEF,
@@ -116,6 +117,23 @@ export const exportDutyRate = (country: Country): number =>
   country.econ.exportTariff ?? country.econ.tariff
 
 /**
+ * Share of a posted duty that actually lands on prices. `tariffBargaining` in
+ * [0, 0.9] says how much of the tax the foreign side absorbs: at 0 (the
+ * default) the posted rate passes through in full; at 0.9 only a tenth of it
+ * moves the landed price and the duty bill.
+ */
+export const tariffPassThrough = (country: Country): number =>
+  1 - applyModifiers(country, 'tariffBargaining', 0)
+
+/** Import duty that the importer can actually make stick. */
+export const effectiveImportDutyRate = (country: Country): number =>
+  country.econ.tariff * tariffPassThrough(country)
+
+/** Export duty that the exporter can actually make stick. */
+export const effectiveExportDutyRate = (country: Country): number =>
+  exportDutyRate(country) * tariffPassThrough(country)
+
+/**
  * Landed cost of one good delivered from `from` to `to` (plan §1.2): the
  * exporter's domestic price marked up by its export duty, then the importer's
  * import duty, region transport cost, market access, transport infrastructure
@@ -128,8 +146,8 @@ export function landedPrice(from: Country, to: Country, good: GoodId): number {
   const relationRisk = 1 + Math.max(0, -relationOf(to, from.id)) / RELATION_RISK_DIVISOR
   return (
     from.econ.prices[good] *
-    (1 + exportDutyRate(from) / 100) *
-    (1 + to.econ.tariff / 100) *
+    (1 + effectiveExportDutyRate(from) / 100) *
+    (1 + effectiveImportDutyRate(to) / 100) *
     regionCost *
     accessFactor *
     transportFactor *
@@ -149,8 +167,8 @@ export function routeLandedPrice(from: Country, to: Country, good: GoodId): numb
   const transportFactor = TRANSPORT_FACTOR_BASE - to.econ.transportInfrastructure / TRANSPORT_FACTOR_DIVISOR
   return (
     from.econ.prices[good] *
-    (1 + exportDutyRate(from) / 100) *
-    (1 + to.econ.tariff / 100) *
+    (1 + effectiveExportDutyRate(from) / 100) *
+    (1 + effectiveImportDutyRate(to) / 100) *
     regionCost *
     accessFactor *
     transportFactor *
@@ -363,8 +381,9 @@ function deriveBalance(countries: Country[], flows: TradeFlow[]): TradeBalance {
     // Export duty is charged on the exporter's domestic value; import duty is
     // then charged on the border value that already includes the export duty.
     const exporter = index[flow.from]
-    const exportTariff = exporter === undefined ? 0 : exportDutyRate(exporter)
-    const importTariff = index[flow.to]?.econ.tariff ?? 0
+    const importer = index[flow.to]
+    const exportTariff = exporter === undefined ? 0 : effectiveExportDutyRate(exporter)
+    const importTariff = importer === undefined ? 0 : effectiveImportDutyRate(importer)
     const borderValue = value * (1 + exportTariff / 100)
     flow.value = value
     flow.exportDuty = value * (exportTariff / 100)
@@ -589,11 +608,11 @@ export function settleTrade(
     if (flow.to === country.id) {
       const borderValue = value + flow.exportDuty
       importBill += borderValue
-      importDuty += borderValue * (country.econ.tariff / 100)
+      importDuty += borderValue * (effectiveImportDutyRate(country) / 100)
     }
     if (flow.from === country.id) {
       exportRevenue += value
-      exportDuty += value * (exportDutyRate(country) / 100)
+      exportDuty += value * (effectiveExportDutyRate(country) / 100)
     }
   }
   const tariffRevenue = importDuty + exportDuty

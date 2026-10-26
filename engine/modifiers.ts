@@ -70,6 +70,7 @@ export const MODIFIER_STAT_NAMES: Record<ModifierStat, string> = {
   bureaucracyCeiling: '官僚上限',
   constructionSpeed: '建造速度',
   constructionCost: '建造花费',
+  tariffBargaining: '关税议价能力',
   marketAccess: '市场接入',
   transportInfrastructure: '基础设施',
   administrativeCapacity: '行政能力',
@@ -97,6 +98,10 @@ export const MODIFIER_STAT_RANGES: Partial<
   // debuffs from turning construction into a source of gold; the ceiling keeps
   // one bad entry bounded.
   constructionCost: [0, 10],
+  // Bargaining power is a direct value: 0 (no leverage) to 0.9 (almost the whole
+  // tariff is absorbed abroad). The floor keeps a negative stack from flipping
+  // the sign and *amplifying* duties.
+  tariffBargaining: [0, 0.9],
 }
 
 /** Clamps a stacked reading to its declared domain; undeclared stats pass through. */
