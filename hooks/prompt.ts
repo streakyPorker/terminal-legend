@@ -72,7 +72,7 @@ export function statusText(world: WorldState): string {
       }`,
       `私人资本 ${fmtNumber(Math.max(0, player.econ.privateCapital))} · 私人外债 ${fmtMoney(ledger.privateDebt)} · 投资信心 ${player.econ.investmentConfidence >= 0 ? '+' : ''}${Math.round(player.econ.investmentConfidence)} · 闲置利润 ${fmtNumber(player.econ.idleProfits)} · 劳动原始利用率 ${(player.econ.laborRawUtilization * 100).toFixed(1)}%（需求 ${fmtPop(player.econ.laborDemand)} / 劳动力 ${fmtPop(player.econ.laborForce)}）`,
       `资源禀赋：农田 ${player.econ.resources.farmland} · 林地 ${player.econ.resources.timber} · 煤矿 ${player.econ.resources.coal} · 铁矿 ${player.econ.resources.iron}`,
-      `建造能力 ${fmtNumber(load.capacity)} 点/月（队列剩余工程量 ${fmtNumber(load.requested)}，已分配 ${fmtNumber(load.allocated)}，闲置 ${fmtNumber(load.remaining)}；每点工程量造价 ${fmtNumber(applyModifiers(player, 'constructionCost', CONSTRUCTION_COST_PER_POINT))} 金）`,
+      `建造能力 ${fmtNumber(load.capacity)} 点/月（队列剩余工程量 ${fmtNumber(load.requested)}，已分配 ${fmtNumber(load.allocated)}，闲置 ${fmtNumber(load.remaining)}；每点工程量造价 ${fmtNumber(applyModifiers(player, 'constructionCost', CONSTRUCTION_COST_PER_POINT))} 金；上月建设实付 国有 ${fmtNumber(player.econ.lastStateConstructionSpend ?? 0)} / 私人 ${fmtNumber(player.econ.lastPrivateConstructionSpend ?? 0)} 金）`,
       `国有建造队列：${
         stateQueue.length === 0
           ? '空'
