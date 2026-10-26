@@ -20,26 +20,26 @@ export const GOODS: Record<GoodId, { name: string; basePrice: number }> = {
   iron: { name: '铁矿石', basePrice: 1 },
   // Priced at the OLD `iron` base price so every downstream consumer that switched
   // from `iron` to `steel` sees its real input cost unchanged. Tunable — F7 tunes.
-  steel: { name: '钢铁', basePrice: 2.6 },
+  steel: { name: '钢铁', basePrice: 2 },
   fabric: { name: '布料', basePrice: 2 },
   clothes: { name: '成衣', basePrice: 3 },
   liquor: { name: '酒类', basePrice: 2.6 },
   furniture: { name: '家具', basePrice: 3.2 },
-  machinery: { name: '机械', basePrice: 5.2 },
-  arms: { name: '军械', basePrice: 5.5 },
-  luxury: { name: '奢侈品', basePrice: 10 },
+  machinery: { name: '机械', basePrice: 6 },
+  arms: { name: '军械', basePrice: 7 },
+  luxury: { name: '奢侈品', basePrice: 20 },
   opium: { name: '鸦片', basePrice: 2.5 },
   services: { name: '服务', basePrice: 4 },
   // PT-066: a ship is a capital good, not a consumer good. Shipyards produce
   // it; naval bases consume it and convert it into `military.navy`.
-  ships: { name: '船只', basePrice: 8 },
+  ships: { name: '船只', basePrice: 12 },
   // Plan 0015 S4: prices kept from the S0 placeholder. They sit inside the
   // existing 1..10 band — chemicals a mid-tier industrial good (≈ steel),
   // electricity a cheap utility (≈ fabric), locomotives a capital good
   // (≈ ships). S4 did not retune them.
-  chemicals: { name: '化工品', basePrice: 3 },
-  electricity: { name: '电力', basePrice: 2 },
-  locomotives: { name: '机车', basePrice: 8 },
+  chemicals: { name: '化工品', basePrice: 5 },
+  electricity: { name: '电力', basePrice: 3 },
+  locomotives: { name: '机车', basePrice: 12 },
 }
 
 export const GOOD_IDS = Object.keys(GOODS) as GoodId[]

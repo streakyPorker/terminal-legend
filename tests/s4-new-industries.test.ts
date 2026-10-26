@@ -32,7 +32,9 @@ const NEW_BUILDINGS: BuildingId[] = ['chemicalWorks', 'powerPlants', 'locomotive
 
 // FAMILY_BANDS.heavyIndustry (tests/economy-recipe-calibration.test.ts): the
 // family the three new works belong to.
-const HEAVY_BAND: [number, number] = [0, 0.36]
+// PT-096: the ladder puts mid-tier capital goods at 60% and high-tier at 75%,
+// so the heavy-industry band opens up to 0.80.
+const HEAVY_BAND: [number, number] = [0, 0.8]
 
 const countryOf = (world: WorldState, id: string): Country => {
   const country = world.countries[id]

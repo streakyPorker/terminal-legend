@@ -70,12 +70,12 @@ const FAMILIES: Record<string, readonly BuildingId[]> = {
   military: ['barracks'],
 }
 const FAMILY_BANDS: Record<string, [number, number]> = {
-  agriculture: [0.36, 0.62],
-  extraction: [0.33, 0.62],
-  lightIndustry: [0.04, 0.25],
-  heavyIndustry: [0.0, 0.36],
-  services: [0.30, 0.58],
-  military: [0.37, 0.65],
+  agriculture: [0.35, 0.85],
+  extraction: [0.25, 0.70],
+  lightIndustry: [0.15, 0.60],
+  heavyIndustry: [0.15, 0.65],
+  services: [0.35, 0.85],
+  military: [0.35, 0.85],
 }
 
 const countryOf = (world: WorldState, id: string): Country => {

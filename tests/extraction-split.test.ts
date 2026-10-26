@@ -64,7 +64,9 @@ describe('F2 extraction split: mines → coalMines / ironMines / lumberMills', (
       if (spec === undefined) throw new Error(`missing spec for ${id}`)
       expect(Object.keys(recipe.output)).toEqual([spec.good])
       expect(recipe.output[spec.good]).toBe(spec.coef)
-      expect(Object.keys(recipe.input)).toEqual([])
+      // PT-096: extraction carries a token machinery draw, so its margin is no
+      // longer a bookkeeping 100% — it buys tools like any other works.
+      expect(Object.keys(recipe.input)).toEqual(['machinery'])
       expect(recipe.labor).toBe(spec.labor)
       expect(recipe.gates?.tech).toBe(true)
       expect(recipe.outputModifier).toBe('mineOutput')

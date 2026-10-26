@@ -334,13 +334,14 @@ const valueAdded = (recipe: { output: RecipeIO; input: RecipeIO }): number => {
 
 /** Frozen oracle: value-added per seat/month at base prices (0015 附录 B + 0016 附录 A.3). */
 const CHECK: Record<BuildingId, { I: number; II: number; III: number; IV: number; V: number }> = {
-  // PT-094: iron input 3.2 → 2.56 per seat, so the smelter's value added rises.
-  steelMills: { I: 5.72, II: 8.658, III: 12.926, IV: 17.981, V: 24.786 },
-  machineryWorks: { I: 1.35, II: 2.39, III: 3.97, IV: 5.35, V: 7.66 },
-  arsenals: { I: 3.26, II: 4.84, III: 7.13, IV: 9.28, V: 12.5 },
-  textileMills: { I: 2.26, II: 3.35, III: 4.89, IV: 6.71, V: 9.29 },
-  furnitureWorks: { I: 1.04, II: 1.56, III: 2.3, IV: 2.99, V: 4.16 },
-  luxuryWorks: { I: -0.03, II: 0.83, III: 2.16, IV: 3.81, V: 6.29 },
+  // PT-096: the whole chain was re-laddered (prices + outputs), so these oracles
+  // are re-frozen at base prices.
+  steelMills: { I: 3.24, II: 5.326, III: 8.448, IV: 11.881, V: 16.98 },
+  machineryWorks: { I: 4.754, II: 6.94, III: 10.064, IV: 12.93, V: 17.296 },
+  arsenals: { I: 5.787, II: 8.247, III: 11.704, IV: 14.906, V: 19.664 },
+  textileMills: { I: 2.138, II: 3.14, III: 4.533, IV: 6.011, V: 8.306 },
+  furnitureWorks: { I: 0.859, II: 1.33, III: 1.99, IV: 2.438, V: 3.433 },
+  luxuryWorks: { I: 16.456, II: 21.916, III: 29.142, IV: 38.265, V: 49.861 },
 }
 
 const checkVA = (id: BuildingId, tier: number, expected: number): void => {

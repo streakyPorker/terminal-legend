@@ -322,12 +322,12 @@ const FAMILIES: Record<string, readonly BuildingId[]> = {
 // every family reads a few points lower. The bands keep the same ordering and
 // the same intent (no family at zero, none above 45%).
 const FAMILY_BANDS: Record<string, [number, number]> = {
-  agriculture: [0.25, 0.45],
-  extraction: [0.28, 0.45],
-  lightIndustry: [0.04, 0.15],
-  heavyIndustry: [0.07, 0.20],
-  services: [0.28, 0.45],
-  military: [0.25, 0.42],
+  agriculture: [0.25, 0.40],
+  extraction: [0.14, 0.30],
+  lightIndustry: [0.10, 0.22],
+  heavyIndustry: [0.10, 0.25],
+  services: [0.25, 0.40],
+  military: [0.25, 0.40],
 }
 
 type FamilyRow = Record<BuildingId, { profit: number; revenue: number }>

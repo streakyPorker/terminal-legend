@@ -87,7 +87,7 @@ describe('F4 building expansion (schools / forts / navalYards) + plan 0014 merge
     // forts / navalYards — military output. PT-066: the yard now lays down
     // hulls (`ships`, a tradeable good) instead of a token amount of machinery.
     expect(BUILDING_RECIPES.forts.output).toEqual({ arms: 0.08 })
-    expect(BUILDING_RECIPES.navalYards.output).toEqual({ ships: 0.5, machinery: 0.03 })
+    expect(BUILDING_RECIPES.navalYards.output).toEqual({ ships: 0.4, machinery: 0.03 })
     // navalBases — consumes hulls, produces no goods of its own.
     expect(Object.keys(BUILDING_RECIPES.navalBases.output)).toEqual([])
     expect(BUILDING_RECIPES.navalBases.input).toEqual({ ships: 0.5 })
