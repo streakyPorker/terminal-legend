@@ -4,7 +4,6 @@ import {
   INFRA_SUPPLY,
   buildableBuildingIds,
   consumerBasket,
-  electricityOutputMultiplier,
   infrastructureSupply,
   isBuildingUnlocked,
   makeRngForWorld,
@@ -89,28 +88,46 @@ describe('S4 chemicals demand enters the basket only after industry-5 (plan 0015
   })
 })
 
-describe('S4 electricity: non-tradable, and only self-production gives the output bonus (plan 0015 §S4)', () => {
-  test('electricity is not tradable; a self-producer gets the bonus, an importer does not', () => {
+describe('S4/S1 electricity: non-tradable and valued only as a recipe input (plan 0016 §S1)', () => {
+  test('electricity is not tradable; owning plants gives NO global output bonus', () => {
     expect(TRADABLE_GOODS).not.toContain('electricity')
 
     const world = newWorld(9100, 'QING')
     const qing = countryOf(world, 'QING')
-    expect(electricityOutputMultiplier(qing)).toBe(1)
     const baseGrain = inspectEconomy(qing).production.grain
 
-    // A country that owns power plants gets the global multiplier on every output.
+    // Plan 0016 §S1 retires the plan-0015 `electricityOutputMultiplier`: a country
+    // that owns power plants no longer gets a global lift on every output — the
+    // 1880-前 baseline is byte-identical with and without plants.
     const producer = clone(qing)
     producer.econ.buildings.powerPlants = 10
     producer.econ.buildingTiers.powerPlants = [10]
-    expect(electricityOutputMultiplier(producer)).toBeGreaterThan(1)
-    close(inspectEconomy(producer).production.grain, baseGrain * 1.2, 1e-6)
+    close(inspectEconomy(producer).production.grain, baseGrain, 1e-9)
 
-    // Electricity that arrives by trade never counts: an importer with no plants
-    // gets exactly the baseline output.
+    // Electricity that arrives by trade never counts either: with the bonus gone,
+    // an importer's output is exactly the baseline.
     const importer = clone(qing)
     importer.trade.imports = [electricityFlow(importer)]
-    expect(electricityOutputMultiplier(importer)).toBe(1)
     close(inspectEconomy(importer).production.grain, baseGrain, 1e-9)
+  })
+
+  test('electricity earns its value only as a consumed input: 0 at ≤III seats, >0 with IV seats', () => {
+    const world = newWorld(9100, 'QING')
+    const qing = countryOf(world, 'QING')
+
+    // A fresh world holds only tier-I seats, and no tier-I/II/III recipe consumes
+    // electricity, so its demand is exactly 0 — the value is the input, never a
+    // global multiplier.
+    expect(inspectEconomy(qing).demand.electricity).toBe(0)
+
+    // One tier-IV steelMills seat consumes electricity (appendix A.2: 0.30/seat),
+    // so demand turns positive once an electrified seat exists.
+    const tierIV = recipeAt('steelMills', 3)
+    qing.econ.buildingTiers.steelMills = [0, 0, 0, 1]
+    qing.econ.buildings.steelMills = 1
+    qing.econ.buildingProfits.steelMills.utilization = 1
+    expect(tierIV.input.electricity ?? 0).toBeGreaterThan(0)
+    close(inspectEconomy(qing).demand.electricity, tierIV.input.electricity ?? 0)
   })
 })
 

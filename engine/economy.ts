@@ -21,7 +21,6 @@ import {
   WAGE_ALLOCATION,
   deriveLabor,
   effectiveCount,
-  electricityOutputMultiplier,
   infrastructureCount,
   infrastructureMultiplier,
   infrastructureStats,
@@ -42,7 +41,7 @@ import {
   type TaxBaseQuantities,
 } from './fiscal'
 import { applyModifiers } from './modifiers'
-import { effectiveResources } from './trade'
+import { TRADABLE_GOODS, effectiveResources } from './trade'
 import { clamp, ensureConstructionFields, ensureGoodsFields, techMultiplier } from './internal'
 import { curveOutput } from './scale'
 import { PRODUCTION_GATE_CURVES } from './config/blocks/gates'
@@ -211,11 +210,6 @@ function computeProduction(country: Country): Record<GoodId, number> {
     country.econ.transportInfrastructure,
   )
   const infra = infrastructureMultiplier(infraLevel)
-  // Plan 0015 §S4 / ADR 0031 §6: self-produced electricity is a second global
-  // output multiplier. It is derived from the country's OWN power-plant seats,
-  // so electricity that arrives by trade never contributes, and a country with
-  // no plants gets 1 (the behaviour-preserving baseline).
-  const electric = electricityOutputMultiplier(country)
   const b = country.econ.buildings
   const resources = resourceFactors(country)
   // Coal and iron are industrial inputs: a country poor in both runs its
@@ -259,8 +253,6 @@ function computeProduction(country: Country): Record<GoodId, number> {
       if (gates?.industrial) value *= industrial
       // The unified infrastructure debuff applies to every building's output.
       value *= infra
-      // Self-produced electricity (ADR 0031 §6) lifts every building's output.
-      value *= electric
       if (modifier !== undefined) value = applyModifiers(country, modifier, value)
       raw[good] += value
     }
@@ -389,17 +381,24 @@ function computeDemand(country: Country): DemandBreakdown {
   // national, outside the recipes.
   const intermediate = zeroGoods()
   for (const id of BUILDING_IDS) {
-    // Caliber (plan 0015 §S1 / 评审 M1): intermediate input reads the RAW seat
-    // count `buildings[id]` — no `effectiveCount` cap — and only the
-    // per-building coefficient is tier-weighted through `mixedRecipe`.
     const count = b[id]
     if (count <= 0) continue
     const recipe = mixedRecipe(country, id)
+    // Caliber (plan 0015 §S1 / 评审 M1): intermediate input reads the RAW seat
+    // count `buildings[id]` — no `effectiveCount` cap — and only the
+    // per-building coefficient is tier-weighted through `mixedRecipe`.
+    // Plan 0016 §S1: a NON_TRADABLE input (electricity) is instead charged
+    // `effectiveCount(count) × storedUtilization(country, id)` — idle/over-built
+    // electrified seats draw proportionally less, and no electricity input
+    // exists before IV/V, so the all-I/II/III oracle is byte-identical. Tradable
+    // inputs (coal/steel/…) keep the RAW count exactly as before.
+    const idleAdjusted = effectiveCount(count) * storedUtilization(country, id)
     for (const [good, perBuilding] of Object.entries(recipe.input) as [
       GoodId,
       number,
     ][]) {
-      intermediate[good] += count * perBuilding
+      const charged = TRADABLE_GOODS.includes(good) ? count : idleAdjusted
+      intermediate[good] += charged * perBuilding
     }
   }
   // Industrial towns buy food off the market; this puts agrarian and

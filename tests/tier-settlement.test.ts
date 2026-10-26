@@ -59,16 +59,30 @@ const COUNT_II = 3
 const COUNT_TOTAL = COUNT_I + COUNT_II // 8
 
 /**
- * Tier-count-weighted coefficient, derived from the STORED tier-I/tier-II
- * arrays — deliberately independent of `mixedRecipe`/`recipeAt`.
+ * Tier-count-weighted coefficient over the STORED per-tier arrays — deliberately
+ * independent of `mixedRecipe` / `recipeAt`. Length-agnostic: `counts[t]` is the
+ * seat count at tier index `t` (0 = tier I) and `values[t]` its coefficient.
  */
-const blend = (tierI: number, tierII: number): number =>
-  (COUNT_I * tierI + COUNT_II * tierII) / COUNT_TOTAL
+const blend = (counts: readonly number[], values: readonly number[]): number => {
+  const total = counts.reduce((running, n) => running + n, 0)
+  return counts.reduce((running, n, i) => running + n * (values[i] ?? 0), 0) / Math.max(1, total)
+}
+
+/** The legacy 5 I + 3 II mix, with per-tier values. */
+const blend2 = (tierI: number, tierII: number): number =>
+  blend([COUNT_I, COUNT_II], [tierI, tierII])
 
 /** Tier-II steelMills recipe, resolved without touching the helpers. */
 const steelTierII = () => {
   const tier = BUILDING_RECIPES.steelMills.tiers?.[0]
   if (tier === undefined) throw new Error('steelMills tier II is missing')
+  return tier
+}
+
+/** Any steelMills `tiers[]` entry by index (0 = II, 1 = III, 2 = IV, 3 = V). */
+const steelTier = (index: number) => {
+  const tier = BUILDING_RECIPES.steelMills.tiers?.[index]
+  if (tier === undefined) throw new Error(`steelMills tiers[${index}] is missing`)
   return tier
 }
 
@@ -97,14 +111,14 @@ describe('mixedRecipe — 5 I + 3 II steelMills hand-calc (plan 0015 S1)', () =>
     const mixed = mixedRecipe(qing, 'steelMills')
 
     // Output: (5·I_steel + 3·II_steel) / 8.
-    close(mixed.output.steel ?? 0, blend(base.output.steel ?? 0, tierII.output.steel ?? 0))
+    close(mixed.output.steel ?? 0, blend2(base.output.steel ?? 0, tierII.output.steel ?? 0))
     // Labor: (5·I_labor + 3·II_labor) / 8.
-    close(mixed.labor, blend(base.labor, tierII.labor))
+    close(mixed.labor, blend2(base.labor, tierII.labor))
     // Inputs: every good blends the same way (iron / coal / machinery).
     for (const good of Object.keys(base.input) as GoodId[]) {
       close(
         mixed.input[good] ?? 0,
-        blend(base.input[good] ?? 0, tierII.input[good] ?? 0),
+        blend2(base.input[good] ?? 0, tierII.input[good] ?? 0),
       )
     }
   })
@@ -143,6 +157,90 @@ describe('mixedRecipe — 5 I + 3 II steelMills hand-calc (plan 0015 S1)', () =>
         COUNT_II * (tierII.input.iron ?? 0) -
         COUNT_TOTAL * (base.input.iron ?? 0),
     )
+  })
+})
+
+describe('mixedRecipe — IV/V boundary mixes into settlement (plan 0016 S1)', () => {
+  test('[3,2,1,0] blends I/II/III and charges no electricity while IV is absent', () => {
+    const world = newWorld(9100, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildingProfits.steelMills.utilization = 1
+    const counts = [3, 2, 1, 0]
+    qing.econ.buildingTiers.steelMills = [...counts]
+    qing.econ.buildings.steelMills = sum(counts)
+
+    const defs = [BUILDING_RECIPES.steelMills, steelTier(0), steelTier(1), steelTier(2)]
+    const mixed = mixedRecipe(qing, 'steelMills')
+    close(mixed.output.steel ?? 0, blend(counts, defs.map(def => def.output.steel ?? 0)))
+    close(mixed.labor, blend(counts, defs.map(def => def.labor)))
+    // IV count is 0, so the blended electricity coefficient — and its demand — are 0.
+    close(mixed.input.electricity ?? 0, blend(counts, defs.map(def => def.input.electricity ?? 0)))
+    expect(mixed.input.electricity ?? 0).toBe(0)
+    expect(inspectEconomy(qing).demand.electricity).toBe(0)
+  })
+
+  test('[2,1,1,1] blends IV in and charges electricity as effectiveCount × utilisation', () => {
+    const world = newWorld(9100, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildingProfits.steelMills.utilization = 1
+    const counts = [2, 1, 1, 1]
+    qing.econ.buildingTiers.steelMills = [...counts]
+    qing.econ.buildings.steelMills = sum(counts)
+
+    const defs = [BUILDING_RECIPES.steelMills, steelTier(0), steelTier(1), steelTier(2)]
+    close(mixedRecipe(qing, 'steelMills').labor, blend(counts, defs.map(def => def.labor)))
+    // Electricity is charged by effectiveCount(Σcount) × utilisation, NOT the raw count.
+    const blendedElectricity = blend(counts, defs.map(def => def.input.electricity ?? 0))
+    expect(blendedElectricity).toBeGreaterThan(0)
+    close(
+      inspectEconomy(qing).demand.electricity,
+      effectiveCount(sum(counts)) * 1 * blendedElectricity,
+    )
+  })
+
+  test('[1,1,0,1,1] blends IV and V in and charges electricity by effectiveCount × utilisation', () => {
+    const world = newWorld(9100, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildingProfits.steelMills.utilization = 1
+    const counts = [1, 1, 0, 1, 1]
+    qing.econ.buildingTiers.steelMills = [...counts]
+    qing.econ.buildings.steelMills = sum(counts)
+
+    const defs = [
+      BUILDING_RECIPES.steelMills,
+      steelTier(0),
+      steelTier(1),
+      steelTier(2),
+      steelTier(3),
+    ]
+    close(
+      mixedRecipe(qing, 'steelMills').output.steel ?? 0,
+      blend(counts, defs.map(def => def.output.steel ?? 0)),
+    )
+    const blendedElectricity = blend(counts, defs.map(def => def.input.electricity ?? 0))
+    close(
+      inspectEconomy(qing).demand.electricity,
+      effectiveCount(sum(counts)) * 1 * blendedElectricity,
+    )
+  })
+
+  test('idle electrified seats draw proportionally less electricity; tradable inputs do not', () => {
+    const world = newWorld(9100, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildingTiers.steelMills = [0, 0, 0, 3]
+    qing.econ.buildings.steelMills = 3
+
+    qing.econ.buildingProfits.steelMills.utilization = 1
+    const active = inspectEconomy(qing).demand
+    qing.econ.buildingProfits.steelMills.utilization = 0
+    const idle = inspectEconomy(qing).demand
+
+    // Non-tradable (electricity) drops to 0 when the seats idle.
+    expect(active.electricity).toBeGreaterThan(0)
+    close(idle.electricity, 0)
+    // Tradable inputs (coal/iron) charge the RAW count either way — idle-invariant.
+    close(idle.coal, active.coal)
+    close(idle.iron, active.iron)
   })
 })
 
@@ -219,7 +317,7 @@ describe('settlement caliber markers (plan 0015 S1/评审 M1)', () => {
     // blended coefficient over tier I — a per-tier cap would break this identity.
     close(
       mixedSteel / allISteel,
-      blend(base.output.steel ?? 0, tierII.output.steel ?? 0) / (base.output.steel ?? 0),
+      blend2(base.output.steel ?? 0, tierII.output.steel ?? 0) / (base.output.steel ?? 0),
     )
   })
 
@@ -241,12 +339,12 @@ describe('settlement caliber markers (plan 0015 S1/评审 M1)', () => {
     let expectedRevenue = 0
     for (const good of Object.keys(base.output) as GoodId[]) {
       expectedRevenue +=
-        blend(base.output[good] ?? 0, tierII.output[good] ?? 0) * prices[good] * eff
+        blend2(base.output[good] ?? 0, tierII.output[good] ?? 0) * prices[good] * eff
     }
     let expectedInput = 0
     for (const good of Object.keys(base.input) as GoodId[]) {
       expectedInput +=
-        blend(base.input[good] ?? 0, tierII.input[good] ?? 0) * prices[good] * eff
+        blend2(base.input[good] ?? 0, tierII.input[good] ?? 0) * prices[good] * eff
     }
 
     close(snap.buildingProfits.steelMills.revenue, expectedRevenue)

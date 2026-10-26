@@ -94,24 +94,6 @@ export function refreshInfrastructure(country: Country): void {
   country.econ.transportInfrastructure = infrastructureStats(country).level
 }
 
-/**
- * plan 0015 S4 derived (not in 附录 B); tunable. Output bonus per power-plant
- * seat and its cap.
- */
-export const ELECTRICITY_BONUS_PER_PLANT = 0.02
-export const ELECTRICITY_BONUS_MAX = 0.2
-
-/**
- * Plan 0015 §S4 / ADR 0031 §6: the global output multiplier a country earns from
- * its OWN power plants. It reads the domestic seat count, so electricity that
- * arrives by trade never contributes (ADR: imported electricity does not count)
- * and a country with no plants gets exactly 1 — the calibration baseline.
- */
-export function electricityOutputMultiplier(country: Country): number {
-  const plants = country.econ.buildings.powerPlants ?? 0
-  return 1 + Math.min(ELECTRICITY_BONUS_MAX, plants * ELECTRICITY_BONUS_PER_PLANT)
-}
-
 /** Goods the infrastructure network consumes this month. */
 export function infrastructureUpkeep(country: Country): Partial<Record<GoodId, number>> {
   const { supply, level } = infrastructureStats(country)
