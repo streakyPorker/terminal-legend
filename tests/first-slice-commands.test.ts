@@ -46,6 +46,20 @@ const startCampaign = async (
   return run
 }
 
+/**
+ * Start the surface without creating a campaign: registers the command and the
+ * tools. Tests that only inspect the tool surface (manual text, schemas, the
+ * idle control report) do not need a world, and skipping `v3 new` keeps them
+ * off the expensive world-creation path (PT-095).
+ */
+const startSurface = async ($: any): Promise<void> => {
+  await ($.session.start as unknown as (e: unknown) => Promise<unknown>)({
+    cwd: '/tmp',
+    surface: 'terminal',
+    isInteractive: true,
+  })
+}
+
 describe('M4/M5 council and managed runs', () => {
   test('a managed run starts in the background and advances', async ($, on) => {
     const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
@@ -128,7 +142,7 @@ describe('v3_manual tool surface', () => {
           value: String(e.path).endsWith('docs/gm-handbook.md') ? handbook : '',
         }),
       })
-      await startCampaign($ as any)
+      await startSurface($ as any)
       const result = (await ($.tool.call as unknown as (e: unknown) => Promise<{
         result?: string
         deny?: string
@@ -143,7 +157,7 @@ describe('v3_manual tool surface', () => {
     async ($, on) => {
       const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
       setupSurface(anyOn)
-      await startCampaign($ as any)
+      await startSurface($ as any)
       const result = (await ($.tool.call as unknown as (e: unknown) => Promise<{
         result?: string
         deny?: string
@@ -168,7 +182,7 @@ describe('PT-039 control tool + PT-037 reorder schema (plan 0013)', () => {
           return { value: undefined }
         },
       })
-      await startCampaign($ as any)
+      await startSurface($ as any)
 
       const control = specs.get('v3_control')
       expect(control).toBeDefined()
@@ -188,7 +202,7 @@ describe('PT-039 control tool + PT-037 reorder schema (plan 0013)', () => {
     async ($, on) => {
       const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
       setupSurface(anyOn)
-      await startCampaign($ as any)
+      await startSurface($ as any)
       const result = (await ($.tool.call as unknown as (e: unknown) => Promise<{
         result?: string
         deny?: string
