@@ -42,6 +42,14 @@ export function constructionSection(country: Country): string[] {
   if (state.length > 0) {
     lines.push('（国有队列的 `#N` 是完整队列位置，私人项目也占位；私人项目不可取消/重排）')
   }
+  // The listing is capped for context economy; say so, or the visible rows no
+  // longer reconcile with the queue-total workload above (PT-081).
+  if (state.length > 12) {
+    lines.push(`- …另有 ${state.length - 12} 个国有项目未显示（国有队列共 ${state.length} 项）`)
+  }
+  if (privateProjects.length > 8) {
+    lines.push(`- …另有 ${privateProjects.length - 8} 个私人项目未显示`)
+  }
   for (const project of privateProjects.slice(0, 8)) {
     lines.push(
       `- 私人 ${projectLabel(project)}×${project.count}：进度 ${n(project.progress * 100, 0)}%，自有 ${n(load.privateByProject[project.id]?.own ?? 0)} / 租用 ${n(load.privateByProject[project.id]?.rented ?? 0)} 点  id=${project.id}`,
