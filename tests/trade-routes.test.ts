@@ -189,6 +189,28 @@ describe('soft-gate clearing: route pass then residual (ADR 0020)', () => {
     expect(Math.abs(short - full * 0.5)).toBeLessThan(1e-9)
   })
 
+  test('a land route ignores the hull gate (PT-086)', async () => {
+    const world = newWorld(9811, 'QING')
+    for (const country of Object.values(world.countries)) {
+      country.econ.prices.coal = 1
+      country.econ.tariff = 0
+      country.econ.merchantHulls = 0
+      country.military.navy = 0
+    }
+    const rus = countryOf(world, 'RUS')
+    rus.econ.prices.coal = 3
+    const markets = marketsFor(world, id => ({
+      production: id === 'RUS' ? { coal: 100 } : {},
+      demand: id === 'QING' ? { coal: 300 } : {},
+    }))
+    const route = makeRoute(world, 'coal', 'RUS', 'QING', 2)
+    const expected = route.level * ROUTE_UNIT_VOLUME * routeCapacityFactor(rus, countryOf(world, 'QING'))
+    const services = new Map<string, RouteService>()
+    clearTrade(Object.values(world.countries), markets, undefined, [route], services)
+    // A land border is a caravan: zero hulls still move the full route capacity.
+    expect(Math.abs((services.get(route.id)?.matched ?? 0) - expected)).toBeLessThan(1e-9)
+  })
+
   test('an un-routed pair still trades through the residual spot pass', async () => {
     const world = newWorld(9804, 'QING')
     for (const country of Object.values(world.countries)) {

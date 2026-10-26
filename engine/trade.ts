@@ -17,6 +17,7 @@ import {
   IMPORT_CAPACITY_PORT,
   IMPORT_CAPACITY_RESTRUCTURE_FACTOR,
   IMPORT_CAPACITY_TRANSPORT,
+  LAND_TRADE_PAIRS,
   MAX_MONTHLY_DEFICIT_SHARE,
   RELATION_CUTOFF,
   RELATION_RISK_DIVISOR,
@@ -130,6 +131,16 @@ export const exportDutyRate = (country: Country): number =>
  */
 export const tariffPassThrough = (country: Country): number =>
   1 - applyModifiers(country, 'tariffBargaining', 0)
+
+const landPairKey = (a: string, b: string): string =>
+  a < b ? `${a}|${b}` : `${b}|${a}`
+const LAND_PAIR_KEYS = new Set(
+  LAND_TRADE_PAIRS.map(([a, b]) => landPairKey(a, b)),
+)
+
+/** PT-086: a land border means caravans, not cargo ships. */
+export const isLandTradePair = (a: string, b: string): boolean =>
+  LAND_PAIR_KEYS.has(landPairKey(a, b))
 
 /** The import duty rate that reaches the importer's price signal. */
 export const effectiveImportDutyRate = (country: Country): number =>
@@ -321,14 +332,16 @@ function routePass(
   // PT-067: the exporter carries the cargo, so its hulls gate every route it
   // serves. Short hulls scale all of that country's routes down by the same
   // ratio — never a per-route arbitrary cut.
-  const requiredLevels: Record<string, number> = {}
+  const requiredBySea: Record<string, number> = {}
   for (const route of routes) {
-    requiredLevels[route.from] = (requiredLevels[route.from] ?? 0) + route.level
+    if (isLandTradePair(route.from, route.to)) continue
+    requiredBySea[route.from] = (requiredBySea[route.from] ?? 0) + route.level
   }
-  const fleetFactor = (id: string): number => {
+  const fleetFactor = (id: string, partnerId: string): number => {
+    if (isLandTradePair(id, partnerId)) return 1
     const country = index[id]
     if (country === undefined) return 1
-    const required = (requiredLevels[id] ?? 0) * SHIPS_PER_ROUTE_LEVEL
+    const required = (requiredBySea[id] ?? 0) * SHIPS_PER_ROUTE_LEVEL
     if (required <= 0) return 1
     const hulls =
       (country.military.navy ?? 0) + (country.econ.merchantHulls ?? 0)
@@ -351,7 +364,7 @@ function routePass(
       route.level *
       ROUTE_UNIT_VOLUME *
       routeCapacityFactor(from, to) *
-      fleetFactor(route.from)
+      fleetFactor(route.from, route.to)
     const quantity = Math.min(offerRemaining, bidRemaining, capacity)
     if (quantity <= 1e-9) continue
     goodOffer.set(route.from, offerRemaining - quantity)

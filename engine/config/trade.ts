@@ -17,6 +17,21 @@ export const ROUTE_UNIT_VOLUME = 2
  * down proportionally instead of letting paper routes conjure tonnage.
  */
 export const SHIPS_PER_ROUTE_LEVEL = 0.5
+/**
+ * PT-086: pairs connected by land in this world (1836). Routes between them are
+ * overland caravans (Kyakhta, the Silk Road, the Rhine), so they draw no hulls
+ * from either side. Every other pair is treated as sea-borne and ship-gated.
+ */
+export const LAND_TRADE_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ['QING', 'RUS'],
+  ['RUS', 'PRU'],
+  ['RUS', 'AUS'],
+  ['RUS', 'OTT'],
+  ['PRU', 'AUS'],
+  ['PRU', 'FRA'],
+  ['AUS', 'OTT'],
+  ['FRA', 'SPA'],
+]
 export const ROUTE_MAX_LEVEL = 5
 export const ROUTE_GROW_UTILIZATION = 0.8
 export const ROUTE_RESIDUAL_FRICTION = 1.15

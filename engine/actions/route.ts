@@ -1,7 +1,14 @@
 import type { Country, WorldState } from '../../types'
 import { GOODS } from '../data'
 import { atWar } from '../diplomacy'
-import { ROUTE_MAX_LEVEL, TRADABLE_GOODS, embargoed, routeId, routeLandedPrice } from '../trade'
+import {
+  ROUTE_MAX_LEVEL,
+  TRADABLE_GOODS,
+  embargoed,
+  isLandTradePair,
+  routeId,
+  routeLandedPrice,
+} from '../trade'
 import { SHIPS_PER_ROUTE_LEVEL } from '../config/trade'
 import { inspectEconomy } from '../economy'
 import { asGood } from '../internal'
@@ -50,9 +57,10 @@ export function actionRoute(
   // PT-067/PT-080: hulls gate how many route levels an exporter can serve.
   // `routePass` scales the actual tonnage, but a manual order must say no
   // outright when the fleet cannot cover it.
+  // Only sea routes compete for hulls; land pairs (PT-086) are caravans.
   const levelsOf = (id: string): number =>
     world.tradeRoutes
-      .filter(one => one.from === id)
+      .filter(one => one.from === id && !isLandTradePair(one.from, one.to))
       .reduce((sum, one) => sum + one.level, 0)
   const hullsOf = (one: Country): number =>
     (one.military.navy ?? 0) + (one.econ.merchantHulls ?? 0)
@@ -77,7 +85,9 @@ export function actionRoute(
     if (exporter === undefined || importer === undefined) {
       return { ok: false, text: `${tag} 无法确定${label}航线端点` }
     }
-    const shortfall = hullShortfall(exporter, levelsOf(fromId) + 1)
+    const shortfall = isLandTradePair(fromId, toId)
+      ? undefined
+      : hullShortfall(exporter, levelsOf(fromId) + 1)
     if (shortfall !== undefined) {
       return { ok: false, text: `${tag} ${shortfall}` }
     }
@@ -113,7 +123,11 @@ export function actionRoute(
   }
   if (op === 'raise') {
     const exporter = world.countries[existing.from]
-    if (exporter !== undefined && existing.level < ROUTE_MAX_LEVEL) {
+    if (
+      exporter !== undefined &&
+      existing.level < ROUTE_MAX_LEVEL &&
+      !isLandTradePair(existing.from, existing.to)
+    ) {
       const shortfall = hullShortfall(exporter, levelsOf(existing.from) + 1)
       if (shortfall !== undefined) {
         return { ok: false, text: `${tag} ${shortfall}` }
