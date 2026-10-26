@@ -6,46 +6,6 @@ import type { BuildingId, GoodId, ModifierStat, ResourceId } from '../../types'
 // `engine/config/economy.ts` without changing its shape. Kept declarative so the
 // wage-split rule can be retuned without touching the profit formula.
 
-/**
- * How the national wage bill is split across building types when snapshotting
- * per-building operating profit (ADR 0021, plan 0008). The split is a *fiction*
- * that keeps `Σ buildingProfits.wages === nationalWages` exact while attributing
- * wages per type:
- *
- * - `'labor'`         — by `recipe.labor × count` (the pre-B5 rule).
- * - `'valueAdded'`    — by `max(0, revenue − inputCost)` (gross value added at
- *                       this month's prices); negative value added is clamped to
- *                       zero so a loss-making type never receives negative wages.
- * - `'capitalPlusLabor'` — by `(recipe.labor + capitalProxy) × count`, where the
- *                       capital proxy is a building's construction cost scaled by
- *                       `CAPITAL_LABOR_SCALE` (see below).
- */
-export type WageAllocationBasis = 'labor' | 'valueAdded' | 'capitalPlusLabor'
-
-/**
- * Wage-allocation rule for `buildingProfits` (plan 0008 B5). `'labor'`
- * reproduces the pre-B5 baseline exactly; B5 selected `'valueAdded'` because
- * under `'labor'` the industrial core's industry cannot be made profitable
- * without breaking the 20% aggregate ceiling: with `'labor'`, the calibrated
- * recipe leaves GBR at ~4% industrial margin at 20.7% aggregate, and any recipe
- * that lifts GBR to 5% pushes the aggregate well past 20%. Charging wages in
- * proportion to value added (wages track productivity) lifts the industrial core
- * and pulls the aggregate to ~16%. `weights` multiplies the chosen basis weight
- * per building type; it is unset in B5.
- */
-export const WAGE_ALLOCATION: {
-  basis: WageAllocationBasis
-  weights?: Partial<Record<BuildingId, number>>
-} = { basis: 'valueAdded' }
-
-/**
- * Capital proxy per gold of construction cost used by the `capitalPlusLabor`
- * basis: `capitalProxy(b) = BUILDINGS[b].cost × CAPITAL_LABOR_SCALE`, so a
- * 4-gold factory contributes ~1.0 capital unit, comparable to its 1.0 labour
- * coefficient. Deterministic, no RNG.
- */
-export const CAPITAL_LABOR_SCALE = 0.25
-
 /** Investment goods required per project-month, per building (plan 0003 §2.2). */
 export const INVESTMENT_DEMAND: Record<BuildingId, Partial<Record<GoodId, number>>> = {
   farms: { wood: 0.12, furniture: 0.02 },

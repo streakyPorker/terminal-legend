@@ -36,19 +36,20 @@ describe('four tax bases (ADR 0023)', () => {
     near(snap.taxBaseQty.land, qing.econ.resources.farmland * LAND_VALUE_PER_UNIT)
   })
 
-  test('the profit base is the positive per-building profit summed, kept by type', async () => {
+  test('the profit base is the national profit pool, and the per-type rows add up to it', async () => {
     const qing = qingOf(newWorld(202, 'QING'))
     const snap = computeEconomy(qing)
-    let expected = 0
-    const contributing: string[] = []
+    // PT-093: the enterprise tax base is the pool the owners receive, not the
+    // sum of positive per-building operating rows.
+    near(snap.taxBaseQty.profit, snap.profits)
+    // The pool is handed out by value-added share; cost centres book their input
+    // bill as a loss, so the commercial rows alone carry the pool.
+    let commercial = 0
     for (const id of BUILDING_IDS) {
-      const profit = Math.max(0, snap.buildingProfits[id].profit)
-      expected += profit
-      if (profit > 0) contributing.push(id)
+      if (snap.buildingProfits[id].revenue === 0) continue
+      commercial += snap.buildingProfits[id].profit
     }
-    near(snap.taxBaseQty.profit, expected)
-    // The per-type contributions are retained for inspection.
-    expect(contributing.length).toBeGreaterThan(0)
+    near(commercial, snap.taxBaseQty.profit, 1e-6)
     expect(snap.buildingProfits.farms.profit).toBeGreaterThan(0)
   })
 

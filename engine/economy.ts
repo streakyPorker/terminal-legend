@@ -10,7 +10,6 @@ import {
   ARTISAN_SERVICE_OUTPUT,
   BUILDINGS,
   BUILDING_IDS,
-  CAPITAL_LABOR_SCALE,
   CONSUMPTION_PROPENSITY,
   CONSUMER_GOODS,
   consumerBasket,
@@ -19,7 +18,6 @@ import {
   GOVERNMENT_DEMAND,
   isCostCentre,
   SUBSISTENCE,
-  WAGE_ALLOCATION,
   deriveLabor,
   effectiveCount,
   infrastructureCount,
@@ -165,40 +163,6 @@ function storedUtilization(country: Country, id: BuildingId): number {
   return Number.isFinite(value) ? clamp(value, 0, 1) : 1
 }
 
-/**
- * Weight of one building type in the wage-allocation rule (ADR 0021, plan 0008
- * B5). The caller normalises by the summed weights and splits the national wage
- * bill by it, so the split stays exhaustive for every basis. `'labor'` returns
- * `labor × count` exactly as the pre-B5 baseline did.
- *
- * Caliber (plan 0015 §S1 / 评审 M1): the `labor` basis uses the tier-weighted
- * labour coefficient `mixedRecipe(...).labor`; the `valueAdded` basis is
- * automatically tier-aware because it reads the tier-weighted revenue/input
- * already blended for this row.
- */
-function wageBasisWeight(
-  country: Country,
-  id: BuildingId,
-  revenue: number,
-  inputCost: number,
-  count: number,
-): number {
-  const recipe = mixedRecipe(country, id)
-  let weight: number
-  switch (WAGE_ALLOCATION.basis) {
-    case 'valueAdded':
-      weight = Math.max(0, revenue - inputCost)
-      break
-    case 'capitalPlusLabor':
-      weight = (recipe.labor + BUILDINGS[id].cost * CAPITAL_LABOR_SCALE) * count
-      break
-    case 'labor':
-    default:
-      weight = recipe.labor * count
-  }
-  const override = WAGE_ALLOCATION.weights?.[id]
-  return override === undefined ? weight : weight * override
-}
 
 function computeProduction(country: Country): Record<GoodId, number> {
   ensureConstructionFields(country)
@@ -592,8 +556,8 @@ export function computeEconomy(
   const profits = realGdp * (1 - laborShare)
 
   // Per-building-type operating profit (ADR 0021 B2, driven from B3). It uses
-  // this month's recipe output/input valued at this month's prices and splits the
-  // national wage bill by the `WAGE_ALLOCATION` rule (plan 0008 B5).
+  // this month's recipe output/input valued at this month's prices and splits
+  // each type's value added into wages and profit (PT-093).
   // `utilization` is written as *next* month's operating rate (ADR 0022): a
   // profitable type recovers toward 1, a losing one decays toward
   // UTIL_IDLE_FLOOR. `computeProduction` reads this stored value next month, so
@@ -618,35 +582,32 @@ export function computeEconomy(
     }
     return { id, count, revenue, inputCost }
   })
-  // Weights come after every row's revenue/input cost so the `valueAdded` basis
-  // can read them; the `labor` basis reproduces the old total exactly.
-  // Caliber (plan 0015 §S1 / 评审 M1): every basis is tier-aware — the `labor`
-  // basis reads the tier-weighted `mixedRecipe(...).labor`, and the
-  // `valueAdded` basis reads the tier-weighted revenue/input rows above.
-  let wageWeightTotal = 0
-  const wageWeights = {} as Record<BuildingId, number>
-  for (const row of rows) {
-    const weight = wageBasisWeight(country, row.id, row.revenue, row.inputCost, row.count)
-    wageWeights[row.id] = weight
-    wageWeightTotal += weight
-  }
-  // A deeply crashed `valueAdded` economy can have no positive-weight type at
-  // all (every building's value added ≤ 0). Fall back to the labour rule so the
-  // split is still exhaustive and `Σ buildingProfits.wages === nationalWages`
-  // holds for every basis, not just the well-behaved case.
-  if (!(wageWeightTotal > 0)) {
-    wageWeightTotal = 0
-    for (const row of rows) {
-      const weight = mixedRecipe(country, row.id).labor * row.count
-      wageWeights[row.id] = weight
-      wageWeightTotal += weight
-    }
-  }
+  // PT-093: split each type's own value added into wages and profit, instead of
+  // spreading the whole national wage bill over the building stock. The national
+  // bill (`labour share × GDP`) is larger than the value the buildings add — GDP
+  // also carries investment and government spending — so charging it in full
+  // left every type showing an operating loss and idling toward the floor.
+  // The national profit pool is then handed out by value-added share, so
+  // `Σ buildingProfits.profit` equals that pool and every commercially viable
+  // type carries a positive margin.
+  const valueAddedOf = (row: { revenue: number; inputCost: number }): number =>
+    Math.max(0, row.revenue - row.inputCost)
+  let valueAddedTotal = 0
+  for (const row of rows) valueAddedTotal += valueAddedOf(row)
   const buildingProfits = {} as Record<BuildingId, BuildingProfit>
   for (const row of rows) {
-    const wageWeight = wageWeightTotal > 0 ? wageWeights[row.id] / wageWeightTotal : 0
-    const typeWages = wages * wageWeight
-    const profit = row.revenue - row.inputCost - typeWages
+    const valueAdded = row.revenue - row.inputCost
+    const costCentre = isCostCentre(row.id)
+    let profit: number
+    if (costCentre || !(valueAddedTotal > 0)) {
+      // Cost centres sell nothing; their input bill is the loss they book, and
+      // it must not idle them (PT-052). A crashed economy with no positive
+      // value added anywhere falls back to the raw residual.
+      profit = valueAdded
+    } else {
+      profit = Math.min(valueAdded, (profits * valueAddedOf(row)) / valueAddedTotal)
+    }
+    const typeWages = valueAdded - profit
     const profitPerBuilding = profit / Math.max(1, row.count)
     // Cost centres have no sellable output, so their accounting loss must not
     // idle them: a building site is either working at full capacity or not at
@@ -663,13 +624,14 @@ export function computeEconomy(
     }
   }
 
-  // The four tax bases (ADR 0023): land endowment, per-building profit (only
-  // positive contributions), final consumer spending and the border duty. GDP
-  // is deliberately absent — it is a derived output, never a tax base.
-  let profitBase = 0
-  for (const id of BUILDING_IDS) {
-    profitBase += Math.max(0, buildingProfits[id].profit)
-  }
+  // The four tax bases (ADR 0023): land endowment, the national profit pool,
+  // final consumer spending and the border duty. GDP is deliberately absent — it
+  // is a derived output, never a tax base.
+  // PT-093: the profit base is the pool the owners actually receive, which is
+  // what an income tax on company profits is meant to reach, not the sum of
+  // positive per-building operating rows (that double-counted loss-making types
+  // and ignored profits booked outside the building accounts).
+  const profitBase = profits
   // PT-073: the per-good final-consumption basket, so each consumer good can be
   // taxed at its own rate and the ledger can show the breakdown.
   const consumptionValueByGood: Partial<Record<GoodId, number>> = {}

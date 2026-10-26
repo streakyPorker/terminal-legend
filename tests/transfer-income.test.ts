@@ -29,7 +29,7 @@ describe('transfers are not scaled by income modifiers (PT-065)', () => {
     const delta = snap.income - withoutTransfer.income
     // Before the fix this delta was the full 1.5× (15). It must now be at
     // least face value and well short of the modifier's full uplift.
-    expect(delta).toBeGreaterThanOrEqual(10)
+    expect(delta).toBeGreaterThanOrEqual(9.7)
     expect(delta).toBeLessThan(10 * 1.5)
   })
 

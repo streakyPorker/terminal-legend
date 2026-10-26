@@ -280,9 +280,16 @@ describe('B5 recipe calibration gates (plan 0008 §5)', () => {
     for (const id of MAJORS) {
       const country = countryOf(world, id)
       const snap = computeEconomy(country)
-      let sumWages = 0
-      for (const building of BUILDING_IDS) sumWages += snap.buildingProfits[building].wages
-      expect(Math.abs(sumWages - snap.wages)).toBeLessThan(1e-6)
+      // PT-093: the per-type split partitions building value added, not the
+      // national wage bill.
+      let split = 0
+      let valueAdded = 0
+      for (const building of BUILDING_IDS) {
+        const row = snap.buildingProfits[building]
+        split += row.wages + row.profit
+        valueAdded += row.revenue - row.inputCost
+      }
+      expect(Math.abs(split - valueAdded)).toBeLessThan(1e-6)
     }
   })
 })
@@ -310,13 +317,17 @@ const FAMILIES: Record<string, readonly BuildingId[]> = {
 // and adds diffusion/overflow, so the industrial output boost compresses margins
 // at the m84 horizon; these floors are re-baselined for that. Plan 0005 K4 owns
 // the final re-tightening once the tech pacing is tuned.
+// PT-093 re-baselined these: margins are now the national profit pool handed
+// out by value-added share instead of the old residual-after-wages figure, so
+// every family reads a few points lower. The bands keep the same ordering and
+// the same intent (no family at zero, none above 45%).
 const FAMILY_BANDS: Record<string, [number, number]> = {
-  agriculture: [0.36, 0.62],
-  extraction: [0.33, 0.62],
-  lightIndustry: [0.04, 0.25],
-  heavyIndustry: [0.0, 0.36],
-  services: [0.30, 0.58],
-  military: [0.37, 0.65],
+  agriculture: [0.25, 0.45],
+  extraction: [0.28, 0.45],
+  lightIndustry: [0.04, 0.15],
+  heavyIndustry: [0.07, 0.20],
+  services: [0.28, 0.45],
+  military: [0.25, 0.42],
 }
 
 type FamilyRow = Record<BuildingId, { profit: number; revenue: number }>

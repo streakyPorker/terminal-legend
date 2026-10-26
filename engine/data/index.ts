@@ -28,8 +28,6 @@ export {
 
 // ---------------------------------------------------------------- buildings / recipes / infrastructure tables
 export {
-  WAGE_ALLOCATION,
-  CAPITAL_LABOR_SCALE,
   INVESTMENT_DEMAND,
   BUILDING_OUTPUT,
   BUILDING_RECIPES,
@@ -48,7 +46,6 @@ export {
   INDUSTRIAL_BUILDING_IDS,
 } from './buildings'
 export type {
-  WageAllocationBasis,
   RecipeIO,
   RecipeGates,
   BuildingRecipe,
