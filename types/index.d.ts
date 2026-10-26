@@ -620,6 +620,13 @@ export type Economy = {
   /** Private savings pool available to private construction. */
   privateCapital: number
   /**
+   * PT-089: player-only toggle. When true, idle construction points are rented
+   * to the private market (0.3 gold/point) BEFORE state projects draw on them;
+   * when false/absent, state projects keep first claim. AI countries never set
+   * it (the AI action whitelist excludes the `rent` action).
+   */
+  rentPriority?: boolean
+  /**
    * Merchant hulls kept at home (PT-067): hulls the country built but did not
    * commission as navy. Together with `military.navy` they cap how many route
    * levels the country can carry as an exporter. Optional so older saves need

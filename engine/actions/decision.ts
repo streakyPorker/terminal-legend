@@ -11,6 +11,7 @@ import { actionConscript } from './conscript'
 import { actionLaw } from './law'
 import { actionDiplomacy } from './diplomacy'
 import { actionRoute } from './route'
+import { actionRent } from './rent'
 import { actionSituation } from './situation'
 import { actionEvent } from './event'
 import { actionPlay } from './play'
@@ -56,6 +57,8 @@ export function applyDecision(
       return actionDiplomacy(world, country, params)
     case 'route':
       return actionRoute(world, country, params)
+    case 'rent':
+      return actionRent(world, country, params)
     case 'situation':
       return actionSituation(world, country, params, decision.narrative)
     case 'event':

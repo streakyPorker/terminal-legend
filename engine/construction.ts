@@ -687,6 +687,27 @@ export function settleConstruction(
     kept.add(project.id)
   }
 
+  // PT-089: player-only "rent first". The private market rents idle points
+  // before state projects draw on them; whatever the private pool cannot
+  // afford flows back to the state queue (and to private projects in pass 2).
+  if (
+    world.playerId === country.id &&
+    country.econ.rentPriority === true &&
+    capacityLeft > 0
+  ) {
+    const affordable =
+      CONSTRUCTION_RENT_PER_POINT > 0
+        ? privateBudget / CONSTRUCTION_RENT_PER_POINT
+        : capacityLeft
+    const rented = Math.min(capacityLeft, Math.max(0, affordable))
+    if (rented > 0) {
+      const rent = rented * CONSTRUCTION_RENT_PER_POINT
+      privateBudget -= rent
+      rentalIncome += rent
+      capacityLeft -= rented
+    }
+  }
+
   // Pass 1: state slots, strictly in queue order, take points until exhausted.
   for (const project of queue) {
     if ((project.owner ?? 'state') === 'private') continue

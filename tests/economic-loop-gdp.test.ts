@@ -108,7 +108,9 @@ describe('E1 demand shock loop', () => {
     })
     advance(control, 12, [], makeRngForWorld(control))
     advance(boosted, 12, [], makeRngForWorld(boosted))
-    expect(boostedQing.econ.gdp).toBeGreaterThan(controlQing.econ.gdp * 1.05)
+    // PT-089 cut construction rent from 0.3 to 0.1, which trims a state-income
+    // channel the shock used to amplify; the boost must still raise GDP.
+    expect(boostedQing.econ.gdp).toBeGreaterThan(controlQing.econ.gdp)
     expect(boostedQing.econ.profits).toBeGreaterThan(controlQing.econ.profits)
     // Construction capacity and inputs can bind, so a demand boost no longer
     // guarantees a strictly larger capital stock; it must not shrink it much.

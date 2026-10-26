@@ -314,6 +314,39 @@ describe('construction slot limits (ADR 0012/0013)', () => {
     expect(Math.abs(constructionGoldPerPoint(proj, qing) - basePrice)).toBeLessThan(1e-9)
   })
 
+  test('rentPriority lets the private market take points first (PT-089)', async () => {
+    const world = newWorld(9409, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 4
+    qing.econ.buildingTiers.workshops = [4, 0, 0, 0, 0]
+    qing.econ.constructionQueue = []
+    qing.econ.privateCapital = 100
+    const result = applyDecision(
+      world,
+      { countryId: 'QING', action: 'build', params: { building: 'steelMills', count: 1 } },
+      makeRngForWorld(world),
+    )
+    expect(result.ok).toBe(true)
+    qing.econ.rentPriority = true
+    advance(world, 1, [], makeRngForWorld(world))
+    // All points went to the private rental market, so the state project got nothing.
+    expect(qing.econ.lastConstructionRent).toBeGreaterThan(0)
+    const project = qing.econ.constructionQueue[0]
+    expect(project === undefined || project.progress < 0.5).toBe(true)
+  })
+
+  test('only the player may toggle rent priority', async () => {
+    const world = newWorld(9410, 'QING')
+    const gbr = countryOf(world, 'GBR')
+    const result = applyDecision(
+      world,
+      { countryId: 'GBR', action: 'rent', params: { enabled: true } },
+      makeRngForWorld(world),
+    )
+    expect(result.ok).toBe(false)
+    expect(gbr.econ.rentPriority).toBeUndefined()
+  })
+
   test('a slot draws all idle capacity, not just its own monthly need', async () => {
     const world = newWorld(9305, 'QING')
     const qing = countryOf(world, 'QING')

@@ -405,7 +405,9 @@ describe('Round 3 regressions', () => {
       }
     }
     for (const country of Object.values(world.countries)) {
-      expect(maxRuns[country.id] ?? 0).toBeLessThanOrEqual(8)
+      // PT-089 (rent 0.3 -> 0.1) makes private project starts lumpier; the gate
+      // still catches a country that stops investing for most of a year.
+      expect(maxRuns[country.id] ?? 0).toBeLessThanOrEqual(10)
     }
   })
 

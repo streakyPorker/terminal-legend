@@ -39,8 +39,12 @@ export const CAPACITY_COST: Record<BuildingId, number> = {
 
 /** Private builders do this share of a slot's work with their own organisation. */
 export const PRIVATE_OWN_CAPACITY_SHARE = 0.5
-/** Gold the state charges per rented construction point. */
-export const CONSTRUCTION_RENT_PER_POINT = 0.3
+/**
+ * Gold the state charges per rented construction point. PT-089 cut this from
+ * 0.3 to 0.1: at 0.3 a country with a large idle workshop park (Britain) earned
+ * more rent than its whole tax take and shrugged off a 300-gold shock in a year.
+ */
+export const CONSTRUCTION_RENT_PER_POINT = 0.1
 /** A slot may hold at most this many buildings. */
 export const MAX_BUILDINGS_PER_SLOT = 5
 /**
