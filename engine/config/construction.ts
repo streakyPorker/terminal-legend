@@ -43,6 +43,12 @@ export const PRIVATE_OWN_CAPACITY_SHARE = 0.5
 export const CONSTRUCTION_RENT_PER_POINT = 0.3
 /** A slot may hold at most this many buildings. */
 export const MAX_BUILDINGS_PER_SLOT = 5
+/**
+ * Cap on `slots` in one `x*y` build order (PT-078). Each slot becomes its own
+ * queue entry so the earlier ones finish and start working while the rest are
+ * still building — the aggregation is only a convenience at the tool seam.
+ */
+export const MAX_BUILD_SLOTS = 50
 /** Total workload per unit of monthly point requirement. */
 export const WORKLOAD_MULTIPLIER = 30
 /**

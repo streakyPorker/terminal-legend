@@ -230,6 +230,67 @@ describe('construction slot limits (ADR 0012/0013)', () => {
     expect(maxSlotCapacity('textileMills')).toBe(10)
   })
 
+  test('slots aggregates x*y into y independent queue entries (PT-078)', async () => {
+    const world = newWorld(9306, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 10
+    qing.econ.constructionQueue = []
+    const result = applyDecision(
+      world,
+      {
+        countryId: 'QING',
+        action: 'build',
+        params: { building: 'farms', count: 2, slots: 3 },
+      },
+      makeRngForWorld(world),
+    )
+    expect(result.ok).toBe(true)
+    // Three separate slots of two seats each — never one packed six-seat entry.
+    expect(qing.econ.constructionQueue).toHaveLength(3)
+    expect(qing.econ.constructionQueue.map(one => one.count)).toEqual([2, 2, 2])
+    expect(new Set(qing.econ.constructionQueue.map(one => one.id)).size).toBe(3)
+    // Omitted `slots` keeps the old single-entry behaviour.
+    const single = applyDecision(
+      world,
+      {
+        countryId: 'QING',
+        action: 'build',
+        params: { building: 'farms', count: 1 },
+      },
+      makeRngForWorld(world),
+    )
+    expect(single.ok).toBe(true)
+    expect(qing.econ.constructionQueue).toHaveLength(4)
+  })
+
+  test('the ETA honours constructionSpeed and the debt penalty (PT-079)', async () => {
+    const world = newWorld(9307, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 4
+    qing.econ.buildingTiers.workshops = [4, 0, 0, 0, 0]
+    qing.econ.constructionQueue = []
+    const result = applyDecision(
+      world,
+      { countryId: 'QING', action: 'build', params: { building: 'steelMills', count: 1 } },
+      makeRngForWorld(world),
+    )
+    expect(result.ok).toBe(true)
+    const id = qing.econ.constructionQueue[0]?.id ?? ''
+    const base = constructionSchedule(qing)[id]?.turns ?? 0
+    addModifier(qing, {
+      id: 'test:construction-speed',
+      label: '建造速度',
+      stat: 'constructionSpeed',
+      stack: 'percent',
+      value: 100,
+    })
+    const fast = constructionSchedule(qing)[id]?.turns ?? 0
+    expect(base).toBeGreaterThan(1)
+    // Doubling the pace must halve the promised months (not leave the ETA
+    // showing the unbuffed time).
+    expect(fast).toBeLessThan(base)
+  })
+
   test('a slot draws all idle capacity, not just its own monthly need', async () => {
     const world = newWorld(9305, 'QING')
     const qing = countryOf(world, 'QING')

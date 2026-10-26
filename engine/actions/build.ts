@@ -8,7 +8,7 @@ import {
   constructionTotalCost,
   projectWorkload,
 } from '../construction'
-import { NON_UPGRADABLE_BUILDINGS } from '../config/construction'
+import { MAX_BUILD_SLOTS, NON_UPGRADABLE_BUILDINGS } from '../config/construction'
 import { computeProduction } from '../economy'
 import { clamp, num } from '../internal'
 import type { ActionParams, ActionResult } from './types'
@@ -138,25 +138,39 @@ export function actionBuild(
   }
   // Orders per month are unlimited: every slot holds at most five buildings.
   // Gold is paid per workload point; duration falls out of the points.
-  const draft: ConstructionProject = {
-    id: `proj-${world.tick}-${country.id}-${country.econ.constructionQueue.length}`,
-    building,
-    count,
-    owner: 'state',
-    monthsLeft: 1,
-    monthlyCost: 0,
-    lastSpend: 0,
-    progress: 0,
-    startedAt: { ...world.date },
-    ...(tier > 1 ? { toTier: tier - 1 } : {}),
-  }
-  draft.monthlyCost = constructionMonthlyCost(draft, country)
+  // PT-078: `slots` aggregates an `x*y` order into one call while still
+  // creating `y` independent queue entries — so the earlier slots finish and
+  // start working while the rest are still building. Never one packed entry.
+  const slots = clamp(Math.floor(num(params.slots, 1)), 1, MAX_BUILD_SLOTS)
   const placement = resolveInsertPosition(country, params)
   if ('error' in placement) return { ok: false, text: `${tag} ${placement.error}` }
-  country.econ.constructionQueue.splice(placement.at, 0, draft)
+  const drafts: ConstructionProject[] = []
+  for (let index = 0; index < slots; index += 1) {
+    const draft: ConstructionProject = {
+      id: `proj-${world.tick}-${country.id}-${country.econ.constructionQueue.length}`,
+      building,
+      count,
+      owner: 'state',
+      monthsLeft: 1,
+      monthlyCost: 0,
+      lastSpend: 0,
+      progress: 0,
+      startedAt: { ...world.date },
+      ...(tier > 1 ? { toTier: tier - 1 } : {}),
+    }
+    draft.monthlyCost = constructionMonthlyCost(draft, country)
+    country.econ.constructionQueue.splice(placement.at + index, 0, draft)
+    drafts.push(draft)
+  }
+  const priced = drafts[0] as ConstructionProject
+  const totalSeats = count * slots
+  const totalWorkload = projectWorkload(priced) * slots
+  const totalCost = constructionTotalCost(priced, country) * slots
+  const order =
+    slots === 1 ? `${count} 座` : `${slots} 个槽位×${count} 座（共 ${totalSeats} 座）`
   return {
     ok: true,
-    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列${placement.note}（工程量 ${projectWorkload(draft).toFixed(1)} 点；按队列顺序取用闲置建造力，一次最多投入剩余工程量；总造价 ${constructionTotalCost(draft, country).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft, country).toFixed(2)} 金）${powerWarning(country, tier)}`,
+    text: `${tag} 将 ${order}${BUILDINGS[building].name}列入建造队列${placement.note}（工程量 ${totalWorkload.toFixed(1)} 点；按队列顺序取用闲置建造力，一次最多投入剩余工程量；总造价 ${totalCost.toFixed(1)} 金，每点 ${constructionGoldPerPoint(priced, country).toFixed(2)} 金）${powerWarning(country, tier)}`,
   }
 }
 

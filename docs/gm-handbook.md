@@ -98,7 +98,7 @@
 
 | action | 必填参数 | 其他参数 | 说明 |
 | --- | --- | --- | --- |
-| `build` | `building`、`count` | `count` 1..5；`tier`（1-based，默认 1 = I 级，须已解锁）；`position`∈ head/tail/before/after（默认 tail）、`before`（before/after 的锚点项目 id） | 入队一座国有项目（每槽最多 5 座）；可指定目标等级或插队首/某条目之前/之后（ADR 0027） |
+| `build` | `building`、`count` | `count` 1..5（每槽座数）；**`slots` 1..50（默认 1，槽数）**；`tier`（1-based，默认 1 = I 级，须已解锁）；`position`∈ head/tail/before/after（默认 tail）、`before`（before/after 的锚点项目 id） | 入队国有项目。**`x*y` 聚合下单**：`count=x, slots=y` 一次生成 y 个各含 x 座的队列条目（逐槽完工，绝不打包成一单）；可指定目标等级或插队首/某条目之前/之后（ADR 0027 / PT-078） |
 | `upgrade` | `building`、`fromTier`、`toTier`、`count` | `fromTier`/`toTier` 为 1-based 等级（如钢铁厂 I→II 为 1→2）；`count` 无 5 座上限，但不得超过来源等级未被预约的存量座数；可选 `position`/`before` | 把存量座位从低等级改造成高等级（`toTier` 须已解锁）；**营造所也可升级**；工程量随目标等级膨胀（ADR 0031/0032、plan 0016 §S7） |
 | `cancel` | `projectId` **或** `index` | `index` 为 1-based 队列序号（见 `v3_inspect construction`） | **仅国有**项目可取消；私人项目不可取消；未命中时错误会列出「可用项目」 |
 | `reorder` | `projectId` **或** `index`、`position` | `before`（before/after 的锚点 id） | 调整既有国有条目的队列顺位（head/tail/before/after）；**保留已投入进度**；私人项目不可重排 |
@@ -350,7 +350,8 @@
 - **每槽最多 5 座**；每月订单数量不限。每点工程量造价 **0.2 金**（乘数/加数 v1 全为 1/0）。
 - **两条独立的建造杠杆（PT-076）**：
   - `constructionSpeed`（**建造速度**）——乘在**每月进度**上。建造力是「点/月」，速度让同样多的点推更多工程量，
-    所以它既缩短工期，也（在建造力受限时）减少总点数消耗。**不改 `v3_status` 的建造能力数字**。
+    所以它既缩短工期，也（在建造力受限时）减少总点数消耗。**不改 `v3_status` 的建造能力数字**；
+    队列与面板的「预计 N 回合」按同一乘数（含债务惩罚）计算（PT-079）。
   - `constructionCost`（**建造花费**）——乘在**每点单价**上，`-50%` 即项目**总造价减半**，工期不受影响。
     显示口径：状态行的「每点工程量造价」、队列行的「总造价」、建造面板的「造价」都读修正后的值；
     结果被钳在 `[0, 10]` 倍，堆叠减免最多把单价压到 0，不会变成倒收钱。

@@ -258,6 +258,12 @@ export function constructionSchedule(country: Country): ConstructionSchedule {
   // under construction are not assumed to finish, so the estimate never
   // promises points that do not exist yet.
   const capacity = constructionCapacity(country)
+  // PT-079: the ETA must use the same pace the settlement does — the
+  // `constructionSpeed` buff and the debt-pressure penalty both multiply
+  // monthly progress, so leaving them out doubled the promised time.
+  const pace =
+    applyModifiers(country, 'constructionSpeed', 1) *
+    (1 - debtPressure(country).constructionPenalty)
   const progress = new Map(state.map(project => [project.id, project.progress]))
   const monthsLeft = new Map(state.map(project => [project.id, project.monthsLeft]))
   const active = new Set(state.map(project => project.id))
@@ -289,7 +295,7 @@ export function constructionSchedule(country: Country): ConstructionSchedule {
       const take = Math.min(monthCapacity, remainingPoints)
       monthCapacity -= take
       const share = workload > 0 ? take / workload : 1
-      let projectProgress = (progress.get(project.id) ?? 0) + share
+      let projectProgress = (progress.get(project.id) ?? 0) + share * pace
       let remainingMonths = monthsLeft.get(project.id) ?? 1
       while (projectProgress >= 1 - 1e-9 && remainingMonths > 0) {
         projectProgress -= 1
