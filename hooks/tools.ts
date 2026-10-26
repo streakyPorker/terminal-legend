@@ -144,7 +144,7 @@ export const TOOL_SPECS: {
   {
     name: 'v3_cheat',
     description:
-      '终末传奇（天命）：修改玩家国家的金钱、科技点、建筑、关系、战争分数、日期，或触发事件、更换领袖、施加修正、立即完成国有建造队列。铁人模式下拒绝。action 取值：treasury（amount；可选 country 指定任意国家）、techPoints（amount）、navy（amount 艘，可为负）、building（building/count）、finishProjects（完成全部国有在建项目）、relations（country/amount）、warScore（country/amount）、date（year/month）、event（kind 可选）、leader（name/title/persona）、modifier（stat/stack/value/months/label）。treasury/techPoints/building/finishProjects/event/leader/modifier 均支持可选 country，缺省为玩家国；relations/warScore 的 country 是对手方。',
+      '终末传奇（天命）：修改玩家国家的金钱、科技点、建筑、关系、战争分数、日期，或触发事件、更换领袖、施加/撤销修正、立即完成国有建造队列。铁人模式下拒绝。action 取值：treasury（amount；可选 country 指定任意国家）、techPoints（amount）、navy（amount 艘，可为负）、building（building/count）、finishProjects（完成全部国有在建项目）、relations（country/amount）、warScore（country/amount）、date（year/month）、event（kind 可选）、leader（name/title/persona）、modifier（stat/stack/value/months/label 施加修正；可选 id 稳定标识）、removeModifier（按 id/label/stat 撤销天命修正）、clearModifiers（清空该国全部天命修正，可按 stat 过滤）。treasury/techPoints/building/finishProjects/event/leader/modifier/removeModifier/clearModifiers 均支持可选 country，缺省为玩家国；relations/warScore 的 country 是对手方。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -162,6 +162,8 @@ export const TOOL_SPECS: {
             'event',
             'leader',
             'modifier',
+            'removeModifier',
+            'clearModifiers',
           ],
         },
         amount: { type: 'number' },

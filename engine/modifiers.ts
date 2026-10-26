@@ -80,6 +80,29 @@ export const MODIFIER_STAT_NAMES: Record<ModifierStat, string> = {
 export const MODIFIER_STATS = Object.keys(MODIFIER_STAT_NAMES) as ModifierStat[]
 
 /**
+ * The documented numeric domain of a modifier seam, where it has one. A stat
+ * listed here is clamped to its range **after** stacking, so an out-of-domain
+ * modifier cannot blow up its consumers (PT-055). `marketAccess` is a 0–1
+ * fraction (0 = autarky, 1 = fully open) that feeds the shared
+ * `0.55 + access × 0.9` gate in BOTH construction capacity and production;
+ * nothing stopped a天命 `flat +20` from turning that gate into an ~18×
+ * multiplier in both paths.
+ */
+export const MODIFIER_STAT_RANGES: Partial<
+  Record<ModifierStat, readonly [number, number]>
+> = {
+  marketAccess: [0, 1],
+}
+
+/** Clamps a stacked reading to its declared domain; undeclared stats pass through. */
+function clampToDomain(stat: ModifierStat, value: number): number {
+  const range = MODIFIER_STAT_RANGES[stat]
+  if (range === undefined) return value
+  if (!Number.isFinite(value)) return range[0]
+  return Math.min(range[1], Math.max(range[0], value))
+}
+
+/**
  * Buffs and debuffs. Every numeric seam reads through `applyModifiers`, so a
  * policy, law, event or天命 can stack effects without touching the formula
  * itself.
@@ -115,7 +138,8 @@ export function applyModifiers(
   base: number,
 ): number {
   const totals = totalsFor(country, stat)
-  return (base + totals.flat) * (1 + totals.percent / 100) * totals.multiplier
+  const value = (base + totals.flat) * (1 + totals.percent / 100) * totals.multiplier
+  return clampToDomain(stat, value)
 }
 
 /** Adds a modifier, replacing one with the same id. */
@@ -132,6 +156,25 @@ export function addModifier(country: Country, modifier: Modifier): Modifier {
     country.modifiers.splice(timed >= 0 ? timed : 0, 1)
   }
   return modifier
+}
+
+/**
+ * Removes every modifier matching `match` and returns how many were dropped.
+ * The天命 revoke path (PT-054) uses it so a mistaken cheat buff can be taken
+ * back outright instead of being counter-buffed with a permanent opposite entry
+ * that still clutters the list.
+ */
+export function removeModifiers(
+  country: Country,
+  match: (modifier: Modifier) => boolean,
+): number {
+  if (!Array.isArray(country.modifiers)) {
+    country.modifiers = []
+    return 0
+  }
+  const before = country.modifiers.length
+  country.modifiers = country.modifiers.filter(modifier => !match(modifier))
+  return before - country.modifiers.length
 }
 
 /** Ages timed modifiers by one month and returns the labels that expired. */

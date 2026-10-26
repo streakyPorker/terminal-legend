@@ -15,7 +15,7 @@ export function modifiersSection(world: WorldState): string[] {
       const value = `${signed(modifier.value, 2)}${modifier.stack === 'flat' ? '' : '%'}`
       const months = modifier.monthsLeft === undefined ? '长期' : `${modifier.monthsLeft} 月`
       lines.push(
-        `- ${modifier.label}｜stat=${MODIFIER_STAT_NAMES[modifier.stat]}｜stack=${modifier.stack}｜value=${value}｜到期=${months}｜来源=${modifier.source}`,
+        `- ${modifier.label}｜id=${modifier.id}｜stat=${MODIFIER_STAT_NAMES[modifier.stat]}｜stack=${modifier.stack}｜value=${value}｜到期=${months}｜来源=${modifier.source}`,
       )
     }
   }

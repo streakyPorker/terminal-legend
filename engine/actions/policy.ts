@@ -139,8 +139,12 @@ export function applyPolicy(
     return sum + magnitude * (months / 12)
   }, 0)
   const required = clamp(Math.round(weight * 0.2), 1, 40)
+  // PT-060: a caller-supplied `authorityCost` is authoritative. The old
+  // `Math.max(required, requested)` silently overrode it, so a 4-entry policy
+  // priced at 40 by magnitude charged 40 even when the caller passed 15. Only
+  // when the caller omits the cost does the magnitude-derived charge apply.
   const requested = clamp(Math.round(num(proposal.authorityCost, 5)), 1, 40)
-  const cost = Math.max(required, requested)
+  const cost = proposal.authorityCost === undefined ? Math.max(required, requested) : requested
   if (country.government.authority < cost) {
     return {
       ok: false,

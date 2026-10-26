@@ -1,6 +1,6 @@
 import type { ConstructionProject, ModifierStack, ModifierStat, WorldState } from '../types'
 import { BUILDINGS, buildOf, makeRngForWorld, spawnEvent } from './data'
-import { MODIFIER_STATS, MODIFIER_STAT_NAMES, addModifier } from './modifiers'
+import { MODIFIER_STATS, MODIFIER_STAT_NAMES, addModifier, removeModifiers } from './modifiers'
 import { clamp, completeBuilding, completeUpgrade, projectKind } from './sim'
 
 export type CheatParams = Record<string, string | number | undefined>
@@ -197,6 +197,49 @@ export function applyCheat(
       text = `${who}施加修正 ${MODIFIER_STAT_NAMES[stat]} ${value}${stack === 'flat' ? '' : '%'}（${months > 0 ? `${months} 月` : '长期'}）`
       break
     }
+    case 'removeModifier': {
+      const subject = subjectFor(params.country)
+      if (subject === undefined) return { ok: false, text: `未知国家 ${String(params.country)}` }
+      const id = typeof params.id === 'string' && params.id !== '' ? params.id : undefined
+      const label =
+        typeof params.label === 'string' && params.label !== '' ? params.label : undefined
+      const stat =
+        typeof params.stat === 'string' && params.stat !== ''
+          ? (params.stat as ModifierStat)
+          : undefined
+      if (id === undefined && label === undefined && stat === undefined) {
+        return { ok: false, text: '撤销天命修正需要 id、label 或 stat 至少一项。' }
+      }
+      const removed = removeModifiers(
+        subject,
+        modifier =>
+          modifier.source === 'cheat' &&
+          (id === undefined || modifier.id === id) &&
+          (label === undefined || modifier.label === label) &&
+          (stat === undefined || modifier.stat === stat),
+      )
+      if (removed === 0) return { ok: false, text: '没有匹配的天命修正可撤销。' }
+      const who = subject.id === player.id ? '' : `${subject.name}：`
+      text = `${who}撤销 ${removed} 条天命修正`
+      break
+    }
+    case 'clearModifiers': {
+      const subject = subjectFor(params.country)
+      if (subject === undefined) return { ok: false, text: `未知国家 ${String(params.country)}` }
+      const stat =
+        typeof params.stat === 'string' && params.stat !== ''
+          ? (params.stat as ModifierStat)
+          : undefined
+      const removed = removeModifiers(
+        subject,
+        modifier =>
+          modifier.source === 'cheat' && (stat === undefined || modifier.stat === stat),
+      )
+      if (removed === 0) return { ok: false, text: '没有可清除的天命修正。' }
+      const who = subject.id === player.id ? '' : `${subject.name}：`
+      text = `${who}清除 ${removed} 条天命修正`
+      break
+    }
     case 'leader': {
       const subject = subjectFor(params.country)
       if (subject === undefined) return { ok: false, text: `未知国家 ${String(params.country)}` }
@@ -215,7 +258,7 @@ export function applyCheat(
     default:
       return {
         ok: false,
-        text: '未知天命：treasury / techPoints / building / relations / warScore / date / event / leader / modifier',
+        text: '未知天命：treasury / techPoints / building / relations / warScore / date / event / leader / modifier / removeModifier / clearModifiers',
       }
   }
 
