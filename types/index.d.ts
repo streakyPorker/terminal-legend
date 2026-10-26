@@ -1053,6 +1053,13 @@ export type GameEvent = {
   options: EventOption[]
   isResolved: boolean
   resolvedOption?: string
+  /**
+   * PT-085: the salient-topic keys this live event was written from
+   * (`economy:grain`, `livelihood:famine`, …). The topic scan cools a key for
+   * `LIVE_TOPIC_COOLDOWN_MONTHS` after it fires, so the same crisis does not
+   * spawn an event every single month. Template/random events leave it unset.
+   */
+  topicKeys?: string[]
 }
 
 export type LogKind =

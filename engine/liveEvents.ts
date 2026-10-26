@@ -41,6 +41,7 @@ import {
   LIVE_SALIENCE_SCALE,
   LIVE_SOL_LOW,
   LIVE_TEXT_MAX,
+  LIVE_TOPIC_COOLDOWN_MONTHS,
   LIVE_TITLE_MAX,
   LIVE_UNEMPLOYMENT_MIN,
   LIVE_WAR_SALIENCE,
@@ -276,10 +277,22 @@ export function salientTopics(
       })
     }
   }
+  // PT-085: rest any topic that fired recently. A persistent condition (cheap
+  // grain, high unemployment) would otherwise seed the same crisis every month;
+  // the data still shows it, but the event writer moves on.
+  const monthIndex = (date: { year: number; month: number }): number =>
+    date.year * 12 + date.month
+  const now = monthIndex(world.date)
+  const cooled = new Set<string>()
+  for (const event of world.events ?? []) {
+    if (event.topicKeys === undefined) continue
+    if (now - monthIndex(event.date) >= LIVE_TOPIC_COOLDOWN_MONTHS) continue
+    for (const key of event.topicKeys) cooled.add(key)
+  }
   // Strongest first; equal salience keeps the LIVE_DIMENSIONS order (stable
   // because the source array is in that order and sort is stable).
   topics.sort((a, b) => b.salience - a.salience)
-  return topics.slice(0, limit)
+  return topics.filter(topic => !cooled.has(topic.key)).slice(0, limit)
 }
 
 /** The template kinds that point at one direction, for prompt guidance. */
@@ -732,6 +745,7 @@ export async function generateLiveEvents(
         countryId: subject.country.id,
         options: candidate.options,
         isResolved: false,
+        topicKeys: subject.topics.map(topic => topic.key),
       })
     })
   }

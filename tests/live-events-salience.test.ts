@@ -67,6 +67,30 @@ describe('live events: E2 four-dimension salience scan (plan 0010 §3)', () => {
     expect(topics[0]?.key).toBe('economy:grain')
   })
 
+  test('a recently used topic is cooled, then returns after the window (PT-085)', async () => {
+    const { world, country } = playable(108)
+    country.econ.prices.grain = GRAIN_BASE * 1.5
+    const key = 'economy:grain'
+    expect(salientTopics(world, country).some(topic => topic.key === key)).toBe(true)
+    world.events = [
+      {
+        id: 'ev-cool',
+        date: { ...world.date },
+        kind: 'economy',
+        title: '谷贱伤农',
+        text: '测试',
+        countryId: 'QING',
+        options: [],
+        isResolved: true,
+        topicKeys: [key],
+      },
+    ]
+    expect(salientTopics(world, country).some(topic => topic.key === key)).toBe(false)
+    // A year later the cooldown has lapsed and the topic is seedable again.
+    world.events[0]!.date = { year: world.date.year - 1, month: world.date.month }
+    expect(salientTopics(world, country).some(topic => topic.key === key)).toBe(true)
+  })
+
   test('a radical spike selects the politics dimension', async () => {
     const { world, country } = playable(102)
     country.pops.radicals = 80

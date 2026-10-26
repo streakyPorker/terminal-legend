@@ -43,7 +43,7 @@ const LIVE_REPLY = JSON.stringify([
   },
 ])
 
-const EVENT_KEYS = ['countryId', 'date', 'id', 'isResolved', 'kind', 'options', 'text', 'title']
+const EVENT_KEYS = ['countryId', 'date', 'id', 'isResolved', 'kind', 'options', 'text', 'title', 'topicKeys']
 const OPTION_KEYS = ['effects', 'id', 'label', 'result']
 const EFFECT_KEYS = [
   'army',

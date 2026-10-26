@@ -49,6 +49,13 @@ export const LIVE_EFFECT_CAPS = {
 
 /** Live-event salience thresholds (plan 0010 §3/§10 待定). */
 export const LIVE_MAX_TOPICS = 2
+/**
+ * PT-085: after a topic key (`economy:grain`, `livelihood:famine`, …) is used
+ * for a live event, it is cooled for this many months so a persistent condition
+ * does not spawn the same crisis event every turn. The condition itself still
+ * shows up in the economic data; only the event seed is rested.
+ */
+export const LIVE_TOPIC_COOLDOWN_MONTHS = 6
 export const LIVE_GRAIN_DEVIATION_MIN = 0.06
 export const LIVE_GDP_CHANGE_MIN = 0.04
 export const LIVE_UNEMPLOYMENT_MIN = 12
