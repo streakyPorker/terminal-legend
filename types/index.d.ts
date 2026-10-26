@@ -571,6 +571,17 @@ export type Economy = {
    * subtract the private burden (ADR 0023).
    */
   taxBaseQty: Record<TaxBaseId, number>
+  /**
+   * PT-073: per-good consumption-tax overrides, percent. A good without an
+   * entry falls back to `taxes.consumption`; an explicitly set 0 exempts it.
+   * Optional so older saves need no migration.
+   */
+  consumptionTaxByGood?: Partial<Record<GoodId, number>>
+  /**
+   * PT-073: this month's final-consumption value per consumer good, stored so
+   * the ledger can tax each good at its own rate and show the breakdown.
+   */
+  consumptionValueByGood?: Partial<Record<GoodId, number>>
   /** Import duty charged on goods entering the country. */
   tariff: number
   /**

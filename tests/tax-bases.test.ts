@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { BUILDING_IDS, GOOD_IDS, makeRngForWorld } from '../engine/data'
+import { BUILDING_IDS, CONSUMER_GOODS, GOOD_IDS, makeRngForWorld } from '../engine/data'
 import {
   advance,
+  applyDecision,
   clone,
   computeEconomy,
   finalConsumptionBase,
@@ -11,6 +12,7 @@ import {
 import {
   collectionEfficiency,
   LAND_VALUE_PER_UNIT,
+  privateTaxBurden,
   taxBaseRevenues,
   taxCompliance,
 } from '../engine/fiscal'
@@ -118,5 +120,52 @@ describe('four tax bases (ADR 0023)', () => {
     const settled = qingOf(world)
     const ledger = taxBaseRevenues(settled, settled.econ.lastTariffRevenue)
     near(ledger.tariff, settled.econ.lastTariffRevenue)
+  })
+})
+
+
+describe('per-good consumption tax (PT-073)', () => {
+  test('a good with its own rate is taxed at that rate, the rest at the fallback', async () => {
+    const qing = qingOf(newWorld(208, 'QING'))
+    const snap = computeEconomy(qing)
+    const collection = collectionEfficiency(qing)
+    const fallback = qing.econ.taxes.consumption
+    const byGood = snap.consumptionValueByGood
+    qing.econ.consumptionTaxByGood = { grain: 8 }
+    const revenue = taxBaseRevenues(qing, 0, undefined, snap.taxBaseQty, byGood).consumption
+    let expected = 0
+    for (const good of CONSUMER_GOODS) {
+      const value = byGood[good] ?? 0
+      const rate = good === 'grain' ? 8 : fallback
+      expected += value * (rate / 100) * collection * taxCompliance(rate)
+    }
+    near(revenue, expected)
+    // The grain base is non-zero, so the override actually bites.
+    expect(byGood.grain ?? 0).toBeGreaterThan(0)
+  })
+
+  test('consumption tax no longer shrinks the demand-side burden', async () => {
+    const qing = qingOf(newWorld(209, 'QING'))
+    qing.econ.taxes.consumption = 3
+    const before = privateTaxBurden(qing)
+    qing.econ.taxes.consumption = 50
+    near(privateTaxBurden(qing), before)
+  })
+
+  test('the tax action sets one good and keeps the fallback rate', async () => {
+    const world = newWorld(210, 'QING')
+    const qing = qingOf(world)
+    const result = applyDecision(
+      world,
+      {
+        countryId: 'QING',
+        action: 'tax',
+        params: { base: 'consumption', good: 'grain', rate: 8 },
+      },
+      makeRngForWorld(world),
+    )
+    expect(result.ok).toBe(true)
+    expect(qing.econ.consumptionTaxByGood?.grain).toBe(8)
+    expect(qing.econ.taxes.consumption).toBe(3)
   })
 })

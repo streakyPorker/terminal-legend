@@ -1,5 +1,11 @@
 import type { Country, WorldState } from '../../types'
-import { collectionEfficiency, fiscalLedger } from '../fiscal'
+import { GOODS } from '../data'
+import {
+  collectionEfficiency,
+  consumptionTaxLines,
+  consumerPrice,
+  fiscalLedger,
+} from '../fiscal'
 import { effectiveImportDutyRate, tariffPassThrough } from '../trade'
 import { n, pct, signed, warFor } from './shared'
 
@@ -15,9 +21,15 @@ export function fiscalSection(world: WorldState, country: Country): string[] {
   const transfers = (world.transfers ?? []).filter(
     schedule => schedule.from === country.id || schedule.to === country.id,
   )
+  const taxLines = consumptionTaxLines(country)
+  const customTaxLines = taxLines.filter(line => line.custom)
+  const hasCustomConsumption = customTaxLines.length > 0
+  const consumptionTerm = hasCustomConsumption
+    ? `消费税 税基 ${n(qty.consumption)} → ${n(bases.consumption)}（分商品见下行）`
+    : `消费税 ${n(qty.consumption)} × ${n(rates.consumption, 0)}% = ${n(bases.consumption)}`
   const lines = [
     `财政收入 ${n(ledger.income.total)} = 税入 ${n(ledger.income.taxes)} + 基建 ${n(ledger.income.ports)} + 基金收益 ${n(ledger.income.sovereignIncome)} + 赔款/转移 ${n(ledger.income.reparations)} + 其他 ${n(ledger.income.other)}`,
-    `四税基（税额 = 税基量 × 税率 × 征收效率〔再乘逐基合规与债务削减〕；当前征收效率 ${pct(collectionEfficiency(country))}）：土地税 ${n(qty.land)} × ${n(rates.land, 0)}% = ${n(bases.land)}；企业所得税 ${n(qty.profit)} × ${n(rates.profit, 0)}% = ${n(bases.profit)}；消费税 ${n(qty.consumption)} × ${n(rates.consumption, 0)}% = ${n(bases.consumption)}；关税 ${n(qty.tariff)} × ${n(country.econ.tariff, 0)}% = ${n(bases.tariff)}`,
+    `四税基（税额 = 税基量 × 税率 × 征收效率〔再乘逐基合规与债务削减〕；当前征收效率 ${pct(collectionEfficiency(country))}）：土地税 ${n(qty.land)} × ${n(rates.land, 0)}% = ${n(bases.land)}；企业所得税 ${n(qty.profit)} × ${n(rates.profit, 0)}% = ${n(bases.profit)}；${consumptionTerm}；关税 ${n(qty.tariff)} × ${n(country.econ.tariff, 0)}% = ${n(bases.tariff)}`,
     `财政支出 ${n(ledger.expense.total)} = 陆军 ${n(ledger.expense.army)} + 海军 ${n(ledger.expense.navy)} + 行政 ${n(ledger.expense.administration)} + 教育 ${n(ledger.expense.education)} + 福利 ${n(ledger.expense.welfare)} + 债息 ${n(ledger.expense.debtInterest)} + 市场损耗 ${n(ledger.expense.marketLoss)} + 维护 ${n(ledger.expense.upkeep)} + 赔款/转移 ${n(ledger.expense.reparations)} + 国有建设 ${n(ledger.expense.construction)} + 建设补贴 ${n(ledger.expense.constructionSubsidy)}`,
     `净额 ${signed(ledger.net)} 金/月；国库 ${signed(country.econ.treasury)}（${ledger.debt > 0 ? `国债 ${n(ledger.debt)}，月息 ${pct(ledger.debtRate, 2)}` : `主权基金 ${n(ledger.fund)}，月息 ${pct(ledger.fundRate, 2)}`}）`,
     `债务压力 ${pressure.label}：债务/GDP ${pct(pressure.ratio, 0)}，收入 −${pct(pressure.incomePenalty, 0)}，建设速度 −${pct(pressure.constructionPenalty, 0)}，合法性目标 −${n(pressure.legitimacyPenalty)}，月息 +${pct(pressure.interestSpread, 2)}`,
@@ -28,6 +40,18 @@ export function fiscalSection(world: WorldState, country: Country): string[] {
         : ''
     }`,
   ]
+  if (hasCustomConsumption) {
+    lines.splice(
+      2,
+      0,
+      `消费税分商品（需求按税前价计算；含税价 = 市场价 × (1 + 税率)）：${customTaxLines
+        .map(
+          line =>
+            `${GOODS[line.good].name} ${n(line.rate, 0)}%（税基 ${n(line.value)} → ${n(line.amount)}，含税价 ${n(consumerPrice(country, line.good), 2)}）`,
+        )
+        .join('；')}；其余消费品按 ${n(rates.consumption, 0)}%`,
+    )
+  }
   if (transfers.length > 0) {
     lines.push(
       `转移支付日程：${transfers

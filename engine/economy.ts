@@ -12,6 +12,7 @@ import {
   BUILDING_IDS,
   CAPITAL_LABOR_SCALE,
   CONSUMPTION_PROPENSITY,
+  CONSUMER_GOODS,
   consumerBasket,
   GOODS,
   GOOD_IDS,
@@ -36,6 +37,7 @@ import {
   expenseParts,
   incomeParts,
   privateTaxBurden,
+  taxBaseRevenues,
   type ExpenseParts,
   type IncomeParts,
   type TaxBaseQuantities,
@@ -111,6 +113,10 @@ export type EconomySnapshot = {
   profits: number
   /** This month's four tax-base quantities (ADR 0023). */
   taxBaseQty: TaxBaseQuantities
+  /** PT-073: final-consumption value per consumer good (per-good sales tax). */
+  consumptionValueByGood: Partial<Record<GoodId, number>>
+  /** PT-073: this month's consumption-tax take, paid out of private savings. */
+  consumptionTaxTake: number
   buildingProfits: Record<BuildingId, BuildingProfit>
   labor: LaborStats
   /** Unified national infrastructure pool readings (plan 0011 F5). */
@@ -664,6 +670,12 @@ export function computeEconomy(
   for (const id of BUILDING_IDS) {
     profitBase += Math.max(0, buildingProfits[id].profit)
   }
+  // PT-073: the per-good final-consumption basket, so each consumer good can be
+  // taxed at its own rate and the ledger can show the breakdown.
+  const consumptionValueByGood: Partial<Record<GoodId, number>> = {}
+  for (const id of CONSUMER_GOODS) {
+    consumptionValueByGood[id] = breakdown.consumer[id] * country.econ.prices[id]
+  }
   const taxBaseQty: TaxBaseQuantities = {
     land: country.econ.resources.farmland * LAND_VALUE_PER_UNIT,
     profit: profitBase,
@@ -675,7 +687,17 @@ export function computeEconomy(
     override?.tariffRevenue ?? 0,
     context,
     taxBaseQty,
+    consumptionValueByGood,
   )
+  // PT-073: the consumption take is booked against private savings, not the
+  // household basket, so the tax moves prices rather than quantities.
+  const consumptionTaxTake = taxBaseRevenues(
+    country,
+    override?.tariffRevenue ?? 0,
+    context,
+    taxBaseQty,
+    consumptionValueByGood,
+  ).consumption
   // PT-065: scheduled transfers (loan installments, reparations) are
   // contractual payments, not domestic revenue — an `income` modifier such as
   // 「理财有方 +40%」 must not inflate them, or a 3.23/month loan books as 4.4.
@@ -700,6 +722,8 @@ export function computeEconomy(
     wages,
     profits,
     taxBaseQty,
+    consumptionValueByGood,
+    consumptionTaxTake,
     buildingProfits,
     labor,
     infrastructure: infrastructureStats(country),

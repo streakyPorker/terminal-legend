@@ -1,5 +1,5 @@
-import type { Country, TaxBaseId } from '../types'
-import { infrastructureCount } from './data'
+import type { Country, GoodId, TaxBaseId } from '../types'
+import { CONSUMER_GOODS, infrastructureCount } from './data'
 import { applyModifiers } from './modifiers'
 import {
   DEBT_PRESSURE_BLOCK,
@@ -257,30 +257,95 @@ export function taxCompliance(rate: number): number {
  * that only have a settled `Country` (the ledger, the disposable-income loop)
  * read the same numbers the treasury did.
  */
+/** PT-073: the consumption-tax rate that applies to one good (override or fallback). */
+export const consumptionRateFor = (country: Country, good: GoodId): number =>
+  country.econ.consumptionTaxByGood?.[good] ?? country.econ.taxes.consumption
+
+/**
+ * PT-073: the tax-inclusive price a consumer pays for one good. The market price
+ * is untouched — demand is computed on the pre-tax price, so the tax moves the
+ * price level, not the quantity.
+ */
+export const consumerPrice = (country: Country, good: GoodId): number =>
+  country.econ.prices[good] * (1 + consumptionRateFor(country, good) / 100)
+
+/** Per-good line of the consumption-tax breakdown (inspect / ledger). */
+export type ConsumptionTaxLine = {
+  good: GoodId
+  value: number
+  rate: number
+  amount: number
+  custom: boolean
+}
+
+export function consumptionTaxLines(country: Country): ConsumptionTaxLine[] {
+  const byGood = country.econ.consumptionValueByGood ?? {}
+  const debtCut = 1 - debtPressure(country).incomePenalty
+  const collection = collectionEfficiency(country)
+  return CONSUMER_GOODS.map(good => {
+    const value = byGood[good] ?? 0
+    const rate = consumptionRateFor(country, good)
+    return {
+      good,
+      value,
+      rate,
+      amount: value * (rate / 100) * collection * taxCompliance(rate) * debtCut,
+      custom: country.econ.consumptionTaxByGood?.[good] !== undefined,
+    }
+  })
+}
+
+/** PT-073: consumption revenue from the per-good final-consumption breakdown. */
+function consumptionTaxFromBreakdown(
+  country: Country,
+  byGood: Partial<Record<GoodId, number>>,
+  collection: number,
+  debtCut: number,
+): number {
+  let total = 0
+  for (const good of CONSUMER_GOODS) {
+    const value = byGood[good]
+    if (value === undefined || value <= 0) continue
+    const rate = consumptionRateFor(country, good)
+    total += value * (rate / 100) * collection * taxCompliance(rate) * debtCut
+  }
+  return total
+}
+
 export function taxBaseRevenues(
   country: Country,
   tariffRevenue: number,
   context: FiscalContext = DEFAULT_CONTEXT,
   quantities: TaxBaseQuantities = country.econ.taxBaseQty,
+  consumptionByGood: Partial<Record<GoodId, number>> | undefined =
+    country.econ.consumptionValueByGood,
 ): TaxBaseQuantities {
   const debtCut = 1 - debtPressure(country).incomePenalty
   const collection = collectionEfficiency(country)
   const rates = country.econ.taxes
   const internal = (base: TaxBaseId, rate: number): number =>
     quantities[base] * (rate / 100) * collection * taxCompliance(rate) * debtCut
+  const consumption =
+    consumptionByGood === undefined || Object.keys(consumptionByGood).length === 0
+      ? internal('consumption', rates.consumption)
+      : consumptionTaxFromBreakdown(country, consumptionByGood, collection, debtCut)
   return {
     land: internal('land', rates.land),
     profit: internal('profit', rates.profit),
-    consumption: internal('consumption', rates.consumption),
+    consumption,
     // Border duty is already the exact collected amount; no assessment step.
     tariff: tariffRevenue * debtCut,
   }
 }
 
-/** The part of the tax bill borne by private households (ADR 0023). */
+/**
+ * The part of the tax bill that reduces *consumption demand* (ADR 0023).
+ * PT-073: the consumption tax is deliberately excluded — it is a price wedge
+ * paid out of private savings, so it must not shrink the household basket.
+ */
 export function privateTaxBurden(country: Country): number {
   const bases = taxBaseRevenues(country, country.econ.lastTariffRevenue)
-  return bases.land + bases.profit + bases.consumption
+  return bases.land + bases.profit
 }
 
 export function incomeParts(
@@ -288,11 +353,19 @@ export function incomeParts(
   tariffRevenue: number,
   context: FiscalContext = DEFAULT_CONTEXT,
   quantities: TaxBaseQuantities = country.econ.taxBaseQty,
+  consumptionByGood: Partial<Record<GoodId, number>> | undefined =
+    country.econ.consumptionValueByGood,
 ): IncomeParts {
   // Debt pressure crowds out the state's non-interest income: part of the
   // tax/tariff/port take is consumed by refinancing and arrears.
   const debtCut = 1 - debtPressure(country).incomePenalty
-  const bases = taxBaseRevenues(country, tariffRevenue, context, quantities)
+  const bases = taxBaseRevenues(
+    country,
+    tariffRevenue,
+    context,
+    quantities,
+    consumptionByGood,
+  )
   return {
     taxes: bases.land + bases.profit + bases.consumption + bases.tariff,
     ports: infrastructureCount(country) * PORT_INCOME_PER_BUILDING * debtCut,

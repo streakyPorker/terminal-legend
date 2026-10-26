@@ -213,6 +213,7 @@ export function simulateCountry(
   country.econ.wages = snap.wages
   country.econ.profits = snap.profits
   country.econ.taxBaseQty = snap.taxBaseQty
+  country.econ.consumptionValueByGood = snap.consumptionValueByGood
   country.econ.buildingProfits = snap.buildingProfits
   country.econ.laborDemand = snap.labor.demand
   country.econ.laborForce = snap.labor.force
@@ -291,6 +292,12 @@ export function simulateCountry(
   // savings may start one private project (plan 0003 §3/§4).
   const savings = snap.profits * effectiveSavingsRate(country)
   country.econ.privateCapital += savings
+  // PT-073: the consumption tax is a price wedge paid out of private savings.
+  // Charging it here (instead of through the household budget) keeps demand
+  // unaffected while the treasury still collects the revenue; a pool that
+  // cannot cover it simply goes negative (private debt, as with a trade gap).
+  const consumptionTax = snap.consumptionTaxTake ?? 0
+  if (consumptionTax > 0) country.econ.privateCapital -= consumptionTax
   investPrivateCapital(world, country, snap, savings, log)
 
   // The construction queue pays from the appropriation; only the money that
