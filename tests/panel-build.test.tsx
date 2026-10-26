@@ -159,4 +159,30 @@ describe('build panel is a read-only dashboard (plan 0015 §S6)', () => {
     expect(await queueIds($)).toEqual([first, second])
     await pane.unmount()
   })
+
+  test('a real upgrade order renders its roman tier label on the pane (plan 0016 §S4)', async ($, on) => {
+    await boot($, on)
+    // The default QING world ships `general-1836`, so farms II is unlocked and
+    // a I→II order goes through the real GM path.
+    const result = await callTool($, {
+      tool: 'mcp__terminal-legend__v3_action',
+      action: 'upgrade',
+      building: 'farms',
+      fromTier: 1,
+      toTier: 2,
+      count: 2,
+    })
+    expect(result.result).toContain('列入升级队列')
+    const ids = await queueIds($)
+    expect(ids.length).toBe(1)
+    const pane = await mountPane($)
+    expect(await pane.find({ type: 'Text', text: /农场 I→II ×2/ })).toBeDefined()
+    expect(await pane.find({ type: 'Button', key: `cancel:${ids[0] ?? ''}` })).toBeDefined()
+    const inspect = await callTool($, {
+      tool: 'mcp__terminal-legend__v3_inspect',
+      section: 'construction',
+    })
+    expect(inspect.result ?? '').toContain('农场 I→II×2')
+    await pane.unmount()
+  })
 })

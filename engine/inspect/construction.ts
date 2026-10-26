@@ -4,7 +4,7 @@ import { BUILDINGS } from '../data'
 import { constructionLoad, constructionSchedule, projectKind, projectWorkload } from '../sim'
 import { n } from './shared'
 
-const ROMAN_TIERS = ['I', 'II', 'III']
+const ROMAN_TIERS = ['I', 'II', 'III', 'IV', 'V']
 const tierName = (tier: number): string => ROMAN_TIERS[tier - 1] ?? String(tier)
 
 const projectLabel = (project: ConstructionProject): string => {

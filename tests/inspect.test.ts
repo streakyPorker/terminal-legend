@@ -329,3 +329,31 @@ describe('v3_inspect country subject (PT-074)', () => {
     expect(inspectWorld(world, 'fiscal').startsWith('[清]')).toBe(true)
   })
 })
+
+describe('v3_inspect construction tier labels (plan 0016 §S4)', () => {
+  test('an IV→V upgrade project renders roman tier names, not decimal digits', async () => {
+    const world = newWorld(9106, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    qing.econ.constructionQueue = [
+      {
+        id: 'proj-iv-v',
+        building: 'steelMills',
+        count: 12,
+        kind: 'upgrade',
+        fromTier: 3,
+        toTier: 4,
+        owner: 'state',
+        monthsLeft: 5,
+        monthlyCost: 1.5,
+        lastSpend: 0,
+        progress: 0.2,
+        startedAt: { ...world.date },
+      },
+    ]
+    const text = inspectWorld(world, 'construction')
+    expect(text).toContain('钢铁厂 IV→V×12')
+    expect(text).not.toContain('钢铁厂 4→5')
+  })
+})

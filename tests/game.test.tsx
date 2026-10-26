@@ -476,7 +476,7 @@ describe('terminal-legend drawing', () => {
     await ui.unmount()
   })
 
-  test('the queue row shows an upgrade project as 钢铁厂 I→II ×12', async ($, on) => {
+  test('the queue row shows upgrade projects as 钢铁厂 I→II ×12 and III→IV ×12', async ($, on) => {
     const world = newWorld(3, 'QING')
     const qing = world.countries.QING
     expect(qing).toBeDefined()
@@ -494,6 +494,20 @@ describe('terminal-legend drawing', () => {
         monthlyCost: 1,
         lastSpend: 0,
         progress: 0.25,
+        startedAt: { ...world.date },
+      },
+      {
+        id: 'proj-upgrade-34',
+        building: 'steelMills',
+        count: 12,
+        kind: 'upgrade',
+        fromTier: 2,
+        toTier: 3,
+        owner: 'state',
+        monthsLeft: 5,
+        monthlyCost: 1.5,
+        lastSpend: 0,
+        progress: 0.1,
         startedAt: { ...world.date },
       },
     ]
@@ -522,7 +536,10 @@ describe('terminal-legend drawing', () => {
       props: PANE_PROPS,
     })
     expect(await ui.find({ type: 'Text', text: /钢铁厂 I→II ×12/ })).toBeDefined()
+    // Plan 0016 §S4: a 5-tier upgrade label must survive the row's label column.
+    expect(await ui.find({ type: 'Text', text: /钢铁厂 III→IV ×12/ })).toBeDefined()
     expect(await ui.find({ type: 'Button', key: 'cancel:proj-upgrade' })).toBeDefined()
+    expect(await ui.find({ type: 'Button', key: 'cancel:proj-upgrade-34' })).toBeDefined()
     await ui.unmount()
   })
 
@@ -569,6 +586,47 @@ describe('terminal-legend drawing', () => {
     await ui.unmount()
   })
 
+  test('the economy tab draws the tier proportion bar across all 5 tiers', async ($, on) => {
+    const world = newWorld(3, 'QING')
+    const qing = world.countries.QING
+    expect(qing).toBeDefined()
+    if (qing === undefined) return
+    // Plan 0016 §S4: a 5-seat-class mix must render five bar segments, with
+    // roman IV/V labels and a TIER_COLORS entry for every tier.
+    qing.econ.buildings.steelMills = 100
+    qing.econ.buildingTiers.steelMills = [40, 25, 20, 10, 5]
+    on('ui.render', { component: 'Pane', requestId: 'econ-five-pane' }, async ($hang, e) => {
+      const kit = ($hang as unknown as { ui: { resolve: (x: unknown) => UiKit } }).ui.resolve(e)
+      return (
+        <Panel
+          ui={kit}
+          world={world}
+          width={e.props.bodyColumns}
+          tab="economy"
+          notice=""
+          onTab={() => undefined}
+          onControl={() => undefined}
+          onEvent={() => undefined}
+          council={{ isOpen: true, report: '', secretaryReport: '', isRunning: false }}
+          onCouncil={() => undefined}
+        />
+      )
+    })
+    const ui = await $.ui.mount({
+      plugin: 'terminal-legend',
+      surface: 'terminal',
+      component: 'Pane',
+      requestId: 'econ-five-pane',
+      props: PANE_PROPS,
+    })
+    expect(await ui.find({ type: 'Text', text: /I 级 40%/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /II 级 25%/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /III 级 20%/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /IV 级 10%/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /V 级 5%/ })).toBeDefined()
+    await ui.unmount()
+  })
+
   test('the tech tab is read-only: researchable nodes are Text, not buttons', async ($, on) => {
     const world = newWorld(3, 'QING')
     const qing = world.countries.QING
@@ -606,6 +664,8 @@ describe('terminal-legend drawing', () => {
     // Before §S6 a researchable node rendered its name as a Button; the Text
     // lookup would then fail. Now the whole panel is a read-only dashboard.
     expect(await ui.find({ type: 'Text', text: new RegExp(pickable.name) })).toBeDefined()
+    // Plan 0016 §S4: `effectText` renders `unlockTier` effects up to tier 5.
+    expect(await ui.find({ type: 'Text', text: /解锁钢铁厂等级5/ })).toBeDefined()
     await ui.unmount()
   })
 })

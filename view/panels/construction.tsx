@@ -16,7 +16,8 @@ import { Heading, playerOf, type ControlAction, type UiKit } from './shared'
 
 /**
  * Player-facing queue-row label (plan 0015 §S6): a new build reads `农场×2`,
- * an upgrade reads `钢铁厂 I→II ×12` from the project's `fromTier`/`toTier`.
+ * an upgrade reads `钢铁厂 I→II ×12` from the project's `fromTier`/`toTier`
+ * (plan 0016 §S4 keeps the same shape for `III→IV` / `IV→V`).
  */
 export function projectLabel(project: ConstructionProject): string {
   const name = BUILDINGS[project.building].name
@@ -25,6 +26,12 @@ export function projectLabel(project: ConstructionProject): string {
   }
   return `${name}×${project.count}`
 }
+
+/**
+ * Queue-row label column. The old 16 fitted `钢铁厂 I→II ×12` but truncated a
+ * 5-tier `海军营地 III→IV ×12` (19 cells, plan 0016 §S4) to `… III→IV ×…`.
+ */
+export const QUEUE_LABEL_WIDTH = 20
 
 /**
  * The construction panel (plan 0013 §S6 / ADR 0031 §8): a read-only roster of
@@ -135,7 +142,7 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
             return (
               <Box flexDirection="row" columnGap={1} key={`queue:${project.id}`}>
                 <Text wrap="truncate">{padEnd(`#${position + 1}`, 4)}</Text>
-                <Text wrap="truncate">{padEnd(projectLabel(project), 16)}</Text>
+                <Text wrap="truncate">{padEnd(projectLabel(project), QUEUE_LABEL_WIDTH)}</Text>
                 <Text color="cyan">{padEnd(bar(project.progress, 1, 8), 9)}</Text>
                 <Text dimColor>
                   剩余 {fmtNumber(workload * (1 - project.progress))}/{fmtNumber(workload)} 点 · 进度 {Math.round(project.progress * 100)}% · 本月投入 {fmtNumber(load.byProject[project.id] ?? 0)} 点 · 预计 {schedule[project.id]?.turns ?? '—'} 回合 · 造价 {constructionTotalCost(project).toFixed(1)} 金
@@ -171,7 +178,7 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
               return (
                 <Box flexDirection="row" columnGap={1} key={`private:${project.id}`}>
                   <Text color="magenta">{padEnd('私人', 4)}</Text>
-                  <Text wrap="truncate">{padEnd(projectLabel(project), 16)}</Text>
+                  <Text wrap="truncate">{padEnd(projectLabel(project), QUEUE_LABEL_WIDTH)}</Text>
                   <Text color="cyan">{padEnd(bar(project.progress, 1, 8), 9)}</Text>
                   <Text dimColor>
                     剩余 {fmtNumber(workload * (1 - project.progress))}/{fmtNumber(workload)} 点 · 进度 {Math.round(project.progress * 100)}% · 本月自有 {fmtNumber(byProject?.own ?? 0)} / 租用 {fmtNumber(byProject?.rented ?? 0)} 点 · 预计 {schedule[project.id]?.turns ?? '—'} 回合

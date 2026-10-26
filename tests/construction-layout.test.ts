@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { ConstructionProject } from '../types'
 import {
+  QUEUE_LABEL_WIDTH,
   STAT_ROW_RESERVED,
   fitStatCells,
   projectLabel,
   type StatCell,
 } from '../view/panels/construction'
+import { displayWidth, padEnd } from '../view/format'
 
 /**
  * PT-059: every buildable-building row rendered 月耗 / 造价 / 存 / 量 / 利 at
@@ -63,7 +65,7 @@ describe('buildable row column fitting (PT-059, plan 0015 §S6)', () => {
   })
 })
 
-describe('queue row label (plan 0015 §S6)', () => {
+describe('queue row label (plan 0015 §S6; 5 tiers per plan 0016 §S4)', () => {
   const base: ConstructionProject = {
     id: 'proj-x',
     building: 'steelMills',
@@ -85,5 +87,34 @@ describe('queue row label (plan 0015 §S6)', () => {
     expect(projectLabel({ ...base, kind: 'upgrade', fromTier: 0, toTier: 1 })).toBe(
       '钢铁厂 I→II ×12',
     )
+  })
+
+  test('a III→IV upgrade reads with roman numerals, not decimal digits', () => {
+    expect(projectLabel({ ...base, kind: 'upgrade', fromTier: 2, toTier: 3 })).toBe(
+      '钢铁厂 III→IV ×12',
+    )
+  })
+
+  test('a IV→V upgrade reads with roman numerals', () => {
+    expect(projectLabel({ ...base, kind: 'upgrade', fromTier: 3, toTier: 4 })).toBe(
+      '钢铁厂 IV→V ×12',
+    )
+  })
+
+  test('the row label column fits a 5-tier upgrade on the longest building name', () => {
+    const label = projectLabel({
+      ...base,
+      building: 'navalBases',
+      kind: 'upgrade',
+      fromTier: 2,
+      toTier: 3,
+    })
+    // 海军营地 III→IV ×12: the widest 5-tier label at the 12-seat fixture size.
+    expect(label).toBe('海军营地 III→IV ×12')
+    expect(displayWidth(label)).toBeLessThanOrEqual(QUEUE_LABEL_WIDTH)
+    const padded = padEnd(label, QUEUE_LABEL_WIDTH)
+    // The old 16-cell column cut this label down to `… ×…`; the count must survive.
+    expect(padded).toContain('III→IV ×12')
+    expect(padded).not.toContain('…')
   })
 })
