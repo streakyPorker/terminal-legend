@@ -32,7 +32,12 @@ export const LAND_TRADE_PAIRS: ReadonlyArray<readonly [string, string]> = [
   ['AUS', 'OTT'],
   ['FRA', 'SPA'],
 ]
-export const ROUTE_MAX_LEVEL = 5
+/**
+ * PT-091: route levels are no longer capped at 5. The real brake is the hull
+ * gate (2 levels per ship), so a larger ceiling keeps the UI sane without
+ * letting paper routes outrun the fleet. 99 is effectively "no cap".
+ */
+export const ROUTE_MAX_LEVEL = 99
 export const ROUTE_GROW_UTILIZATION = 0.8
 export const ROUTE_RESIDUAL_FRICTION = 1.15
 export const ROUTE_RESIDUAL_TOP_PARTNERS = 3
