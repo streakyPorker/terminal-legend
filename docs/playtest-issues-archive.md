@@ -1631,8 +1631,9 @@
   而实际 `settleConstruction` 会乘。玩家看到的 ETA 约为真实工期的两倍。
 - 数据：建造力 55.4 点/月、队列 450 点；面板显示 9 回合，按 +100% 速度实际约 4–5 回合。
 - 判断：**报告口径缺口**，不改变结算。
-- 修复（aaf6978）：schedule 读取同一乘数（`constructionSpeed × (1 − 债务惩罚)`）；
-  新增测试断言 +100% 时 ETA 缩短。
+- 修复（aaf6978；fb7d480 改为 capacity 口径）：schedule 与 capacity 共用同一乘数；
+  新增测试断言 +100% 时 ETA 缩短。此后 `constructionSpeed` 直接乘在建造力产量上
+  （55.4 → 110.8），不再按每点进度计算。
 - 关联：`engine/construction.ts`（`constructionSchedule` / `settleConstruction`）、手册 §4.6。
 - 优先级：**P2**
 - 状态：**fixed（aaf6978）**
