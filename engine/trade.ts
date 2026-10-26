@@ -117,21 +117,28 @@ export const exportDutyRate = (country: Country): number =>
   country.econ.exportTariff ?? country.econ.tariff
 
 /**
- * Share of a posted duty that actually lands on prices. `tariffBargaining` in
- * [0, 0.9] says how much of the tax the foreign side absorbs: at 0 (the
- * default) the posted rate passes through in full; at 0.9 only a tenth of it
- * moves the landed price and the duty bill.
+ * How much of a posted **import** duty actually lands on the importer's price.
+ * `tariffBargaining` in [0, 0.9] is the share the foreign producer absorbs:
+ * at 0 (the default) the posted rate passes through in full; at 0.9 only a
+ * tenth of it moves the landed price. The importer's treasury still collects
+ * the full posted duty — the difference is shifted back onto the exporter
+ * (`bargainingAbsorbed`), which is the whole point of the leverage.
+ *
+ * Export duties need no equivalent: the engine never lowers the exporter's
+ * domestic price for them, so the foreign consumer already bears them in full.
  */
 export const tariffPassThrough = (country: Country): number =>
   1 - applyModifiers(country, 'tariffBargaining', 0)
 
-/** Import duty that the importer can actually make stick. */
+/** The import duty rate that reaches the importer's price signal. */
 export const effectiveImportDutyRate = (country: Country): number =>
   country.econ.tariff * tariffPassThrough(country)
 
-/** Export duty that the exporter can actually make stick. */
-export const effectiveExportDutyRate = (country: Country): number =>
-  exportDutyRate(country) * tariffPassThrough(country)
+/** Duty the exporter absorbs so the importer's price stays put (gold-conserving). */
+export const bargainingAbsorbed = (
+  importer: Country,
+  importDuty: number,
+): number => importDuty * applyModifiers(importer, 'tariffBargaining', 0)
 
 /**
  * Landed cost of one good delivered from `from` to `to` (plan §1.2): the
@@ -146,7 +153,7 @@ export function landedPrice(from: Country, to: Country, good: GoodId): number {
   const relationRisk = 1 + Math.max(0, -relationOf(to, from.id)) / RELATION_RISK_DIVISOR
   return (
     from.econ.prices[good] *
-    (1 + effectiveExportDutyRate(from) / 100) *
+    (1 + exportDutyRate(from) / 100) *
     (1 + effectiveImportDutyRate(to) / 100) *
     regionCost *
     accessFactor *
@@ -167,7 +174,7 @@ export function routeLandedPrice(from: Country, to: Country, good: GoodId): numb
   const transportFactor = TRANSPORT_FACTOR_BASE - to.econ.transportInfrastructure / TRANSPORT_FACTOR_DIVISOR
   return (
     from.econ.prices[good] *
-    (1 + effectiveExportDutyRate(from) / 100) *
+    (1 + exportDutyRate(from) / 100) *
     (1 + effectiveImportDutyRate(to) / 100) *
     regionCost *
     accessFactor *
@@ -382,12 +389,17 @@ function deriveBalance(countries: Country[], flows: TradeFlow[]): TradeBalance {
     // then charged on the border value that already includes the export duty.
     const exporter = index[flow.from]
     const importer = index[flow.to]
-    const exportTariff = exporter === undefined ? 0 : effectiveExportDutyRate(exporter)
-    const importTariff = importer === undefined ? 0 : effectiveImportDutyRate(importer)
+    const exportTariff = exporter === undefined ? 0 : exportDutyRate(exporter)
+    const importTariff = importer === undefined ? 0 : importer.econ.tariff
     const borderValue = value * (1 + exportTariff / 100)
     flow.value = value
     flow.exportDuty = value * (exportTariff / 100)
     flow.tariffPaid = borderValue * (importTariff / 100)
+    // Bargaining power does not cut the duty the importer collects; it pushes
+    // that slice onto the exporter, so the importer's price barely moves while
+    // its treasury keeps the full posted duty (gold-conserving transfer).
+    flow.absorbed =
+      importer === undefined ? 0 : bargainingAbsorbed(importer, flow.tariffPaid)
     const imported = balance.importQty[flow.to]
     const exported = balance.exportQty[flow.from]
     if (imported !== undefined) imported[flow.good] += flow.quantity
@@ -485,8 +497,9 @@ export function applyCapacity(
     if (flows === undefined) continue
     let bill = 0
     for (const flow of flows) {
-      // The real private payment is the domestic value plus both duties.
-      bill += flow.value + flow.exportDuty + flow.tariffPaid
+      // The real private payment is the domestic value plus both duties,
+      // minus whatever the exporter absorbed under the importer's leverage.
+      bill += flow.value + flow.exportDuty + flow.tariffPaid - (flow.absorbed ?? 0)
     }
     if (bill > capacity && bill > 0) {
       const factor = capacity / bill
@@ -549,8 +562,9 @@ export function applyPaymentCapacity(
     const capacity = capacities[country.id] ?? 0
     let bill = 0
     for (const flow of flows) {
-      // The real private payment is the domestic value plus both duties.
-      bill += flow.value + flow.exportDuty + flow.tariffPaid
+      // The real private payment is the domestic value plus both duties,
+      // minus whatever the exporter absorbed under the importer's leverage.
+      bill += flow.value + flow.exportDuty + flow.tariffPaid - (flow.absorbed ?? 0)
     }
     if (bill > capacity && bill > 0) {
       const factor = capacity / bill
@@ -605,14 +619,17 @@ export function settleTrade(
   let exportDuty = 0
   for (const flow of flows) {
     const value = flow.quantity * flow.unitPrice
+    const absorbed = flow.absorbed ?? 0
     if (flow.to === country.id) {
       const borderValue = value + flow.exportDuty
-      importBill += borderValue
-      importDuty += borderValue * (effectiveImportDutyRate(country) / 100)
+      // The exporter's absorbed slice lowers what the importer's private
+      // sector pays, but the state still collects the full posted duty.
+      importBill += borderValue - absorbed
+      importDuty += borderValue * (country.econ.tariff / 100)
     }
     if (flow.from === country.id) {
-      exportRevenue += value
-      exportDuty += value * (effectiveExportDutyRate(country) / 100)
+      exportRevenue += value - absorbed
+      exportDuty += value * (exportDutyRate(country) / 100)
     }
   }
   const tariffRevenue = importDuty + exportDuty

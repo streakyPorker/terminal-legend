@@ -69,6 +69,14 @@ export type TradeFlow = {
   exportDuty: number
   /** quantity × unitPrice, the exporter's domestic book value. */
   value: number
+  /**
+   * Import duty the exporter's private sector absorbs because the importer has
+   * `tariffBargaining` power (see `bargainingAbsorbed`). The importer's bill
+   * falls by this amount and so does the exporter's revenue, so the importer's
+   * domestic price barely moves while its treasury still collects the posted
+   * duty. Zero when the importer has no leverage.
+   */
+  absorbed?: number
 }
 
 /**

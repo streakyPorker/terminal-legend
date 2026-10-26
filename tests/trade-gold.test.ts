@@ -608,7 +608,7 @@ describe('T1b baseline and determinism', () => {
     expect(exportDutyRate(gbr)).toBe(2)
   })
 
-  test('tariff bargaining damps the import wedge and the duty bill', async () => {
+  test('tariff bargaining damps the price wedge but keeps the posted duty', async () => {
     const world = newWorld(7018, 'QING')
     const qing = countryOf(world, 'QING')
     const gbr = countryOf(world, 'GBR')
@@ -634,15 +634,22 @@ describe('T1b baseline and determinism', () => {
       quantity: 10,
       unitPrice: 1,
       landedPrice: 1,
-      tariffPaid: 0,
+      tariffPaid: 2,
       exportDuty: 0,
       value: 10,
+      // Derived by `deriveBalance`: half of the 2 gold posted duty.
+      absorbed: 1,
     }
-    // 10 gold of border value × a 10% effective rate (half of the posted 20%).
-    expect(Math.abs(settleTrade(qing, [flow], 0).importDuty - 1)).toBeLessThan(1e-9)
+    const importer = settleTrade(qing, [flow], 0)
+    const exporter = settleTrade(gbr, [flow], 0)
+    // The state keeps the full posted 20% duty — no revenue is given up.
+    expect(Math.abs(importer.importDuty - 2)).toBeLessThan(1e-9)
+    // The exporter eats the absorbed slice; the importer's bill falls by it.
+    expect(Math.abs(importer.importBill - 9)).toBeLessThan(1e-9)
+    expect(Math.abs(exporter.exportRevenue - 9)).toBeLessThan(1e-9)
   })
 
-  test('tariff bargaining damps the export wedge too and clamps at 0.9', async () => {
+  test('export duties keep their full pass-through, and bargaining clamps at 0.9', async () => {
     const world = newWorld(7019, 'QING')
     const qing = countryOf(world, 'QING')
     const gbr = countryOf(world, 'GBR')
@@ -657,9 +664,9 @@ describe('T1b baseline and determinism', () => {
       stack: 'flat',
       value: 0.5,
     })
-    expect(
-      Math.abs(landedPrice(gbr, qing, 'coal') - (base * 1.1) / 1.2),
-    ).toBeLessThan(1e-9)
+    // The export duty already falls on the foreign consumer in full; the
+    // exporter's leverage does not damp the foreign price.
+    expect(Math.abs(landedPrice(gbr, qing, 'coal') - base)).toBeLessThan(1e-9)
     // The domain floors the value at 0.9, so at most a tenth of the duty lands.
     addModifier(gbr, {
       id: 'test:bargain:export:clamp',
