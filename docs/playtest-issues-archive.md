@@ -85,6 +85,7 @@
 | PT-084 | 政策 flat 值单位未文档化：识字「+2」直接顶到 100% | 0006 / 手册 §3 | fixed（869f45f） |
 | PT-085 | 粮价长期偏低，谷贱/饥民事件月月刷屏 | 0010 / 手册 §8 | fixed（eeea79e，仅事件冷却） |
 | PT-086 | 陆路贸易（对俄）也被船队门控 | 0004 / 手册 §4.3 | fixed（18b1579） |
+| PT-087 | 私人建设实付金额不可见 | 0006 / inspect | fixed（b221e18） |
 
 ---
 
@@ -1791,3 +1792,22 @@
   `engine/inspect/routes.ts`、手册 §4.3、PT-067。
 - 优先级：**P2**
 - 状态：**fixed（18b1579）**
+
+
+### PT-087 私人建设实付金额不可见
+
+- 日期：2026-10-26
+- 游戏内日期：1837.04
+- 来源：玩家「现在私人投资有多少，没显示啊」
+- 现象：私人建设只在数据层有 `econ.lastPrivateConstructionSpend`，
+  `v3_status` / `v3_inspect construction` 都只给「私人资本」池子（63.8 金）与
+  私人项目进度，**看不到上月私人实际投了多少钱**。
+- 判断：**GM 接口缺口**（plan 0006）。玩家无法判断民间投资是在扩张还是停滞。
+- 修复（b221e18）：
+  1. `v3_inspect construction` 新增一行：**上月建设实付 国有 X + 私人 Y 金**，
+     并附私人自有/租用建造点；
+  2. `v3_status` 的建造能力行追加同样两个数字。
+- 关联：`engine/inspect/construction.ts`、`hooks/prompt.ts`、
+  `engine/construction.ts`（`last*ConstructionSpend`）、plan 0006。
+- 优先级：**P2**
+- 状态：**fixed（b221e18）**
