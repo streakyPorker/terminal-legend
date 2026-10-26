@@ -314,25 +314,52 @@ describe('construction slot limits (ADR 0012/0013)', () => {
     expect(Math.abs(constructionGoldPerPoint(proj, qing) - basePrice)).toBeLessThan(1e-9)
   })
 
-  test('rentPriority lets the private market take points first (PT-089)', async () => {
-    const world = newWorld(9409, 'QING')
-    const qing = countryOf(world, 'QING')
-    qing.econ.buildings.workshops = 4
-    qing.econ.buildingTiers.workshops = [4, 0, 0, 0, 0]
-    qing.econ.constructionQueue = []
-    qing.econ.privateCapital = 100
-    const result = applyDecision(
-      world,
-      { countryId: 'QING', action: 'build', params: { building: 'steelMills', count: 1 } },
-      makeRngForWorld(world),
-    )
-    expect(result.ok).toBe(true)
-    qing.econ.rentPriority = true
-    advance(world, 1, [], makeRngForWorld(world))
-    // All points went to the private rental market, so the state project got nothing.
-    expect(qing.econ.lastConstructionRent).toBeGreaterThan(0)
-    const project = qing.econ.constructionQueue[0]
-    expect(project === undefined || project.progress < 0.5).toBe(true)
+  test('rentPriority lets private projects take points first (PT-089)', async () => {
+    const run = (priority: boolean) => {
+      const world = newWorld(9409, 'QING')
+      const qing = countryOf(world, 'QING')
+      qing.econ.buildings.workshops = 6
+      qing.econ.buildingTiers.workshops = [6, 0, 0, 0, 0]
+      qing.econ.privateCapital = 100
+      qing.econ.rentPriority = priority
+      qing.econ.constructionQueue = [
+        project(
+          {
+            id: 'priv',
+            building: 'coalMines',
+            count: 5,
+            owner: 'private',
+            monthsLeft: 1,
+            monthlyCost: 1,
+          },
+          world.date,
+        ),
+        project(
+          {
+            id: 'state',
+            building: 'steelMills',
+            count: 1,
+            owner: 'state',
+            monthsLeft: 1,
+            monthlyCost: 0.5,
+          },
+          world.date,
+        ),
+      ]
+      advance(world, 1, [], makeRngForWorld(world))
+      const stateProject = qing.econ.constructionQueue.find(one => one.id === 'state')
+      return {
+        stateProgress: stateProject?.progress ?? 1,
+        rented: qing.econ.lastConstructionRent,
+      }
+    }
+    const withPriority = run(true)
+    const without = run(false)
+    // The private project rents before the state draws, so it pays rent and the
+    // state project is visibly slower than in the default order.
+    expect(withPriority.rented).toBeGreaterThan(0)
+    expect(without.rented).toBe(0)
+    expect(withPriority.stateProgress).toBeLessThan(without.stateProgress)
   })
 
   test('only the player may toggle rent priority', async () => {

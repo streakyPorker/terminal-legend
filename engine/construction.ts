@@ -687,90 +687,85 @@ export function settleConstruction(
     kept.add(project.id)
   }
 
-  // PT-089: player-only "rent first". The private market rents idle points
-  // before state projects draw on them; whatever the private pool cannot
-  // afford flows back to the state queue (and to private projects in pass 2).
-  if (
-    world.playerId === country.id &&
-    country.econ.rentPriority === true &&
-    capacityLeft > 0
-  ) {
-    const affordable =
-      CONSTRUCTION_RENT_PER_POINT > 0
-        ? privateBudget / CONSTRUCTION_RENT_PER_POINT
-        : capacityLeft
-    const rented = Math.min(capacityLeft, Math.max(0, affordable))
-    if (rented > 0) {
-      const rent = rented * CONSTRUCTION_RENT_PER_POINT
-      privateBudget -= rent
-      rentalIncome += rent
+  // PT-089: player-only "private first". When on, PRIVATE PROJECTS draw on the
+  // state's points before the state queue does — so the rent the private pool
+  // pays actually turns into buildings rather than an abstract transfer. The
+  // idle-market rental at the end still handles whatever nobody can use.
+  const rentFirst =
+    world.playerId === country.id && country.econ.rentPriority === true
+
+  const runStatePass = (): void => {
+    for (const project of queue) {
+      if ((project.owner ?? 'state') === 'private') continue
+      const need = capacityCost(project)
+      const workload = projectWorkload(project)
+      const remainingPoints = workload * Math.max(0, 1 - project.progress)
+      const capacityTake = Math.min(capacityLeft, remainingPoints)
+      capacityLeft -= capacityTake
+      runProject(
+        project,
+        capacityTake,
+        need > 0 ? capacityTake / need : 1,
+        workload > 0 ? capacityTake / workload : 1,
+        false,
+      )
+    }
+  }
+
+  const runPrivatePass = (): void => {
+    for (const project of queue) {
+      if ((project.owner ?? 'state') !== 'private') continue
+      const need = capacityCost(project)
+      const workload = projectWorkload(project)
+      const slotNeed = Math.min(
+        need,
+        maxSlotCapacity(project.building),
+        workload * Math.max(0, 1 - project.progress),
+      )
+      const own = slotNeed * PRIVATE_OWN_CAPACITY_SHARE
+      const affordableRent =
+        CONSTRUCTION_RENT_PER_POINT > 0
+          ? privateBudget / CONSTRUCTION_RENT_PER_POINT
+          : Infinity
+      const rented = Math.min(
+        capacityLeft,
+        Math.max(0, slotNeed - own),
+        affordableRent,
+      )
       capacityLeft -= rented
+      const rent = rented * CONSTRUCTION_RENT_PER_POINT
+      if (rent > 0) {
+        privateBudget -= rent
+        rentalIncome += rent
+      }
+      const capacityTake = own + rented
+      const inputShare = need > 0 ? capacityTake / need : 1
+      // Safety net only: a private pool that cannot pay gets the treasury behind
+      // it, so idle capacity never rots (PT-070).
+      const subsidy =
+        privateBudget + 1e-9 < project.monthlyCost * inputShare
+          ? Math.min(
+              project.monthlyCost * inputShare - privateBudget,
+              Math.max(0, country.econ.treasury - debtFloor),
+            )
+          : 0
+      runProject(
+        project,
+        capacityTake,
+        inputShare,
+        workload > 0 ? capacityTake / workload : 1,
+        true,
+        subsidy,
+      )
     }
   }
 
-  // Pass 1: state slots, strictly in queue order, take points until exhausted.
-  for (const project of queue) {
-    if ((project.owner ?? 'state') === 'private') continue
-    const need = capacityCost(project)
-    const workload = projectWorkload(project)
-    const remainingPoints = workload * Math.max(0, 1 - project.progress)
-    const capacityTake = Math.min(capacityLeft, remainingPoints)
-    capacityLeft -= capacityTake
-    runProject(
-      project,
-      capacityTake,
-      need > 0 ? capacityTake / need : 1,
-      workload > 0 ? capacityTake / workload : 1,
-      false,
-    )
-  }
-
-  // Pass 2: private slots do half the work with their own organisation and may
-  // rent idle state points for the rest; rent is private gold paid to the state.
-  for (const project of queue) {
-    if ((project.owner ?? 'state') !== 'private') continue
-    const need = capacityCost(project)
-    const workload = projectWorkload(project)
-    const slotNeed = Math.min(
-      need,
-      maxSlotCapacity(project.building),
-      workload * Math.max(0, 1 - project.progress),
-    )
-    const own = slotNeed * PRIVATE_OWN_CAPACITY_SHARE
-    const affordableRent =
-      CONSTRUCTION_RENT_PER_POINT > 0
-        ? privateBudget / CONSTRUCTION_RENT_PER_POINT
-        : Infinity
-    const rented = Math.min(
-      capacityLeft,
-      Math.max(0, slotNeed - own),
-      affordableRent,
-    )
-    capacityLeft -= rented
-    const rent = rented * CONSTRUCTION_RENT_PER_POINT
-    if (rent > 0) {
-      privateBudget -= rent
-      rentalIncome += rent
-    }
-    const capacityTake = own + rented
-    const inputShare = need > 0 ? capacityTake / need : 1
-    // Safety net only: a private pool that cannot pay gets the treasury behind
-    // it, so idle capacity never rots (PT-070).
-    const subsidy =
-      privateBudget + 1e-9 < project.monthlyCost * inputShare
-        ? Math.min(
-            project.monthlyCost * inputShare - privateBudget,
-            Math.max(0, country.econ.treasury - debtFloor),
-          )
-        : 0
-    runProject(
-      project,
-      capacityTake,
-      inputShare,
-      workload > 0 ? capacityTake / workload : 1,
-      true,
-      subsidy,
-    )
+  if (rentFirst) {
+    runPrivatePass()
+    runStatePass()
+  } else {
+    runStatePass()
+    runPrivatePass()
   }
 
   // Any points still idle after the state and private project passes are
