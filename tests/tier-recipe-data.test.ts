@@ -34,6 +34,9 @@ const NAVAL_BASE: BuildingId[] = ['navalBases']
 const NEW_WORKS: BuildingId[] = ['chemicalWorks', 'locomotiveWorks']
 const POWER_PLANTS: BuildingId[] = ['powerPlants']
 const FARMS: BuildingId[] = ['farms']
+// S7: the workshops produce construction points (not goods), so their II–V
+// baskets are hand-derived in 附录 A.5 rather than by the family multipliers.
+const WORKSHOPS: BuildingId[] = ['workshops']
 
 const TIERED: BuildingId[] = [
   ...HEAVY,
@@ -45,6 +48,7 @@ const TIERED: BuildingId[] = [
   ...NEW_WORKS,
   ...POWER_PLANTS,
   ...FARMS,
+  ...WORKSHOPS,
 ]
 
 /**
@@ -197,6 +201,29 @@ const expandTiersRaw = (id: BuildingId): RawTier[] => {
     t3 = { output: {}, input: mul(t2.input, r[4]), labor: base.labor }
     t4 = { output: {}, input: electrify(mul(t3.input, r[7]), coal[0], elec[0]), labor: base.labor }
     t5 = { output: {}, input: electrify(mul(t4.input, r[10]), coal[1], elec[1]), labor: base.labor }
+  } else if (WORKSHOPS.includes(id)) {
+    // 附录 A.5 hand-derived baskets: iron → steel (II), + machinery (III),
+    // + electricity (IV/V). Output stays {} (points come from constructionCapacity).
+    t2 = {
+      output: {},
+      input: { wood: 1.0, grain: 0.58, iron: 0.15, steel: 0.15 },
+      labor: 0.88,
+    }
+    t3 = {
+      output: {},
+      input: { wood: 0.98, grain: 0.55, iron: 0.06, steel: 0.2, machinery: 0.06 },
+      labor: 0.968,
+    }
+    t4 = {
+      output: {},
+      input: { wood: 0.95, grain: 0.52, steel: 0.26, machinery: 0.1, electricity: 0.15 },
+      labor: 1.045,
+    }
+    t5 = {
+      output: {},
+      input: { wood: 0.92, grain: 0.5, steel: 0.3, machinery: 0.14, electricity: 0.22 },
+      labor: 1.129,
+    }
   } else {
     t2 = { output: mul(base.output, r[0]), input: mul(base.input, r[1]), labor: base.labor * r[2] }
     t3 = { output: mul(t2.output, r[3]), input: mul(t2.input, r[4]), labor: t2.labor * r[5] }
@@ -217,7 +244,7 @@ const expandTiersRaw = (id: BuildingId): RawTier[] => {
 const expandTiers = (id: BuildingId): BuildTierDef[] => expandTiersRaw(id).map(roundDef)
 
 describe('Tier recipe data — 附录-B drift guard (plan 0015 S1 / plan 0016 S0)', () => {
-  test('each of the 17 tiered buildings stores exactly four tiers', () => {
+  test('each of the 18 tiered buildings stores exactly four tiers', () => {
     for (const id of TIERED) {
       const tiers = BUILDING_RECIPES[id].tiers
       expect(tiers, `${id}.tiers is defined`).toBeDefined()
@@ -260,11 +287,21 @@ describe('Tier recipe data — 附录-B drift guard (plan 0015 S1 / plan 0016 S0
     expect(new Set([0.08, 0.1, 0.15, 0.2, 0.3]).size).toBe(5)
   })
 
-  test('tier I is untouched and the other 6 buildings stay untiered', () => {
+  test('tier I is untouched and the other 5 buildings stay untiered', () => {
     for (const id of BUILDING_IDS) {
       if (TIERED.includes(id)) continue
       expect(BUILDING_RECIPES[id].tiers, `${id} must stay untiered`).toBeUndefined()
     }
+  })
+
+  test('S7: workshops derive four tiers with the 附录 A.5 advanced-material baskets', () => {
+    const expanded = expandTiers('workshops')
+    expect(expanded.length, 'workshops derives II–V').toBe(4)
+    expect(expanded[0]?.output).toEqual({})
+    expect(expanded[0]?.input.steel).toBe(0.15)
+    expect(expanded[0]?.input.iron).toBe(0.15)
+    expect(expanded[2]?.input.electricity).toBe(0.15)
+    expect(expanded[3]?.input.electricity).toBe(0.22)
   })
 
   test('S3: powerPlants/farms derive four tiers with no electricity input (附录 A.2)', () => {

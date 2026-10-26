@@ -7,13 +7,22 @@ import {
   capacityCost,
   applyDecision,
   constructionCapacity,
+  constructionGoldPerPoint,
   constructionLoad,
   constructionSchedule,
   maxSlotCapacity,
   newWorld,
   normalizeConstructionQueue,
+  projectWorkload,
 } from '../engine/sim'
-import type { ConstructionProject, Country, WorldState } from '../types'
+import type {
+  BuildingId,
+  ConstructionProject,
+  Country,
+  GoodId,
+  TradeFlow,
+  WorldState,
+} from '../types'
 
 const countryOf = (world: WorldState, id: string): Country => {
   const country = world.countries[id]
@@ -425,5 +434,122 @@ describe('construction queue orchestration (PT-037)', () => {
       makeRngForWorld(world),
     )
     expect(denied.ok).toBe(false)
+  })
+})
+
+describe('workshop tiering: capacity, cost and workload (plan 0016 §S7)', () => {
+  const close = (actual: number, expected: number, eps = 1e-9): void => {
+    expect(Math.abs(actual - expected), `expected ${expected}, got ${actual}`).toBeLessThan(eps)
+  }
+
+  const draftProject = (
+    building: BuildingId,
+    count: number,
+    targetTierIndex = 0,
+  ): ConstructionProject => ({
+    id: 'draft',
+    building,
+    count,
+    owner: 'state',
+    monthsLeft: 1,
+    monthlyCost: 0,
+    lastSpend: 0,
+    progress: 0,
+    startedAt: { year: 1836, month: 1 },
+    ...(targetTierIndex > 0 ? { toTier: targetTierIndex } : {}),
+  })
+
+  /** Inject ample imports for every workshop input so materials never cap a reading. */
+  const supplyAllInputs = (country: Country): void => {
+    const flow = (good: GoodId): TradeFlow => ({
+      good,
+      from: 'GBR',
+      to: country.id,
+      quantity: 1e6,
+      unitPrice: 1,
+      landedPrice: 1,
+      tariffPaid: 0,
+      exportDuty: 0,
+      value: 0,
+    })
+    country.trade.imports = [
+      'wood',
+      'grain',
+      'iron',
+      'steel',
+      'machinery',
+      'electricity',
+    ].map(flow)
+  }
+
+  test('higher-grade workshops produce more construction points (×2.10 at V)', () => {
+    const world = newWorld(9400, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 8
+    supplyAllInputs(qing)
+    qing.econ.buildingTiers.workshops = [8, 0, 0, 0, 0]
+    const tierI = constructionCapacity(qing)
+    qing.econ.buildingTiers.workshops = [0, 0, 0, 0, 8]
+    const tierV = constructionCapacity(qing)
+    expect(tierI).toBeGreaterThan(0)
+    close(tierV / tierI, 2.1)
+  })
+
+  test('a mixed workshop stock blends the capacity multiplier by seat share', () => {
+    const world = newWorld(9401, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 4
+    supplyAllInputs(qing)
+    qing.econ.buildingTiers.workshops = [4, 0, 0, 0, 0]
+    const tierI = constructionCapacity(qing)
+    qing.econ.buildingTiers.workshops = [2, 0, 0, 0, 2]
+    const mixed = constructionCapacity(qing)
+    close(mixed / tierI, (1 + 2.1) / 2)
+  })
+
+  test('the gold cost per point falls with the workshop tier', () => {
+    const world = newWorld(9402, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 8
+    const proj = draftProject('steelMills', 1)
+    qing.econ.buildingTiers.workshops = [8, 0, 0, 0, 0]
+    close(constructionGoldPerPoint(proj, qing), 0.2)
+    qing.econ.buildingTiers.workshops = [0, 0, 0, 0, 8]
+    close(constructionGoldPerPoint(proj, qing), 0.2 * 0.8)
+    // No country → tier-I base (the old call shape stays bit-identical).
+    close(constructionGoldPerPoint(proj), 0.2)
+  })
+
+  test('a tier-V new build needs 2.8× the points of a tier-I build', () => {
+    const buildI = draftProject('steelMills', 1)
+    const buildV = draftProject('steelMills', 1, 4)
+    close(projectWorkload(buildV), 2.8 * projectWorkload(buildI))
+  })
+
+  test('only-I workshops make a tier-V build far slower than V workshops do', () => {
+    const world = newWorld(9403, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 8
+    supplyAllInputs(qing)
+    const workloadV = projectWorkload(draftProject('steelMills', 1, 4))
+    qing.econ.buildingTiers.workshops = [8, 0, 0, 0, 0]
+    const turnsI = Math.ceil(workloadV / constructionCapacity(qing))
+    qing.econ.buildingTiers.workshops = [0, 0, 0, 0, 8]
+    const turnsV = Math.ceil(workloadV / constructionCapacity(qing))
+    expect(turnsI).toBeGreaterThan(turnsV)
+    expect(turnsI / turnsV).toBeGreaterThan(1.5)
+  })
+
+  test('a IV/V workshop loses capacity when steel/machinery/electricity run short', () => {
+    const world = newWorld(9404, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 8
+    qing.econ.buildingTiers.workshops = [0, 0, 0, 0, 8]
+    supplyAllInputs(qing)
+    const full = constructionCapacity(qing)
+    qing.trade.imports = qing.trade.imports.filter(flow => flow.good !== 'electricity')
+    const short = constructionCapacity(qing)
+    expect(full).toBeGreaterThan(0)
+    expect(short).toBeLessThan(full)
   })
 })

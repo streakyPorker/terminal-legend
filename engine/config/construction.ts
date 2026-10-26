@@ -53,12 +53,36 @@ export const WORKLOAD_MULTIPLIER = 30
  * only because it is smaller, never because it is discounted.
  */
 export const UPGRADE_WORKLOAD_SHARE = 0.5
-/** Plan 0015 §S2 / ADR 0031 §5: buildings with no upgrade path at all. `workshops`
- *  is excluded (评审 F4): allowing it would let construction capacity compound
- *  itself (upgrade workshops → more points → faster upgrades). */
-export const NON_UPGRADABLE_BUILDINGS: BuildingId[] = ['workshops']
+/**
+ * Plan 0016 §S7 / ADR 0032 §6: the workshops ARE now upgradable. This
+ * **Supersedes plan 0015 §S2 / ADR 0031 §5**'s guard — the self-acceleration
+ * loop (upgrade workshops → more points → faster upgrades) is intentionally kept
+ * as the growth engine, bounded by the advanced-material / non-tradable
+ * electricity draw, the per-point cost curve, the five-seat slot cap and the
+ * rule that an upgrade's workload never produces construction points. Empty.
+ */
+export const NON_UPGRADABLE_BUILDINGS: BuildingId[] = []
 /** Base gold paid per construction-workload point. */
 export const CONSTRUCTION_COST_PER_POINT = 0.2
+/**
+ * Plan 0016 §S7 / 附录 B: seat-weighted per-tier multiplier on a workshop's
+ * construction-point output (index 0 = tier I = 1). Blended by seat share via
+ * `tierWeightedMultiplier(country, 'workshops', …)`, so a country on tier-I
+ * workshops (and the 1836 baseline, which never leaves tier I) is unchanged.
+ */
+export const CONSTRUCTION_CAPACITY_TIER_MULTIPLIER: readonly number[] = [1, 1.2, 1.45, 1.75, 2.1]
+/**
+ * Plan 0016 §S7 / 附录 B: seat-weighted per-tier multiplier on the gold cost per
+ * construction point — a higher-grade workshop builds cheaper (tier I = 1).
+ */
+export const CONSTRUCTION_COST_TIER_MULTIPLIER: readonly number[] = [1, 0.95, 0.9, 0.85, 0.8]
+/**
+ * Plan 0016 §S1/S7 / 附录 B: per-tier multiplier on a NEW-BUILD's workload
+ * (`projectWorkload`). An upgrade is `UPGRADE_WORKLOAD_SHARE × the same-tier
+ * new-build workload`, so it inherits this inflation (an upgrade to a higher tier
+ * is dearer). Tier I = 1.
+ */
+export const WORKLOAD_TIER_MULTIPLIER: readonly number[] = [1, 1.3, 1.7, 2.2, 2.8]
 /** Per-building gold tuning; v1 is 1 for every type. */
 export const BUILDING_COST_MULTIPLIER: Record<BuildingId, number> = {
   farms: 1,

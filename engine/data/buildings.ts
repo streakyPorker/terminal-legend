@@ -612,6 +612,32 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     // Construction is labour-intensive: 0.8 makes 20 workshops a real employer
     // (~16 units of labour demand) instead of a zero-labour special case.
     labor: 0.8,
+    // Plan 0016 §S7 / 附录 A.5: a higher-grade workshop switches raw `iron` for
+    // worked `steel` (II+), adds `machinery` (III) and `electricity` (IV/V); wood
+    // and grain ease slightly and labour rises. `output` stays `{}` — the
+    // construction points are produced by `constructionCapacity`, not this recipe.
+    tiers: [
+      {
+        output: {},
+        input: { wood: 1.0, grain: 0.58, iron: 0.15, steel: 0.15 },
+        labor: 0.88,
+      },
+      {
+        output: {},
+        input: { wood: 0.98, grain: 0.55, iron: 0.06, steel: 0.2, machinery: 0.06 },
+        labor: 0.968,
+      },
+      {
+        output: {},
+        input: { wood: 0.95, grain: 0.52, steel: 0.26, machinery: 0.1, electricity: 0.15 },
+        labor: 1.045,
+      },
+      {
+        output: {},
+        input: { wood: 0.92, grain: 0.5, steel: 0.3, machinery: 0.14, electricity: 0.22 },
+        labor: 1.129,
+      },
+    ],
   },
   // Plan 0015 S4: the three new works. ADR 0031 §6 fixes the good sets (output
   // and the input members); the coefficients are NOT in the frozen appendix, so

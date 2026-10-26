@@ -155,14 +155,17 @@ const grantUnlockTier = (
 describe('S2 upgrade workload and unit price (plan 0015 §S2)', () => {
   test('an upgrade needs 50% of the same-tier new-build workload, at the same unit price', () => {
     for (const count of [1, 4, 12]) {
-      const build = buildProject(count)
+      // Plan 0016 §S7: the "same-tier new-build" is the build AT the upgrade's
+      // target tier, so both carry WORKLOAD_TIER_MULTIPLIER[1] and the ratio is
+      // exactly the 50% rule again.
+      const buildII = { ...buildProject(count), toTier: 1 }
       const upgrade = upgradeProject('steelMills', 0, 1, count)
-      close(projectWorkload(upgrade), 0.5 * projectWorkload(build))
+      close(projectWorkload(upgrade), 0.5 * projectWorkload(buildII))
       // The rule value is 50%, inside the ADR's ≤60% cap.
-      expect(projectWorkload(upgrade)).toBeLessThanOrEqual(projectWorkload(build) * 0.6)
-      close(constructionGoldPerPoint(upgrade), constructionGoldPerPoint(build))
+      expect(projectWorkload(upgrade)).toBeLessThanOrEqual(projectWorkload(buildII) * 0.6)
+      close(constructionGoldPerPoint(upgrade), constructionGoldPerPoint(buildII))
     }
-    // 0.2 gold per point, unchanged by the upgrade.
+    // 0.2 gold per point, unchanged by the upgrade (no country → tier-I price).
     close(constructionGoldPerPoint(upgradeProject('steelMills', 0, 1, 3)), 0.2)
   })
 })
@@ -299,14 +302,24 @@ describe('S2 upgrade tier gate and seat reservation (plan 0015 §S2)', () => {
     }
   })
 
-  test('workshops cannot be upgraded', () => {
+  test('workshops can now be upgraded once the tier is unlocked (plan 0016 §S7)', () => {
     const world = newWorld(7006, 'QING')
     const qing = countryOf(world, 'QING')
     qing.econ.buildingTiers.workshops = [5]
     qing.econ.buildings.workshops = 5
-    const rejected = orderUpgrade(world, 'QING', 'workshops', 1, 2, 2)
-    expect(rejected.ok).toBe(false)
-    expect(rejected.text).toContain('不可升级')
+    // The tier ceiling still gates the order (default world unlocks no workshop >I).
+    const locked = orderUpgrade(world, 'QING', 'workshops', 1, 2, 2)
+    expect(locked.ok).toBe(false)
+    expect(locked.text).toContain('解锁')
+    const restore = grantUnlockTier(qing, 'workshops', 2)
+    try {
+      // The 0015 §S2 guard is gone, so the order now queues.
+      const ok = orderUpgrade(world, 'QING', 'workshops', 1, 2, 2)
+      expect(ok.ok).toBe(true)
+      expect(upgradeProjects(qing).length).toBe(1)
+    } finally {
+      restore()
+    }
   })
 })
 

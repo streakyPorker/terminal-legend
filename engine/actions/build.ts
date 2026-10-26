@@ -150,13 +150,13 @@ export function actionBuild(
     startedAt: { ...world.date },
     ...(tier > 1 ? { toTier: tier - 1 } : {}),
   }
-  draft.monthlyCost = constructionMonthlyCost(draft)
+  draft.monthlyCost = constructionMonthlyCost(draft, country)
   const placement = resolveInsertPosition(country, params)
   if ('error' in placement) return { ok: false, text: `${tag} ${placement.error}` }
   country.econ.constructionQueue.splice(placement.at, 0, draft)
   return {
     ok: true,
-    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列${placement.note}（工程量 ${projectWorkload(draft).toFixed(1)} 点；按队列顺序取用闲置建造力，一次最多投入剩余工程量；总造价 ${constructionTotalCost(draft).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft).toFixed(2)} 金）${powerWarning(country, tier)}`,
+    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列${placement.note}（工程量 ${projectWorkload(draft).toFixed(1)} 点；按队列顺序取用闲置建造力，一次最多投入剩余工程量；总造价 ${constructionTotalCost(draft, country).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft, country).toFixed(2)} 金）${powerWarning(country, tier)}`,
   }
 }
 
@@ -213,13 +213,13 @@ export function actionUpgrade(
     progress: 0,
     startedAt: { ...world.date },
   }
-  draft.monthlyCost = constructionMonthlyCost(draft)
+  draft.monthlyCost = constructionMonthlyCost(draft, country)
   const placement = resolveInsertPosition(country, params)
   if ('error' in placement) return { ok: false, text: `${tag} ${placement.error}` }
   country.econ.constructionQueue.splice(placement.at, 0, draft)
   return {
     ok: true,
-    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}从 ${fromTier} 级升级到 ${toTier} 级列入升级队列${placement.note}（工程量 ${projectWorkload(draft).toFixed(1)} 点；总造价 ${constructionTotalCost(draft).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft).toFixed(2)} 金）${powerWarning(country, toTier)}`,
+    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}从 ${fromTier} 级升级到 ${toTier} 级列入升级队列${placement.note}（工程量 ${projectWorkload(draft).toFixed(1)} 点；总造价 ${constructionTotalCost(draft, country).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft, country).toFixed(2)} 金）${powerWarning(country, toTier)}`,
   }
 }
 

@@ -15,7 +15,9 @@ import {
   deriveBureaucracy,
   effectiveCount,
   infrastructureMultiplier,
+  mixedRecipe,
   refreshInfrastructure,
+  tierWeightedMultiplier,
 } from './data'
 import {
   CONSTRUCTION_SUBSIDY_POINTS_PER_LEVEL,
@@ -36,6 +38,8 @@ import {
   CONSTRUCTION_COST_PER_POINT,
   CONSTRUCTION_RENT_PER_POINT,
   CONSTRUCTION_SCHEDULE_MONTHS,
+  CONSTRUCTION_CAPACITY_TIER_MULTIPLIER,
+  CONSTRUCTION_COST_TIER_MULTIPLIER,
   INFRA_MARKET_ACCESS,
   MAX_BUILDINGS_PER_SLOT,
   OFFICE_ADMIN_CAPACITY,
@@ -44,11 +48,15 @@ import {
   UNIVERSITY_ADMIN_CAPACITY,
   UPGRADE_WORKLOAD_SHARE,
   WORKLOAD_MULTIPLIER,
+  WORKLOAD_TIER_MULTIPLIER,
   WORKSHOP_CAPACITY_OUTPUT,
 } from './config/construction'
 import { RESTRUCTURE_DEBT_RATIO } from './config/fiscal'
 
-/** Goods one workshop consumes per month to run at full capacity. */
+/** Goods one workshop consumes per month to run at full capacity (the TIER-I
+ *  basket). `constructionCapacity` reads the tier-aware `mixedRecipe` instead, so
+ *  IV/V workshops add steel/machinery/electricity to the supply constraint; this
+ *  constant stays as the tier-I reference. */
 export const WORKSHOP_INPUTS: Partial<Record<GoodId, number>> =
   BUILDING_RECIPES.workshops.input
 
@@ -62,6 +70,9 @@ export {
   MAX_BUILDINGS_PER_SLOT,
   WORKLOAD_MULTIPLIER,
   CONSTRUCTION_COST_PER_POINT,
+  CONSTRUCTION_CAPACITY_TIER_MULTIPLIER,
+  CONSTRUCTION_COST_TIER_MULTIPLIER,
+  WORKLOAD_TIER_MULTIPLIER,
   BUILDING_COST_MULTIPLIER,
   BUILDING_COST_ADDEND,
 }
@@ -95,14 +106,25 @@ export function alreadyReserved(
   return reserved
 }
 
-/** Total points of work a project must complete. An upgrade retrofits existing
- *  seats, so it needs only `UPGRADE_WORKLOAD_SHARE` of the same-tier new-build
- *  workload; the per-point price is unchanged, so the saving is time and total
- *  points, never a discount (plan 0015 §S2 / ADR 0031 §5). */
-export const projectWorkload = (project: ConstructionProject): number =>
-  capacityCost(project) *
-  WORKLOAD_MULTIPLIER *
-  (projectKind(project) === 'upgrade' ? UPGRADE_WORKLOAD_SHARE : 1)
+/** Total points of work a project must complete. Plan 0016 §S7 / 附录 B: a
+ *  NEW-BUILD at tier N carries `WORKLOAD_TIER_MULTIPLIER[N-1]` of the base
+ *  workload; an upgrade retrofits existing seats so it needs only
+ *  `UPGRADE_WORKLOAD_SHARE` of the SAME-TIER new-build workload (thus inheriting
+ *  the inflation), and the per-point price is unchanged — the saving is time and
+ *  total points, never a discount (plan 0015 §S2 / ADR 0031 §5). */
+export const projectWorkload = (project: ConstructionProject): number => {
+  const tierIndex = project.toTier ?? 0
+  const tierMultiplier =
+    WORKLOAD_TIER_MULTIPLIER[tierIndex] ??
+    WORKLOAD_TIER_MULTIPLIER[WORKLOAD_TIER_MULTIPLIER.length - 1] ??
+    1
+  return (
+    capacityCost(project) *
+    WORKLOAD_MULTIPLIER *
+    tierMultiplier *
+    (projectKind(project) === 'upgrade' ? UPGRADE_WORKLOAD_SHARE : 1)
+  )
+}
 
 export const maxSlotCapacity = (building: BuildingId): number =>
   MAX_BUILDINGS_PER_SLOT * (CAPACITY_COST[building] ?? 1)
@@ -113,13 +135,23 @@ export const maxSlotCapacity = (building: BuildingId): number =>
 /**
  * Gold per workload point for a project: the fixed base times the building
  * multiplier, plus its addend spread over the workload (so the total stays
- * workload × per-point + addend).
+ * workload × per-point + addend). Plan 0016 §S7 / 附录 B multiplies the base by
+ * the country's seat-weighted workshop cost multiplier, so a higher-grade
+ * workshop builds cheaper; without a country the multiplier is 1 (tier-I price).
  */
-export function constructionGoldPerPoint(project: ConstructionProject): number {
+export function constructionGoldPerPoint(
+  project: ConstructionProject,
+  country?: Country,
+): number {
   const workload = projectWorkload(project)
+  const tierMultiplier =
+    country === undefined
+      ? 1
+      : tierWeightedMultiplier(country, 'workshops', CONSTRUCTION_COST_TIER_MULTIPLIER)
   return (
     CONSTRUCTION_COST_PER_POINT *
-      (BUILDING_COST_MULTIPLIER[project.building] ?? 1) +
+      (BUILDING_COST_MULTIPLIER[project.building] ?? 1) *
+      tierMultiplier +
     (BUILDING_COST_ADDEND[project.building] ?? 0) / Math.max(1, workload)
   )
 }
@@ -127,12 +159,14 @@ export function constructionGoldPerPoint(project: ConstructionProject): number {
 /** Total gold cost of the project: workload × per-point price. */
 export const constructionTotalCost = (
   project: ConstructionProject,
-): number => projectWorkload(project) * constructionGoldPerPoint(project)
+  country?: Country,
+): number => projectWorkload(project) * constructionGoldPerPoint(project, country)
 
 /** Monthly gold bill when the slot receives its full monthly points. */
 export const constructionMonthlyCost = (
   project: ConstructionProject,
-): number => capacityCost(project) * constructionGoldPerPoint(project)
+  country?: Country,
+): number => capacityCost(project) * constructionGoldPerPoint(project, country)
 
 const importedQuantity = (country: Country, good: GoodId): number =>
   country.trade.imports
@@ -141,8 +175,11 @@ const importedQuantity = (country: Country, good: GoodId): number =>
 
 /**
  * Construction points a country produces this month. Workshops are the source;
- * their output is capped by the availability of wood, grain and iron, so a
- * country that cannot supply the inputs builds slower (ADR 0010).
+ * their output is capped by the availability of their inputs, so a country that
+ * cannot supply them builds slower (ADR 0010). Plan 0016 §S7: the gross is scaled
+ * by the seat-weighted workshop capacity multiplier, and the input basket is the
+ * tier-aware `mixedRecipe` — so a IV/V workshop draws steel / machinery /
+ * electricity and loses output when they run short.
  */
 export function constructionCapacity(country: Country): number {
   ensureConstructionFields(country)
@@ -159,16 +196,22 @@ export function constructionCapacity(country: Country): number {
     ),
   )
   const gross =
-    effectiveCount(workshops) *
+    (effectiveCount(workshops) *
       WORKSHOP_CAPACITY_OUTPUT *
       techMultiplier(country) *
       infra *
       access +
-    Math.max(0, country.econ.spending.construction ?? 0) *
-      CONSTRUCTION_SUBSIDY_POINTS_PER_LEVEL
+      Math.max(0, country.econ.spending.construction ?? 0) *
+        CONSTRUCTION_SUBSIDY_POINTS_PER_LEVEL) *
+    tierWeightedMultiplier(
+      country,
+      'workshops',
+      CONSTRUCTION_CAPACITY_TIER_MULTIPLIER,
+    )
   const production = computeProduction(country)
+  const inputs = mixedRecipe(country, 'workshops').input
   let inputRatio = 1
-  for (const [good, perWorkshop] of Object.entries(WORKSHOP_INPUTS) as [
+  for (const [good, perWorkshop] of Object.entries(inputs) as [
     GoodId,
     number,
   ][]) {
@@ -438,7 +481,7 @@ export function completeUpgrade(
     lastCapacity: 0,
     progress: 0,
   }
-  remainder.monthlyCost = constructionMonthlyCost(remainder)
+  remainder.monthlyCost = constructionMonthlyCost(remainder, country)
   return remainder
 }
 
@@ -454,7 +497,7 @@ export function normalizeConstructionQueue(country: Country): void {
   const next: ConstructionProject[] = []
   let changed = false
   for (const project of queue) {
-    const expectedMonthly = constructionMonthlyCost(project)
+    const expectedMonthly = constructionMonthlyCost(project, country)
     if (
       project.monthsLeft !== 1 ||
       Math.abs(project.monthlyCost - expectedMonthly) > 1e-9
@@ -477,7 +520,7 @@ export function normalizeConstructionQueue(country: Country): void {
           lastSpend: 0,
           lastCapacity: 0,
         }
-        part.monthlyCost = constructionMonthlyCost(part)
+        part.monthlyCost = constructionMonthlyCost(part, country)
         next.push(part)
         remaining -= count
         index += 1
