@@ -37,6 +37,7 @@
 | PT-074 | 看不到他国的税率与基本经济数据 | 0006 / inspect | fixed（fffca38） |
 | PT-075 | AI 不会撤销/重排建造，也从不开贸易航线 | 0003 / AI | fixed（90345e1） |
 | PT-076 | 建造造价无法被修正：只有建造速度，没有建造花费 | 0006 / 手册 §4.6 | fixed（7cb54a9） |
+| PT-077 | 战争和约缺少「关税议价权」条款 | 0004 / 手册 §8 | open（需求已登记） |
 
 <details><summary>已结（59 条，详情见 archive）</summary>
 
@@ -244,4 +245,28 @@
 - 关联：ADR 0023、`engine/fiscal.ts`（`taxBaseRevenues` / `taxCompliance`）、
   `engine/data/goods.ts`（`CONSUMER_GOODS`）、`hooks/tools.ts`、`engine/inspect/fiscal.ts`、§4.7。
 - 优先级：**P2**（不阻塞当前存档；财政想动消费税时需要它）
+- 状态：**open（需求已登记，未实现）**
+
+### PT-077 战争和约缺少「关税议价权」条款
+
+- 日期：2026-10-26
+- 游戏内日期：1836.01
+- 来源：玩家提出（柳大飞篡位局）——「这个关税议价能力，可以在签订战争条约的时候做额外选项，最多到 0.9」
+- 现象 / 缺口：`v3_diplomacy move=peace` 目前只有**赔款**一个可谈的附加条款
+  （`indemnityTotal` / `indemnityMonths`），胜利方无法把「关税议价权」写进和约；
+  而 `tariffBargaining` 已经作为修正接缝存在（域 [0, 0.9]，PT-076 同批落地）。
+- 需求（玩家口径）：
+  1. 签订和约（本方获胜）时，除赔款外可**额外**索取**关税议价能力**，取值 **0–0.9**；
+  2. 只能由**胜方**索取；白和（双方均未过 `DIPLOMACY_PEACE_SCORE`）不可谈；
+  3. 落地为胜方的 `tariffBargaining` 修正（来源记为 `treaty`，id 稳定、可重复签订叠加，
+     由 `MODIFIER_STAT_RANGES` 的 [0, 0.9] 封顶）；
+  4. 编年史与停战回报要写明「和约条款：关税议价权 +0.4」；
+  5. 可选：AI 作为胜方时按国情权重索取；作为败方时可抵抗（抬高门槛或压低可得上限）。
+- 实现落点（供开发）：
+  - `engine/actions/diplomacy.ts` 的 `case 'peace'`（税额条款已在 171 行附近组装）；
+  - `ReparationTerms` / `endWar`（`engine/diplomacy.ts`）需要承载新条款；
+  - `hooks/tools.ts` 的 peace 参数表（`indemnityTotal` 旁的 schema 与 args 透传）；
+  - `engine/modifiers.ts` 的 `tariffBargaining` 已在册，直接 `addModifier`。
+- 关联：`docs/plans/0004-trade-diplomacy.md` §4/§5、手册 §8「战争目标」、PT-076、ADR 0004（修正叠算）。
+- 优先级：**P2**（需求已登记，不阻塞当前存档）
 - 状态：**open（需求已登记，未实现）**
