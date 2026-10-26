@@ -38,6 +38,8 @@
 | PT-075 | AI 不会撤销/重排建造，也从不开贸易航线 | 0003 / AI | fixed（90345e1） |
 | PT-076 | 建造造价无法被修正：只有建造速度，没有建造花费 | 0006 / 手册 §4.6 | fixed（7cb54a9） |
 | PT-077 | 战争和约缺少「关税议价权」条款 | 0004 / 手册 §8 | open（需求已登记） |
+| PT-078 | `v3_action build` 无法聚合下单（x*y 要连发 y 次） | 0013 / ADR 0027 | fixed（aaf6978） |
+| PT-079 | 建造队列「预计 N 回合」忽略 constructionSpeed | 0013 / 手册 §4.6 | fixed（aaf6978） |
 
 <details><summary>已结（59 条，详情见 archive）</summary>
 

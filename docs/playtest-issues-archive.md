@@ -77,6 +77,8 @@
 | PT-074 | 看不到他国的税率与基本经济数据 | 0006 / inspect | fixed（fffca38） |
 | PT-075 | AI 不会撤销/重排建造，也从不开贸易航线 | 0003 / AI | fixed（90345e1） |
 | PT-076 | 建造造价无法被修正：只有建造速度，没有建造花费 | 0006 / 手册 §4.6 | fixed（7cb54a9） |
+| PT-078 | `v3_action build` 无法聚合下单（x*y 要连发 y 次） | 0013 / ADR 0027 | fixed（aaf6978） |
+| PT-079 | 建造队列「预计 N 回合」忽略 constructionSpeed | 0013 / 手册 §4.6 | fixed（aaf6978） |
 
 ---
 
@@ -1599,3 +1601,38 @@
   `hooks/prompt.ts`、`view/panels/construction.tsx`、手册 §4.6、ADR 0004（修正叠算）。
 - 优先级：**P1**（本轮天命 buff 直接依赖）
 - 状态：**fixed（7cb54a9）**
+
+
+### PT-078 `v3_action build` 无法聚合下单（x*y 要连发 y 次）
+
+- 日期：2026-10-26
+- 游戏内日期：1836.02
+- 来源：玩家要求「v3_action build可以聚合一下，支持x*y」
+- 现象：按 `x*y`（每槽 x 座、共 y 槽）下单时只能连发 y 次工具调用；本局 10 座营造所
+  被迫发了 10 次 `v3_action build`。
+- 判断：工具层 UX 缺口。**不能把 y 槽打包成一单**——那样所有座数要等最后一槽才完工，
+  违背「逐槽完工即投产、建造力滚动上升」的既有收益结构。
+- 修复（aaf6978）：
+  1. `build` 新增 **`slots`（1..50，默认 1）**：一次调用生成 y 个各含 x 座的**独立队列条目**，
+     逐槽完工；`position` 仍按块插入；回报聚合工程量与总造价；
+  2. `MAX_BUILD_SLOTS = 50` 进 `engine/config/construction.ts`；
+  3. 手册 §3 工具表补 `slots` 口径；
+  4. 测试：`count=2, slots=3` 生成 3 条各 2 座、id 互异；省略 `slots` 仍是单条目。
+- 关联：plan 0013 / ADR 0027、`engine/actions/build.ts`、`hooks/tools.ts`。
+- 优先级：**P2**（工具顺手度）
+- 状态：**fixed（aaf6978）**
+
+### PT-079 建造队列的「预计 N 回合」忽略 constructionSpeed
+
+- 日期：2026-10-26
+- 游戏内日期：1836.02
+- 来源：试玩（柳大飞局）：建造速度 +100% 后，10 座营造所仍显示 1/2/3…9 回合
+- 现象：`constructionSchedule` 用原始建造力逐月推进，未乘 `constructionSpeed` 与债务惩罚；
+  而实际 `settleConstruction` 会乘。玩家看到的 ETA 约为真实工期的两倍。
+- 数据：建造力 55.4 点/月、队列 450 点；面板显示 9 回合，按 +100% 速度实际约 4–5 回合。
+- 判断：**报告口径缺口**，不改变结算。
+- 修复（aaf6978）：schedule 读取同一乘数（`constructionSpeed × (1 − 债务惩罚)`）；
+  新增测试断言 +100% 时 ETA 缩短。
+- 关联：`engine/construction.ts`（`constructionSchedule` / `settleConstruction`）、手册 §4.6。
+- 优先级：**P2**
+- 状态：**fixed（aaf6978）**
