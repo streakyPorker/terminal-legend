@@ -9,11 +9,25 @@ import {
   projectWorkload,
 } from '../construction'
 import { NON_UPGRADABLE_BUILDINGS } from '../config/construction'
+import { computeProduction } from '../economy'
 import { clamp, num } from '../internal'
 import type { ActionParams, ActionResult } from './types'
 
 /** `[FLAG] 名称` prefix shared by every action report line. */
 const tagOf = (country: Country): string => `[${country.flag}] ${country.name}`
+
+/**
+ * Plan 0016 §S5 soft hint. IV/V seats are the only electricity consumers, and
+ * electricity is `NON_TRADABLE` (ADR 0031 §6) — self-production is its only
+ * source, so a country with no running power plants cannot feed the seats it is
+ * ordering. This NEVER blocks the order (the plant can be built afterwards); it
+ * just appends a warning to the success line so the player sees the trap before
+ * the seats starve. A country with any domestic electricity output passes.
+ */
+const powerWarning = (country: Country, targetTier: number): string =>
+  targetTier >= 4 && computeProduction(country).electricity <= 0
+    ? '；⚠ 该国无电力供给：电力不可贸易，IV/V 级座位将无电可用，请先建发电厂'
+    : ''
 
 /** One `1=id（名×count）` entry per queued project, for not-found errors. */
 const availableList = (country: Country): string => {
@@ -142,7 +156,7 @@ export function actionBuild(
   country.econ.constructionQueue.splice(placement.at, 0, draft)
   return {
     ok: true,
-    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列${placement.note}（工程量 ${projectWorkload(draft).toFixed(1)} 点；按队列顺序取用闲置建造力，一次最多投入剩余工程量；总造价 ${constructionTotalCost(draft).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft).toFixed(2)} 金）`,
+    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}列入建造队列${placement.note}（工程量 ${projectWorkload(draft).toFixed(1)} 点；按队列顺序取用闲置建造力，一次最多投入剩余工程量；总造价 ${constructionTotalCost(draft).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft).toFixed(2)} 金）${powerWarning(country, tier)}`,
   }
 }
 
@@ -205,7 +219,7 @@ export function actionUpgrade(
   country.econ.constructionQueue.splice(placement.at, 0, draft)
   return {
     ok: true,
-    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}从 ${fromTier} 级升级到 ${toTier} 级列入升级队列${placement.note}（工程量 ${projectWorkload(draft).toFixed(1)} 点；总造价 ${constructionTotalCost(draft).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft).toFixed(2)} 金）`,
+    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}从 ${fromTier} 级升级到 ${toTier} 级列入升级队列${placement.note}（工程量 ${projectWorkload(draft).toFixed(1)} 点；总造价 ${constructionTotalCost(draft).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft).toFixed(2)} 金）${powerWarning(country, toTier)}`,
   }
 }
 
