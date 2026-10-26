@@ -1,6 +1,6 @@
 # 建筑五级化与电气化投入（five building tiers & electrified inputs）
 
-- Status: **planned**（决策见 `docs/adr/0032-building-tiers-v-and-electrified-inputs.md`；目标 World **v14**）
+- Status: **implemented**（决策见 `docs/adr/0032-building-tiers-v-and-electrified-inputs.md`；World **v14**；切片 S0 `be149f1` … S8 `d9f1111` + fix `3937d52`）
 - Depends on: ADR 0031（科技分级/制海权）、plan 0015（3 级分级与三新建筑）、ADR 0021（配方单一真源）、ADR 0022（利用率与利润）
 - Supersedes: plan 0015 §S4 的全局电力产出乘数（`electricityOutputMultiplier`，退役于 S1）
 - 评审：纯数据 + 一处结算口径，无结构字段变更。关键派生数值在附录内标 `> 派生值`。修订点在各切片内标 **〔评审〕**。

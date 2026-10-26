@@ -1,6 +1,6 @@
 # AI 生成的逐回合事件
 
-- Status: proposed（待用户批准实现）
+- Status: accepted（已实现：plan 0010 E1–E7，World v13）
 - Depends on: ADR 0003（可计算的部分交给引擎，不可计算的部分交给 LLM）、ADR 0024（配置块，事件效果编译路径）、`docs/plans/0002-agent-event-trees.md`（暂停的前身）
 - Scope: 把每月一次的固定事件模板换成**逐回合、由 AI 生成、可交互**的事件；实现切片见 `docs/plans/0010-live-events.md`。
 

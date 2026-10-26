@@ -1,6 +1,6 @@
 # 科技细化：建筑分级、新建筑与制海权（tech tiers & sea control）
 
-- Status: **planned**（决策见 `docs/adr/0031-tech-tiers-and-sea-control.md`；目标 World **v14**）
+- Status: **implemented**（决策见 `docs/adr/0031-tech-tiers-and-sea-control.md`；World **v14**；切片 S0 `88f14f4`/`3b991b9` … S6 `539d7be`）
 - Depends on: ADR 0021（配方单一真源）、ADR 0022（利用率与利润）、ADR 0026（建筑扩张）、ADR 0030（科技树）
 - Supersedes: ADR 0027 的「面板下单」部分；ADR 0030 的 16 节点表
 - 评审：本计划已按 `critic` 评审修订（F1–F6 / M1–M16），修订点在各切片内标 **〔评审〕**。
