@@ -25,9 +25,11 @@ describe('recipeAt: tier → recipe accessor', () => {
     expect(recipeAt('steelMills', -1)).toBe(BUILDING_RECIPES.steelMills)
   })
 
-  test('tier 1 / 2 return the matching stored tier, for a tiered building', () => {
+  test('tier 1 / 2 / 3 / 4 return the matching stored tier, for a tiered building', () => {
     expect(recipeAt('steelMills', 1)).toBe(BUILDING_RECIPES.steelMills.tiers?.[0])
     expect(recipeAt('steelMills', 2)).toBe(BUILDING_RECIPES.steelMills.tiers?.[1])
+    expect(recipeAt('steelMills', 3)).toBe(BUILDING_RECIPES.steelMills.tiers?.[2])
+    expect(recipeAt('steelMills', 4)).toBe(BUILDING_RECIPES.steelMills.tiers?.[3])
   })
 
   test('an untiered building falls back to tier I at any tier', () => {
@@ -36,7 +38,7 @@ describe('recipeAt: tier → recipe accessor', () => {
   })
 
   test('an out-of-range tier falls back to tier I', () => {
-    expect(recipeAt('steelMills', 3)).toBe(BUILDING_RECIPES.steelMills)
+    expect(recipeAt('steelMills', 5)).toBe(BUILDING_RECIPES.steelMills)
   })
 })
 

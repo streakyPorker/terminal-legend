@@ -27,11 +27,11 @@ export const SHIPS_PER_NAVAL_BASE = 1
 
 /**
  * Plan 0015 S4 / appendix B: the per-tier multiplier on the naval-base training
- * rate (index 0 = tier I, 1 = II ×1.25, 2 = III ×1.50). Seat-weighted by
- * `tierWeightedMultiplier`, so a base upgrade lifts commissioning without adding
- * a seat.
+ * rate (index 0 = tier I, 1 = II ×1.25, 2 = III ×1.50). Plan 0016 §S0 extends
+ * it to IV (×1.95) and V (×2.54). Seat-weighted by `tierWeightedMultiplier`, so a
+ * base upgrade lifts commissioning without adding a seat.
  */
-export const SHIPS_PER_NAVAL_BASE_TIER_MULTIPLIER = [1, 1.25, 1.5]
+export const SHIPS_PER_NAVAL_BASE_TIER_MULTIPLIER = [1, 1.25, 1.5, 1.95, 2.54]
 
 /** Leader ageing. */
 export const LEADER_AGE_PER_MONTH = 1 / 12

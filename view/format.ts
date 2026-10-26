@@ -107,7 +107,7 @@ export function bar(value: number, max: number, width: number, full = '█', emp
   return `${full.repeat(filled)}${empty.repeat(size - filled)}`
 }
 
-const ROMAN_TIERS = ['I', 'II', 'III']
+const ROMAN_TIERS = ['I', 'II', 'III', 'IV', 'V']
 
 /** 1-based building tier → its roman numeral, matching `v3_inspect construction`. */
 export const tierName = (tier: number): string => ROMAN_TIERS[tier - 1] ?? String(tier)

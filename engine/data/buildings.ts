@@ -226,6 +226,8 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     tiers: [
       { output: { coal: 1.248 }, input: {}, labor: 0.69 },
       { output: { coal: 1.622 }, input: {}, labor: 0.759 },
+      { output: { coal: 2.109 }, input: { electricity: 0.08 }, labor: 0.835 },
+      { output: { coal: 2.7 }, input: { electricity: 0.12 }, labor: 0.902 },
     ],
   },
   ironMines: {
@@ -237,6 +239,8 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     tiers: [
       { output: { iron: 1.248 }, input: {}, labor: 0.69 },
       { output: { iron: 1.622 }, input: {}, labor: 0.759 },
+      { output: { iron: 2.109 }, input: { electricity: 0.08 }, labor: 0.835 },
+      { output: { iron: 2.7 }, input: { electricity: 0.12 }, labor: 0.902 },
     ],
   },
   lumberMills: {
@@ -248,6 +252,8 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     tiers: [
       { output: { wood: 1.248 }, input: {}, labor: 0.46 },
       { output: { wood: 1.622 }, input: {}, labor: 0.506 },
+      { output: { wood: 2.109 }, input: { electricity: 0.08 }, labor: 0.557 },
+      { output: { wood: 2.7 }, input: { electricity: 0.12 }, labor: 0.601 },
     ],
   },
   // Plan 0011 F3: the bundled `factories` row is split into seven single/few-
@@ -282,6 +288,16 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
         input: { grain: 1.232, coal: 0.222, wood: 0.123, machinery: 0.222 },
         labor: 1.04,
       },
+      {
+        output: { fabric: 4.394, clothes: 0.439 },
+        input: { grain: 1.355, coal: 0.195, wood: 0.136, machinery: 0.244, electricity: 0.15 },
+        labor: 1.091,
+      },
+      {
+        output: { fabric: 5.624, clothes: 0.562 },
+        input: { grain: 1.464, coal: 0.148, wood: 0.146, machinery: 0.263, electricity: 0.2 },
+        labor: 1.124,
+      },
     ],
   },
   furnitureWorks: {
@@ -303,6 +319,30 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
         output: { furniture: 1.171 },
         input: { wood: 0.033, coal: 0.055, fabric: 0.388, steel: 0.1, machinery: 0.055 },
         labor: 0.809,
+      },
+      {
+        output: { furniture: 1.523 },
+        input: {
+          wood: 0.037,
+          coal: 0.049,
+          fabric: 0.427,
+          steel: 0.11,
+          machinery: 0.061,
+          electricity: 0.15,
+        },
+        labor: 0.849,
+      },
+      {
+        output: { furniture: 1.949 },
+        input: {
+          wood: 0.04,
+          coal: 0.037,
+          fabric: 0.461,
+          steel: 0.119,
+          machinery: 0.066,
+          electricity: 0.2,
+        },
+        labor: 0.874,
       },
     ],
   },
@@ -329,6 +369,16 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
         input: { grain: 0.748, coal: 0.111, wood: 0.061, machinery: 0.105 },
         labor: 0.693,
       },
+      {
+        output: { liquor: 1.878 },
+        input: { grain: 0.823, coal: 0.098, wood: 0.067, machinery: 0.116, electricity: 0.15 },
+        labor: 0.728,
+      },
+      {
+        output: { liquor: 2.404 },
+        input: { grain: 0.889, coal: 0.074, wood: 0.072, machinery: 0.125, electricity: 0.2 },
+        labor: 0.749,
+      },
     ],
   },
   machineryWorks: {
@@ -347,6 +397,16 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
         output: { machinery: 1.458 },
         input: { steel: 0.708, coal: 0.258, wood: 0.129, machinery: 0.232 },
         labor: 1.155,
+      },
+      {
+        output: { machinery: 1.895 },
+        input: { steel: 0.793, coal: 0.202, wood: 0.144, machinery: 0.26, electricity: 0.3 },
+        labor: 1.213,
+      },
+      {
+        output: { machinery: 2.426 },
+        input: { steel: 0.873, coal: 0.133, wood: 0.159, machinery: 0.286, electricity: 0.4 },
+        labor: 1.237,
       },
     ],
   },
@@ -367,6 +427,16 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
         input: { iron: 4.122, coal: 1.288, machinery: 0.129 },
         labor: 1.155,
       },
+      {
+        output: { steel: 9.477 },
+        input: { iron: 4.616, coal: 1.01, machinery: 0.144, electricity: 0.3 },
+        labor: 1.213,
+      },
+      {
+        output: { steel: 12.131 },
+        input: { iron: 5.078, coal: 0.666, machinery: 0.159, electricity: 0.4 },
+        labor: 1.237,
+      },
     ],
   },
   arsenals: {
@@ -386,6 +456,16 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
         input: { steel: 0.464, machinery: 0.232, coal: 0.155, iron: 0.232 },
         labor: 1.04,
       },
+      {
+        output: { arms: 2.369 },
+        input: { steel: 0.519, machinery: 0.26, coal: 0.121, iron: 0.26, electricity: 0.3 },
+        labor: 1.091,
+      },
+      {
+        output: { arms: 3.033 },
+        input: { steel: 0.571, machinery: 0.286, coal: 0.08, iron: 0.286, electricity: 0.4 },
+        labor: 1.113,
+      },
     ],
   },
   luxuryWorks: {
@@ -404,6 +484,16 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
         output: { luxury: 0.811 },
         input: { fabric: 1.848, coal: 0.32, wood: 0.172, machinery: 0.296 },
         labor: 0.924,
+      },
+      {
+        output: { luxury: 1.055 },
+        input: { fabric: 2.033, coal: 0.282, wood: 0.19, machinery: 0.325, electricity: 0.15 },
+        labor: 0.97,
+      },
+      {
+        output: { luxury: 1.35 },
+        input: { fabric: 2.195, coal: 0.213, wood: 0.205, machinery: 0.351, electricity: 0.2 },
+        labor: 0.999,
       },
     ],
   },
@@ -430,6 +520,16 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     tiers: [
       { output: {}, input: { steel: 0.23, wood: 0.184 }, labor: 0.54 },
       { output: {}, input: { steel: 0.276, wood: 0.221, locomotives: 0.4 }, labor: 0.54 },
+      {
+        output: {},
+        input: { steel: 0.331, wood: 0.265, locomotives: 0.48, electricity: 0.3 },
+        labor: 0.54,
+      },
+      {
+        output: {},
+        input: { steel: 0.414, wood: 0.331, locomotives: 0.6, electricity: 0.4 },
+        labor: 0.54,
+      },
     ],
   },
   forts: {
@@ -456,6 +556,16 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
         input: { steel: 0.214, wood: 0.143, machinery: 0.048 },
         labor: 0.924,
       },
+      {
+        output: { ships: 0.731, machinery: 0.033 },
+        input: { steel: 0.231, wood: 0.154, machinery: 0.051, electricity: 0.2 },
+        labor: 0.97,
+      },
+      {
+        output: { ships: 0.987, machinery: 0.033 },
+        input: { steel: 0.245, wood: 0.163, machinery: 0.054, electricity: 0.28 },
+        labor: 0.999,
+      },
     ],
   },
   navalBases: {
@@ -468,6 +578,8 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     tiers: [
       { output: {}, input: { ships: 1.1 }, labor: 0.6 },
       { output: {}, input: { ships: 1.265 }, labor: 0.6 },
+      { output: {}, input: { ships: 1.455, electricity: 0.1 }, labor: 0.6 },
+      { output: {}, input: { ships: 1.746, electricity: 0.15 }, labor: 0.6 },
     ],
   },
   universities: {
@@ -658,13 +770,14 @@ export const INFRA_SUPPLY: Partial<Record<BuildingId, number>> = {
 
 /**
  * Plan 0015 S4 / appendix B: the per-tier multiplier on `INFRA_SUPPLY`.
- * Index 0 is tier I (1), 1 is II (×1.30), 2 is III (×1.60). `mixed` tiers blend
+ * Index 0 is tier I (1), 1 is II (×1.30), 2 is III (×1.60); plan 0016 §S0
+ * extends the table to IV (×2.08) and V (×2.70). `mixed` tiers blend
  * the multiplier by seat share (`tierWeightedMultiplier`), so an upgrade adds
  * supply without adding a seat — the only way a tiered infrastructure can pay
  * for its extra input and labour.
  */
 export const INFRA_SUPPLY_TIER_MULTIPLIER: Partial<Record<BuildingId, number[]>> = {
-  infrastructure: [1, 1.3, 1.6],
+  infrastructure: [1, 1.3, 1.6, 2.08, 2.7],
 }
 
 /** Shortfall-multiplier floor: a linear debuff cannot bite harder than this. */

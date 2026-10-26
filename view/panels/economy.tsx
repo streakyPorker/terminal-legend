@@ -49,7 +49,7 @@ export function tierShares(econ: Economy, id: BuildingId): TierShare[] {
     .filter(share => share.count > 0)
 }
 
-const TIER_COLORS = ['cyan', 'yellow', 'green']
+const TIER_COLORS = ['cyan', 'yellow', 'green', 'magenta', 'blue']
 
 export function EconomyPanel(props: {
   ui: UiKit
