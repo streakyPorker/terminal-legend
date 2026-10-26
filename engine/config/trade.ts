@@ -10,6 +10,13 @@ export const TOP_PARTNERS = 6
 export const RELATION_CUTOFF = -50
 /** Persistent routes (ADR 0020). */
 export const ROUTE_UNIT_VOLUME = 2
+/**
+ * Hulls needed per route level (PT-067). 0.5 means one ship carries two levels
+ * of a route. The exporter's fleet is `military.navy + econ.merchantHulls`;
+ * when it falls short, `routePass` scales every one of that country's routes
+ * down proportionally instead of letting paper routes conjure tonnage.
+ */
+export const SHIPS_PER_ROUTE_LEVEL = 0.5
 export const ROUTE_MAX_LEVEL = 5
 export const ROUTE_GROW_UTILIZATION = 0.8
 export const ROUTE_RESIDUAL_FRICTION = 1.15

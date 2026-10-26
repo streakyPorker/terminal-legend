@@ -26,6 +26,7 @@ import {
   ROUTE_RESIDUAL_TOP_PARTNERS,
   ROUTE_SPOT_DISCOUNT,
   ROUTE_UNIT_VOLUME,
+  SHIPS_PER_ROUTE_LEVEL,
   TOP_PARTNERS,
   TRADE_DEBT_GDP_CAP,
   TRANSPORT_FACTOR_BASE,
@@ -317,6 +318,22 @@ function routePass(
     (a, b) =>
       compareIds(a.good, b.good) || compareIds(a.from, b.from) || compareIds(a.to, b.to),
   )
+  // PT-067: the exporter carries the cargo, so its hulls gate every route it
+  // serves. Short hulls scale all of that country's routes down by the same
+  // ratio — never a per-route arbitrary cut.
+  const requiredLevels: Record<string, number> = {}
+  for (const route of routes) {
+    requiredLevels[route.from] = (requiredLevels[route.from] ?? 0) + route.level
+  }
+  const fleetFactor = (id: string): number => {
+    const country = index[id]
+    if (country === undefined) return 1
+    const required = (requiredLevels[id] ?? 0) * SHIPS_PER_ROUTE_LEVEL
+    if (required <= 0) return 1
+    const hulls =
+      (country.military.navy ?? 0) + (country.econ.merchantHulls ?? 0)
+    return Math.min(1, hulls / required)
+  }
   for (const route of ordered) {
     if (!TRADABLE_GOODS.includes(route.good)) continue
     if (route.from === route.to) continue
@@ -330,7 +347,11 @@ function routePass(
     if (goodOffer === undefined || goodBid === undefined) continue
     const offerRemaining = goodOffer.get(route.from) ?? 0
     const bidRemaining = goodBid.get(route.to) ?? 0
-    const capacity = route.level * ROUTE_UNIT_VOLUME * routeCapacityFactor(from, to)
+    const capacity =
+      route.level *
+      ROUTE_UNIT_VOLUME *
+      routeCapacityFactor(from, to) *
+      fleetFactor(route.from)
     const quantity = Math.min(offerRemaining, bidRemaining, capacity)
     if (quantity <= 1e-9) continue
     goodOffer.set(route.from, offerRemaining - quantity)

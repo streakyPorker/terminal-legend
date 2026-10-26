@@ -160,6 +160,35 @@ describe('soft-gate clearing: route pass then residual (ADR 0020)', () => {
     expect(Math.abs((flow?.quantity ?? 0) - capacity)).toBeLessThan(1e-9)
   })
 
+  test('an exporter without enough hulls carries proportionally less (PT-067)', async () => {
+    const world = newWorld(9810, 'QING')
+    for (const country of Object.values(world.countries)) {
+      country.econ.prices.coal = 1
+      country.econ.tariff = 0
+      country.econ.merchantHulls = 0
+    }
+    const gbr = countryOf(world, 'GBR')
+    gbr.econ.prices.coal = 3
+    const markets = marketsFor(world, id => ({
+      production: id === 'GBR' ? { coal: 100 } : {},
+      demand: id === 'QING' ? { coal: 300 } : {},
+    }))
+    const route = makeRoute(world, 'coal', 'GBR', 'QING', 4)
+    const quantityWith = () => {
+      // Read the routed flow's matched tonnage, not the total GBR→QING coal
+      // (the residual spot pass would add un-gated volume on top).
+      const services = new Map<string, RouteService>()
+      clearTrade(Object.values(world.countries), markets, undefined, [route], services)
+      return services.get(route.id)?.matched ?? 0
+    }
+    const full = quantityWith()
+    // Four levels need two hulls at 0.5/level; one hull halves the tonnage.
+    gbr.military.navy = 1
+    const short = quantityWith()
+    expect(full).toBeGreaterThan(0)
+    expect(Math.abs(short - full * 0.5)).toBeLessThan(1e-9)
+  })
+
   test('an un-routed pair still trades through the residual spot pass', async () => {
     const world = newWorld(9804, 'QING')
     for (const country of Object.values(world.countries)) {

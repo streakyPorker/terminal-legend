@@ -550,28 +550,28 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
   navalYards: {
     // PT-066: a yard lays down hulls. `ships` is a tradeable good; the naval
     // base below turns delivered hulls into `military.navy`.
-    output: { ships: 0.3, machinery: 0.03 },
+    output: { ships: 0.5, machinery: 0.03 },
     input: { steel: 0.18, wood: 0.12, machinery: 0.04 },
     labor: 0.8,
     gates: { tech: true, industrial: true },
     tiers: [
       {
-        output: { ships: 0.375, machinery: 0.033 },
+        output: { ships: 0.625, machinery: 0.033 },
         input: { steel: 0.198, wood: 0.132, machinery: 0.044 },
         labor: 0.88,
       },
       {
-        output: { ships: 0.563, machinery: 0.033 },
+        output: { ships: 0.938, machinery: 0.033 },
         input: { steel: 0.214, wood: 0.143, machinery: 0.048 },
         labor: 0.924,
       },
       {
-        output: { ships: 0.731, machinery: 0.033 },
+        output: { ships: 1.219, machinery: 0.033 },
         input: { steel: 0.231, wood: 0.154, machinery: 0.051, electricity: 0.2 },
         labor: 0.97,
       },
       {
-        output: { ships: 0.987, machinery: 0.033 },
+        output: { ships: 1.645, machinery: 0.033 },
         input: { steel: 0.245, wood: 0.163, machinery: 0.054, electricity: 0.28 },
         labor: 0.999,
       },
@@ -581,14 +581,14 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     // Consumes one hull a month; the settlement grows the navy by the number
     // of hulls actually delivered.
     output: {},
-    input: { ships: 1 },
+    input: { ships: 0.5 },
     labor: 0.6,
     gates: { tech: true },
     tiers: [
-      { output: {}, input: { ships: 1.1 }, labor: 0.6 },
-      { output: {}, input: { ships: 1.265 }, labor: 0.6 },
-      { output: {}, input: { ships: 1.455, electricity: 0.1 }, labor: 0.6 },
-      { output: {}, input: { ships: 1.746, electricity: 0.15 }, labor: 0.6 },
+      { output: {}, input: { ships: 0.55 }, labor: 0.6 },
+      { output: {}, input: { ships: 0.633 }, labor: 0.6 },
+      { output: {}, input: { ships: 0.727, electricity: 0.1 }, labor: 0.6 },
+      { output: {}, input: { ships: 0.873, electricity: 0.15 }, labor: 0.6 },
     ],
   },
   universities: {

@@ -2,6 +2,7 @@ import type { Country, WorldState } from '../../types'
 import { GOODS } from '../data'
 import { atWar } from '../diplomacy'
 import { ROUTE_MAX_LEVEL, TRADABLE_GOODS, embargoed, routeId, routeLandedPrice } from '../trade'
+import { SHIPS_PER_ROUTE_LEVEL } from '../config/trade'
 import { inspectEconomy } from '../economy'
 import { asGood } from '../internal'
 import type { ActionParams, ActionResult } from './types'
@@ -46,6 +47,24 @@ export function actionRoute(
   const index = world.tradeRoutes.findIndex(route => route.id === id)
   const existing = index < 0 ? undefined : world.tradeRoutes[index]
   const label = `${GOODS[good].name} ${fromId}→${toId}`
+  // PT-067/PT-080: hulls gate how many route levels an exporter can serve.
+  // `routePass` scales the actual tonnage, but a manual order must say no
+  // outright when the fleet cannot cover it.
+  const levelsOf = (id: string): number =>
+    world.tradeRoutes
+      .filter(one => one.from === id)
+      .reduce((sum, one) => sum + one.level, 0)
+  const hullsOf = (one: Country): number =>
+    (one.military.navy ?? 0) + (one.econ.merchantHulls ?? 0)
+  const hullShortfall = (
+    exporter: Country,
+    levelsAfter: number,
+  ): string | undefined => {
+    const required = levelsAfter * SHIPS_PER_ROUTE_LEVEL
+    const hulls = hullsOf(exporter)
+    if (hulls + 1e-9 >= required) return undefined
+    return `${exporter.name}船只不足：该航线需要 ${required.toFixed(1)} 艘，现有 ${hulls.toFixed(1)} 艘（海军 ${(exporter.military.navy ?? 0).toFixed(1)} + 商船 ${(exporter.econ.merchantHulls ?? 0).toFixed(1)}）`
+  }
   if (op === 'open') {
     if (existing !== undefined) {
       return { ok: false, text: `${tag} 与${partner.name}的${label}航线已存在（等级 ${existing.level}）` }
@@ -57,6 +76,10 @@ export function actionRoute(
     const importer = world.countries[toId]
     if (exporter === undefined || importer === undefined) {
       return { ok: false, text: `${tag} 无法确定${label}航线端点` }
+    }
+    const shortfall = hullShortfall(exporter, levelsOf(fromId) + 1)
+    if (shortfall !== undefined) {
+      return { ok: false, text: `${tag} ${shortfall}` }
     }
     const landed = routeLandedPrice(exporter, importer, good)
     const price = importer.econ.prices[good]
@@ -89,6 +112,13 @@ export function actionRoute(
     return { ok: false, text: `${tag} 未找到与${partner.name}的${label}航线` }
   }
   if (op === 'raise') {
+    const exporter = world.countries[existing.from]
+    if (exporter !== undefined && existing.level < ROUTE_MAX_LEVEL) {
+      const shortfall = hullShortfall(exporter, levelsOf(existing.from) + 1)
+      if (shortfall !== undefined) {
+        return { ok: false, text: `${tag} ${shortfall}` }
+      }
+    }
     existing.level = Math.min(ROUTE_MAX_LEVEL, existing.level + 1)
     return { ok: true, text: `${tag} 将${label}航线提升到等级 ${existing.level}` }
   }

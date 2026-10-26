@@ -21,9 +21,11 @@ export const MORALE_MAX = 100
 
 /**
  * PT-066: hulls a naval base can convert into a warship each month, scaled by
- * the share of its `ships` demand that was actually delivered.
+ * the share of its `ships` demand that was actually delivered. PT-080 halves
+ * both this rate and the tier-I ship input to 0.5/seat, so one hull still
+ * equals one warship while commissioning (and the fleet's growth) is slower.
  */
-export const SHIPS_PER_NAVAL_BASE = 1
+export const SHIPS_PER_NAVAL_BASE = 0.5
 
 /**
  * Plan 0015 S4 / appendix B: the per-tier multiplier on the naval-base training

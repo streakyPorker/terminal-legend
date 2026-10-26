@@ -608,6 +608,13 @@ export type Economy = {
   resources: Resources
   /** Private savings pool available to private construction. */
   privateCapital: number
+  /**
+   * Merchant hulls kept at home (PT-067): hulls the country built but did not
+   * commission as navy. Together with `military.navy` they cap how many route
+   * levels the country can carry as an exporter. Optional so older saves need
+   * no migration; a missing field reads as 0.
+   */
+  merchantHulls?: number
   /** Tick of the last private project start, for the expansion brake (PT-029). */
   lastPrivateStartTick: number
   /** Current investment confidence, base ± envelope (percentage points). */

@@ -198,6 +198,16 @@ export function simulateCountry(
       tierWeightedMultiplier(country, 'navalBases', SHIPS_PER_NAVAL_BASE_TIER_MULTIPLIER)
     country.military.navy += navalBases * rate * deliveredRatio
   }
+  // PT-067: hulls a country builds but does not commission stay in the
+  // merchant marine. The exporter's navy + merchant hulls cap how many route
+  // levels it can carry (see `routePass` in trade.ts).
+  const hullSurplus = Math.max(
+    0,
+    (snap.production.ships ?? 0) - (snap.demand.ships ?? 0),
+  )
+  if (hullSurplus > 0) {
+    country.econ.merchantHulls = (country.econ.merchantHulls ?? 0) + hullSurplus
+  }
   country.econ.goods = snap.production
   country.econ.laborShare = snap.laborShare
   country.econ.wages = snap.wages

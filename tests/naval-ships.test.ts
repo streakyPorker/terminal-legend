@@ -12,7 +12,7 @@ describe('ships, shipyards and naval bases (PT-066)', () => {
     expect(GOODS.ships.basePrice).toBeGreaterThan(0)
     expect(BUILDING_RECIPES.navalYards.output.ships).toBeGreaterThan(0)
     expect(Object.keys(BUILDING_RECIPES.navalBases.output)).toEqual([])
-    expect(BUILDING_RECIPES.navalBases.input.ships).toBe(1)
+    expect(BUILDING_RECIPES.navalBases.input.ships).toBe(0.5)
   })
 
   test('naval bases grow the navy when hulls are delivered', () => {
