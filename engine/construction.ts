@@ -212,7 +212,11 @@ export function constructionCapacity(country: Country): number {
       country,
       'workshops',
       CONSTRUCTION_CAPACITY_TIER_MULTIPLIER,
-    )
+    ) *
+    // `constructionSpeed` is an output multiplier on points per month, not a
+    // per-point progress multiplier: +100% shows up in this number (and in the
+    // gold bill) instead of silently making each point cheaper.
+    applyModifiers(country, 'constructionSpeed', 1)
   const production = computeProduction(country)
   const inputs = mixedRecipe(country, 'workshops').input
   let inputRatio = 1
@@ -258,12 +262,10 @@ export function constructionSchedule(country: Country): ConstructionSchedule {
   // under construction are not assumed to finish, so the estimate never
   // promises points that do not exist yet.
   const capacity = constructionCapacity(country)
-  // PT-079: the ETA must use the same pace the settlement does — the
-  // `constructionSpeed` buff and the debt-pressure penalty both multiply
-  // monthly progress, so leaving them out doubled the promised time.
-  const pace =
-    applyModifiers(country, 'constructionSpeed', 1) *
-    (1 - debtPressure(country).constructionPenalty)
+  // PT-079: the ETA must use the same pace the settlement does. `capacity`
+  // already carries `constructionSpeed`, so debt pressure is the only extra
+  // multiplier on monthly progress.
+  const pace = 1 - debtPressure(country).constructionPenalty
   const progress = new Map(state.map(project => [project.id, project.progress]))
   const monthsLeft = new Map(state.map(project => [project.id, project.monthsLeft]))
   const active = new Set(state.map(project => project.id))
@@ -581,9 +583,9 @@ export function settleConstruction(
   // Upgrade projects that had to complete partially; written back after both
   // passes so the same-month loop never re-processes them (plan 0015 §S2).
   const remainders: ConstructionProject[] = []
-  // A fully funded slot finishes in one month; `constructionSpeed` policies
-  // and the debt-pressure penalty are the only modifiers on that pace.
-  const constructionSpeed = applyModifiers(country, 'constructionSpeed', 1)
+  // A fully funded slot finishes in one month; debt pressure is the only
+  // modifier on that pace. `constructionSpeed` is already folded into
+  // `constructionCapacity`, so applying it here too would double it.
 
   const runProject = (
     project: ConstructionProject,
@@ -635,9 +637,7 @@ export function settleConstruction(
     }
     const goldShare = goldNeed > 0 ? spend / goldNeed : 1
     if (capacityTake > 0 && spend > 0) {
-      const speed =
-        constructionSpeed *
-        (isPrivate ? 1 : 1 - debtPressure(country).constructionPenalty)
+      const speed = isPrivate ? 1 : 1 - debtPressure(country).constructionPenalty
       const remainingWork =
         projectWorkload(project) * Math.max(0, 1 - project.progress)
       if (capacityTake >= remainingWork - 1e-9 && goldShare >= 1 - 1e-9) {

@@ -291,6 +291,29 @@ describe('construction slot limits (ADR 0012/0013)', () => {
     expect(fast).toBeLessThan(base)
   })
 
+  test('constructionSpeed multiplies points produced, not the price per point', async () => {
+    const world = newWorld(9308, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 8
+    qing.econ.buildingTiers.workshops = [8, 0, 0, 0, 0]
+    const proj = project(
+      { id: 'speed-probe', building: 'steelMills', count: 1, owner: 'state' },
+      world.date,
+    )
+    const base = constructionCapacity(qing)
+    const basePrice = constructionGoldPerPoint(proj, qing)
+    addModifier(qing, {
+      id: 'test:construction-speed',
+      label: '建造速度',
+      stat: 'constructionSpeed',
+      stack: 'percent',
+      value: 100,
+    })
+    expect(Math.abs(constructionCapacity(qing) - base * 2)).toBeLessThan(1e-9)
+    // The point price is untouched — `constructionCost` is the only discount.
+    expect(Math.abs(constructionGoldPerPoint(proj, qing) - basePrice)).toBeLessThan(1e-9)
+  })
+
   test('a slot draws all idle capacity, not just its own monthly need', async () => {
     const world = newWorld(9305, 'QING')
     const qing = countryOf(world, 'QING')
