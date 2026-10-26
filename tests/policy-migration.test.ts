@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Country, PolicyEffect, PolicyProposal, WorldState } from '../types'
 import { applyPolicy } from '../engine/actions'
+import { validateEffects } from '../engine/actions/policy'
 import { newWorld } from '../engine/sim'
 import {
   MODIFIER_STATS,
@@ -329,5 +330,19 @@ describe('compilePolicyBlock / installBlock (C2 unit)', () => {
     expect(installed[0]?.id).toBe('policy:测试:0')
     expect(installed[0]?.upkeep).toBe(0.5)
     expect(installed[0]?.monthsLeft).toBeUndefined()
+  })
+})
+
+
+describe('policy effect unit guard (PT-084)', () => {
+  test('a >1 flat value on a 0–1 stat is rejected with a hint', () => {
+    const bad = validateEffects([{ stat: 'literacy', stack: 'flat', value: 2 }])
+    expect(bad.ok).toBe(false)
+    if (!bad.ok) expect(bad.text).toContain('0.02')
+  })
+
+  test('0.02 is accepted, and percent stacking is unaffected', () => {
+    expect(validateEffects([{ stat: 'literacy', stack: 'flat', value: 0.02 }]).ok).toBe(true)
+    expect(validateEffects([{ stat: 'literacy', stack: 'percent', value: 30 }]).ok).toBe(true)
   })
 })

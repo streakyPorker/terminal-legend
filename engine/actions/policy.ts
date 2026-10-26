@@ -35,6 +35,19 @@ const POLICY_FLAT_SCALE: Partial<Record<PolicyEffect['stat'], number>> = {
   factoryOutput: 2,
 }
 
+/**
+ * PT-084: stats stored as 0–1 fractions. A flat value above 1 is almost always
+ * a unit mistake (+2 means +200 percentage points), so the validator rejects it
+ * instead of silently maxing the stat out.
+ */
+const FRACTION_STATS = new Set<PolicyEffect['stat']>([
+  'literacy',
+  'marketAccess',
+  'laborShare',
+  'privateInvestment',
+  'consumption',
+])
+
 const flatScale = (stat: PolicyEffect['stat']): number => {
   if (stat.endsWith('Output') || stat.endsWith('Demand')) return 2
   // The default treats one flat point of a 0..100 stock/flow stat as a
@@ -82,6 +95,12 @@ export function validateEffects(raw: PolicyEffect[], maxCount = 12): EffectValid
     const stack = effect.stack ?? 'flat'
     if (stack !== 'flat' && stack !== 'percent' && stack !== 'multiply') {
       return { ok: false, text: '效果单位必须是 flat / percent / multiply。' }
+    }
+    if (stack === 'flat' && FRACTION_STATS.has(effect.stat) && Math.abs(value) > 1) {
+      return {
+        ok: false,
+        text: `「${MODIFIER_STAT_NAMES[effect.stat]}」是 0–1 的比例值：+2 个百分点请写 0.02（收到 ${value}）`,
+      }
     }
     const months =
       effect.months === undefined

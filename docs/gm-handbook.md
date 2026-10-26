@@ -53,7 +53,7 @@
 | `v3_advance` | 批准推进一月；`months>1` 托管 | `months` 1..24 | 玩家批准时间推进 |
 | `v3_control` | 运行控制：停止托管 / 存档 | `action`∈ `stop`/`save` | 想提前停下后台托管（`stop`）；秘书无权调用，越权会审计 |
 | `v3_action` | 内政行动（见下表） | `action` 及各行动参数 | 建造/升级（可插队）、取消、重排队列、税率、关税、支出、研究、征兵、法案、贸易路线 |
-| `v3_policy` | 提交政策提议：一组效果条目变成可叠算 buff/debuff | `name`、`effects[]`（`stat`/`stack`/`value`/`months`/`label`）、`authorityCost` | 常规施策，不针对特定局势 |
+| `v3_policy` | 提交政策提议：一组效果条目变成可叠算 buff/debuff | `name`、`effects[]`（`stat`/`stack`/`value`/`months`/`label`）、`authorityCost` | 常规施策，不针对特定局势。**`flat` 值按该 stat 的原生单位**：识字/市场接入/劳动份额/私人投资/消费倾向是 **0–1 分数**（+2 个百分点写 `0.02`，写 `2` 会被拒绝，PT-084）；`sol`/`legitimacy`/`radicals` 等是 0–100 |
 | `v3_diplomacy` | 外交行动（改善/交恶/结盟/对手/赠礼/宣战/停战/禁运/解除禁运/贸易张力/**封锁/解除封锁**） | `target`、`move` + 各 move 参数 | 双边外交与战争 |
 | `v3_situation` | 就当前局势（如鸦片危机）提交立场 | `action`(submit/abstain)、`stance`、`narrative` | 局势开启时 |
 | `v3_event` | 列出或处理待决事件 | `eventId`、`optionId`（省略 `eventId` 则列出） | 处理随机/局势事件 |

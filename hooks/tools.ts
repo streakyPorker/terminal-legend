@@ -312,7 +312,7 @@ export const TOOL_SPECS: {
   {
     name: 'v3_policy',
     description:
-      '终末传奇：提交一项政策提议（缺省作用于玩家国，可用 country 指定任意国家）。政策由若干效果条目组成，每条把某个数值入口加上 buff/debuff；引擎校验单位与数值后按叠算规则结算，并消耗权威（默认 5，最多 40）。效果条目字段：stat（修正对象）、stack（flat/percent/multiply，默认 flat）、value、months（可选，持续月数）、label（可选）。',
+      '终末传奇：提交一项政策提议（缺省作用于玩家国，可用 country 指定任意国家）。政策由若干效果条目组成，每条把某个数值入口加上 buff/debuff；引擎校验单位与数值后按叠算规则结算，并消耗权威（默认 5，最多 40）。效果条目字段：stat（修正对象）、stack（flat/percent/multiply，默认 flat）、value、months（可选，持续月数）、label（可选）。flat 值按 stat 的原生单位：识字/市场接入/劳动份额/私人投资/消费倾向是 0–1 分数（+2 个百分点写 0.02，写 2 会被拒绝）；sol/legitimacy/radicals 等是 0–100。',
     inputSchema: {
       type: 'object',
       properties: {
