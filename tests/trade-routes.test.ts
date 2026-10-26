@@ -19,6 +19,7 @@ import {
   type TradeBlocker,
 } from '../engine/trade'
 import type { Country, GoodId, TradeFlow, TradeRoute, WorldState } from '../types'
+import { EQ_MONTHS, LONG_MONTHS } from './helpers/horizon'
 
 const rngFor = (world: WorldState) => makeRngForWorld(world)
 
@@ -382,8 +383,8 @@ describe('route gold conservation and determinism (ADR 0020)', () => {
   test('60 months with routes stay deterministic', async () => {
     const left = newWorld(9100, 'QING')
     const right = newWorld(9100, 'QING')
-    advance(left, 60, [], rngFor(left))
-    advance(right, 60, [], rngFor(right))
+    advance(left, EQ_MONTHS, [], rngFor(left))
+    advance(right, EQ_MONTHS, [], rngFor(right))
     expect(left.tradeRoutes).toEqual(right.tradeRoutes)
     for (const id of Object.keys(left.countries)) {
       expect(left.countries[id]?.trade).toEqual(right.countries[id]?.trade)

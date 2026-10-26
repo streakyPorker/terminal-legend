@@ -10,6 +10,7 @@ import {
   computeEconomy,
   newWorld,
 } from '../engine/sim'
+import { EQ_MONTHS, LONG_MONTHS } from './helpers/horizon'
 
 // Split out of `economic-loop.test.ts` (plan 0012 S6): the AI batch / determinism
 // checks and the Round 1-3 regression guards (including the policy stack guard).
@@ -40,8 +41,8 @@ describe('E4/E5 AI batch and determinism', () => {
   test('same seed and no decisions give identical 60-month worlds', async () => {
     const left = newWorld(113, 'QING')
     const right = newWorld(113, 'QING')
-    advance(left, 60, [], makeRngForWorld(left))
-    advance(right, 60, [], makeRngForWorld(right))
+    advance(left, EQ_MONTHS, [], makeRngForWorld(left))
+    advance(right, EQ_MONTHS, [], makeRngForWorld(right))
     expect(left.countries.QING?.econ).toEqual(right.countries.QING?.econ)
     expect(left.countries.PRU?.econ).toEqual(right.countries.PRU?.econ)
   })
@@ -155,8 +156,8 @@ describe('Round 1 regressions', () => {
       monthsLeft: 60,
       source: 'test',
     })
-    advance(control, 60, [], makeRngForWorld(control))
-    advance(boosted, 60, [], makeRngForWorld(boosted))
+    advance(control, EQ_MONTHS, [], makeRngForWorld(control))
+    advance(boosted, EQ_MONTHS, [], makeRngForWorld(boosted))
     const a = control.countries.QING
     const b = boosted.countries.QING
     expect(a).toBeDefined()
@@ -295,7 +296,7 @@ describe('Round 2 regressions', () => {
     if (qing === undefined) return
     let zeroRun = 0
     let maxZeroRun = 0
-    for (let month = 0; month < 120; month += 1) {
+    for (let month = 0; month < LONG_MONTHS; month += 1) {
       advance(world, 1, [], makeRngForWorld(world))
       if (qing.econ.gdpComponents.i <= 0.01) {
         zeroRun += 1
@@ -393,7 +394,7 @@ describe('Round 3 regressions', () => {
     for (const country of Object.values(world.countries)) zeroRuns[country.id] = 0
     const maxRuns: Record<string, number> = {}
     for (const country of Object.values(world.countries)) maxRuns[country.id] = 0
-    for (let month = 0; month < 120; month += 1) {
+    for (let month = 0; month < LONG_MONTHS; month += 1) {
       advance(world, 1, [], makeRngForWorld(world))
       for (const country of Object.values(world.countries)) {
         if (country.econ.gdpComponents.i <= 0.01) {
@@ -465,6 +466,7 @@ describe('Round 3 regressions', () => {
     qing.econ.spending.construction = 0
     qing.econ.privateCapital = 0
     qing.politicalEconomy.savingsRate = 0
+    // Market access decays slowly: this one needs the full 60-month window.
     advance(world, 60, [], makeRngForWorld(world))
     expect(qing.econ.marketAccess).toBeLessThan(0.95)
     // Plan 0014: removing the single infrastructure building collapses the level.
@@ -567,8 +569,8 @@ describe('Round 3 policy stack guard', () => {
         effects: [{ stat, stack: 'percent', value: 100 }],
       })
     }
-    advance(control, 120, [], makeRngForWorld(control))
-    advance(boosted, 120, [], makeRngForWorld(boosted))
+    advance(control, LONG_MONTHS, [], makeRngForWorld(control))
+    advance(boosted, LONG_MONTHS, [], makeRngForWorld(boosted))
     const a = control.countries.QING
     const b = boosted.countries.QING
     expect(a).toBeDefined()

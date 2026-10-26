@@ -19,6 +19,7 @@ import {
   type TradeBlocker,
 } from '../engine/trade'
 import type { Country, GameDate, GoodId, TradeFlow, WorldState } from '../types'
+import { EQ_MONTHS, LONG_MONTHS } from './helpers/horizon'
 
 const rngFor = (world: WorldState) => makeRngForWorld(world)
 
@@ -407,8 +408,8 @@ describe('T2 diplomacy: trade tension channel (plan §2.7/§6)', () => {
   test('the monthly trade step is deterministic over 60 months', async () => {
     const left = newWorld(7113, 'QING')
     const right = newWorld(7113, 'QING')
-    advance(left, 60, [], rngFor(left))
-    advance(right, 60, [], rngFor(right))
+    advance(left, EQ_MONTHS, [], rngFor(left))
+    advance(right, EQ_MONTHS, [], rngFor(right))
     for (const id of Object.keys(left.countries)) {
       expect(left.countries[id]?.diplo.relations).toEqual(right.countries[id]?.diplo.relations)
       expect(left.countries[id]?.trade).toEqual(right.countries[id]?.trade)

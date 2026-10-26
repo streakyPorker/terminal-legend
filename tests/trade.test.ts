@@ -10,6 +10,7 @@ import {
   type MarketSnapshot,
 } from '../engine/trade'
 import type { GoodId, WorldState } from '../types'
+import { EQ_MONTHS, LONG_MONTHS } from './helpers/horizon'
 
 const zeroRecord = (): Record<GoodId, number> => {
   const out = {} as Record<GoodId, number>
@@ -224,8 +225,8 @@ describe('T1a baseline and determinism', () => {
   test('the same seed gives identical trade and NX after 60 months', async () => {
     const left = newWorld(9008, 'QING')
     const right = newWorld(9008, 'QING')
-    advance(left, 60, [], makeRngForWorld(left))
-    advance(right, 60, [], makeRngForWorld(right))
+    advance(left, EQ_MONTHS, [], makeRngForWorld(left))
+    advance(right, EQ_MONTHS, [], makeRngForWorld(right))
     for (const id of Object.keys(left.countries)) {
       expect(left.countries[id]?.trade).toEqual(right.countries[id]?.trade)
       expect(left.countries[id]?.econ.gdpComponents.nx).toBe(

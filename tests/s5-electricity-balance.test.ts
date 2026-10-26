@@ -10,6 +10,7 @@ import {
 import { TRADABLE_GOODS } from '../engine/trade'
 import { advance, applyDecision, inspectEconomy, newWorld } from '../engine/sim'
 import type { BuildingId, Country, WorldState } from '../types'
+import { EQ_MONTHS, LONG_MONTHS } from './helpers/horizon'
 
 // ============================================================================
 // Plan 0016 §S5 — economic regression, bootstrap and electricity satisfiability.
@@ -319,8 +320,8 @@ describe('S5 fixed-horizon regression: balance, bands and determinism (plan 0016
   test('two identical fixtures stay economically identical over 60 months', () => {
     const left = horizonWorld()
     const right = horizonWorld()
-    advance(left, 60, [], makeRngForWorld(left))
-    advance(right, 60, [], makeRngForWorld(right))
+    advance(left, EQ_MONTHS, [], makeRngForWorld(left))
+    advance(right, EQ_MONTHS, [], makeRngForWorld(right))
     expect(countryOf(left, 'QING').econ).toEqual(countryOf(right, 'QING').econ)
   })
 })

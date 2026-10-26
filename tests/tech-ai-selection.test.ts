@@ -9,6 +9,7 @@ import {
 import { selectAiResearchNode } from '../engine/tech'
 import { TECH_ERA_COSTS, techNodeCost } from '../engine/config/tech'
 import { advance, newWorld } from '../engine/sim'
+import { EQ_MONTHS, LONG_MONTHS } from './helpers/horizon'
 
 const countryOf = (world: WorldState, id: string): Country => {
   const country = world.countries[id]
@@ -117,7 +118,7 @@ describe('deterministic AI selection (plan 0005 §2.5, K3)', () => {
   test('the whole world keeps one research path per seed over 120 months', () => {
     const left = newWorld(9406, 'QING')
     const right = newWorld(9406, 'QING')
-    for (let month = 0; month < 120; month += 1) {
+    for (let month = 0; month < LONG_MONTHS; month += 1) {
       advance(left, 1, [], makeRngForWorld(left))
       advance(right, 1, [], makeRngForWorld(right))
     }
@@ -150,6 +151,7 @@ describe('tech pace and bounds (plan 0005 K4)', () => {
     const startUnlocked = qing.tech.unlocked.length
     let prevUnlocked = startUnlocked
     let prevEra = qing.tech.era
+    // Tech pacing is a ten-year property: keep the full window.
     for (let month = 0; month < 120; month += 1) {
       advance(world, 1, [], makeRngForWorld(world))
       for (const country of Object.values(world.countries)) {

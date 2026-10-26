@@ -20,6 +20,7 @@ import {
   newWorld,
 } from '../engine/sim'
 import type { Country, GoodId, WorldState } from '../types'
+import { EQ_MONTHS, LONG_MONTHS } from './helpers/horizon'
 
 // ============================================================================
 // Plan 0015 §S1 — settlement correctness for the tier blend.
@@ -414,8 +415,8 @@ describe('tier settlement determinism (plan 0015 S1)', () => {
   test('two worlds advanced 60 months stay economically identical', () => {
     const left = newWorld(205, 'QING')
     const right = newWorld(205, 'QING')
-    advance(left, 60, [], makeRngForWorld(left))
-    advance(right, 60, [], makeRngForWorld(right))
+    advance(left, EQ_MONTHS, [], makeRngForWorld(left))
+    advance(right, EQ_MONTHS, [], makeRngForWorld(right))
     expect(left.countries.QING?.econ).toEqual(right.countries.QING?.econ)
     expect(left.countries.PRU?.econ).toEqual(right.countries.PRU?.econ)
     expect(left.countries.GBR?.econ).toEqual(right.countries.GBR?.econ)

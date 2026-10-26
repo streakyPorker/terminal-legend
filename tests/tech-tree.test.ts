@@ -13,6 +13,7 @@ import {
 import type { Decision } from '../engine/internal'
 import { advance, applyDecision, newWorld } from '../engine/sim'
 import { CURRENT_WORLD_VERSION, parseWorld } from '../engine/save'
+import { EQ_MONTHS, LONG_MONTHS } from './helpers/horizon'
 
 const countryOf = (world: WorldState, id: string): Country => {
   const country = world.countries[id]
@@ -160,6 +161,7 @@ describe('tech tree (plan 0005 K1)', () => {
 
   test('a 120-month baseline stays finite and never exceeds the modelled range', () => {
     const world = newWorld(9104, 'QING')
+    // Tech pacing is a ten-year property by design: keep the full 120 months.
     for (let month = 0; month < 120; month += 1) {
       advance(world, 1, [], makeRngForWorld(world))
     }

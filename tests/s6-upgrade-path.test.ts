@@ -10,6 +10,7 @@ import { advance, applyDecision, newWorld, randomDecision } from '../engine/sim'
 import { upgradeCandidate } from '../engine/investment'
 import type { Rng } from '../engine/rng'
 import type { BuildingId, Country, TechState, WorldState } from '../types'
+import { EQ_MONTHS, LONG_MONTHS } from './helpers/horizon'
 
 // ============================================================================
 // Plan 0016 §S6 — the AI and private-investment upgrade ("electrify") path.
@@ -167,8 +168,8 @@ describe('S6 private investment upgrades non-player empires (plan 0016 §S6)', (
     }
     const left = make()
     const right = make()
-    advance(left, 60, [], makeRngForWorld(left))
-    advance(right, 60, [], makeRngForWorld(right))
+    advance(left, EQ_MONTHS, [], makeRngForWorld(left))
+    advance(right, EQ_MONTHS, [], makeRngForWorld(right))
     expect(countryOf(left, 'GBR').econ).toEqual(countryOf(right, 'GBR').econ)
   })
 })

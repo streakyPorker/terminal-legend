@@ -22,6 +22,7 @@ import {
 } from '../engine/sim'
 import type { RecipeIO } from '../engine/data'
 import type { BuildingId, Country, ConstructionProject, GoodId, TradeFlow, WorldState } from '../types'
+import { EQ_MONTHS, LONG_MONTHS } from './helpers/horizon'
 
 // ============================================================================
 // Plan 0016 §S8 — numeric calibration (附录 E). This is the slice where the
@@ -449,8 +450,8 @@ describe('S8 calibration — determinism guardrail (附录 E.3(c))', () => {
   test('two identical reference worlds settle to byte-identical economies over 60 months', () => {
     const left = referenceWorld(WORKSHOPS_ALL_I)
     const right = referenceWorld(WORKSHOPS_ALL_I)
-    advance(left, 60, [], makeRngForWorld(left))
-    advance(right, 60, [], makeRngForWorld(right))
+    advance(left, EQ_MONTHS, [], makeRngForWorld(left))
+    advance(right, EQ_MONTHS, [], makeRngForWorld(right))
     expect(countryOf(left, 'QING').econ).toEqual(countryOf(right, 'QING').econ)
   })
 })

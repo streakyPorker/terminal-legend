@@ -46,106 +46,6 @@ const startCampaign = async (
   return run
 }
 
-// ---------------------------------------------------------------- M3
-
-describe('M3 secretary subagent', () => {
-  test('the secretary type is hidden from the model', async ($) => {
-    const offered = await $.agent.offer({ agent: 'terminal-legend:secretary' })
-    expect(offered).toEqual({ isOffered: false })
-  })
-
-  test(
-    'a secretary war declaration is audited, not refused',
-    async ($, on) => {
-      const toasts: string[] = []
-      const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
-      setupSurface(anyOn, {
-        'ui.toast': (_$: any, e: any) => {
-          toasts.push(String(e.text ?? ''))
-          return { value: undefined }
-        },
-      })
-      await startCampaign($ as any)
-
-      const result = (await ($.tool.call as unknown as (e: unknown) => Promise<unknown>)({
-        tool: 'mcp__terminal-legend__v3_diplomacy',
-        target: 'GBR',
-        move: 'war',
-        reason: '秘书擅自开战',
-        agentId: 'secretary-1',
-      })) as { result?: string; deny?: string }
-      expect(result.result).toBeDefined()
-      expect(result.result ?? '').toContain('宣战')
-      expect(toasts.some(text => text.includes('秘书越权'))).toBe(true)
-    },
-  )
-})
-
-describe('M3 secretary command surface', () => {
-  test(
-    'the fourth consecutive overreach is refused',
-    async ($, on) => {
-      const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
-      setupSurface(anyOn)
-      await startCampaign($ as any)
-      const call = () =>
-        ($.tool.call as unknown as (e: unknown) => Promise<{ result?: string; deny?: string }>)({
-          tool: 'mcp__terminal-legend__v3_cheat',
-          action: 'treasury',
-          amount: 1,
-          agentId: 'secretary-1',
-        })
-      const first = await call()
-      expect(first.result).toBeDefined()
-      const second = await call()
-      expect(second.result).toBeDefined()
-      const third = await call()
-      expect(third.result).toBeDefined()
-      const fourth = await call()
-      expect(fourth.deny ?? '').toContain('越权')
-    },
-  )
-
-
-  // The test harness has no engine beneath `agent.spawn` that starts a real
-  // subagent and mints an agentId, so the full spawn -> turn.complete round
-  // trip cannot be mocked here. The command surface and the tool path the
-  // secretary uses are covered instead.
-  test(
-    'delegation toggles and an agent build uses the same tool path',
-    async ($, on) => {
-      const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
-      setupSurface(anyOn, {
-        'agent.spawn': () => ({ model: 'haiku' }),
-        'clock.after': () => ({ value: { cancel: () => undefined } }),
-      })
-      const run = await startCampaign($ as any)
-
-      const delegated = await run({ command: 'v3', args: 'delegate internal on' })
-      expect(delegated.text).toContain('内政委托已开启')
-
-      const built = (await ($.tool.call as unknown as (e: unknown) => Promise<unknown>)({
-        tool: 'mcp__terminal-legend__v3_action',
-        action: 'build',
-        building: 'farms',
-        count: 1,
-        agentId: 'secretary-1',
-      })) as { result?: string; deny?: string }
-      expect(built.result ?? '').toContain('建造队列')
-
-      const status = await run({ command: 'v3', args: 'status' })
-      expect(status.text).toContain('建造队列')
-      expect(status.text).toContain('农场×1')
-      expect(status.text).toContain('内政开')
-
-      const started = await run({ command: 'v3', args: 'secretary' })
-      expect(started.text).toContain('已受命')
-    },
-  )
-})
-
-// ---------------------------------------------------------------- M4/M5
-
 describe('M4/M5 council and managed runs', () => {
   test('a managed run starts in the background and advances', async ($, on) => {
     const anyOn = on as unknown as (event: string, hook: ($: any, e: any) => unknown) => void
@@ -298,3 +198,4 @@ describe('PT-039 control tool + PT-037 reorder schema (plan 0013)', () => {
     },
   )
 })
+

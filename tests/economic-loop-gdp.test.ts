@@ -3,6 +3,7 @@ import { makeRngForWorld } from '../engine/data'
 import { addModifier } from '../engine/modifiers'
 import { advance, clone, computeEconomy, newWorld } from '../engine/sim'
 import type { WorldState } from '../types'
+import { EQ_MONTHS, LONG_MONTHS } from './helpers/horizon'
 
 // Split out of `economic-loop.test.ts` (plan 0012 S6): expenditure-GDP,
 // Stone-Geary demand and factor shares, plus the demand-shock loop.
@@ -72,7 +73,7 @@ describe('E1 expenditure GDP, Stone-Geary and factor shares', () => {
     expect(qing).toBeDefined()
     if (qing === undefined) return
     const startGdp = qing.econ.gdp
-    advance(world, 60, [], makeRngForWorld(world))
+    advance(world, EQ_MONTHS, [], makeRngForWorld(world))
     for (const country of Object.values(world.countries)) {
       expect(Number.isFinite(country.econ.gdp)).toBe(true)
       expect(Number.isFinite(country.econ.privateCapital)).toBe(true)
