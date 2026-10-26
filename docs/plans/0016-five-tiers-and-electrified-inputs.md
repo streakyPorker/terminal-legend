@@ -573,16 +573,21 @@ II = output ×1.25、labor ×1.10；III = output ×1.25、labor ×1.08（累乘�
 - **营造所两组**（只差营造所，其余同状态）：
   (a) 全 I `buildingTiers.workshops = [20,0,0,0,0]`；(b) 全 V `[0,0,0,0,20]`（可另加混级）。
   两者都同步 `buildings.workshops = Σ`。
-- **固定高级建筑集**：手工设定一组 IV/V 座数供电力与毛利测量，例如
-  `buildingTiers.steelMills=[0,0,0,6,4]`、`powerPlants=[0,0,0,6,4]`、`machineryWorks=[0,0,0,4,2]`（`Σ` 同步）。
+- **营造所阶梯**：五个世界，除营造所外逐位同状态，各 20 座（`[20,0,0,0,0]`…`[0,0,0,0,20]`）。
+  营造所投入篮（I：木/粮/铁；IV/V：钢/机械/电）以进口「解放」，**隔离出附录 D 描述的毛产能/成本阶梯**
+  （投入约束由 S7 单独测）。阶梯被测建筑 = `steelMills`，固定 **100 座**（使 `⌈·⌉` 舍入相对 ±0.10 容差可忽略）。
+- **参考电气库存**（T4/T5）：seed QING + 手工在**既有座数之上**加 IV/V
+  `coalMines +8IV/4V`、`ironMines +6IV/3V`、`steelMills +10IV/6V`、`machineryWorks +8IV/6V`（电厂上游闭环，S5 同形），
+  `powerPlants = [0,0,0,2,1]`。三座命名建筑（`steelMills`/`powerPlants`/`machineryWorks`）齐备；**营造所混级取全 I `[20,0,0,0,0]`**（法比对耦合稳定；全 V 混级另测，见 T4）。
 - **测量**（每项都从引擎函数取，独立于被测常量）：
-  - 工作量：`projectWorkload(draftProject(id, 1, tier))`，tier = I..V；
-  - 产能：`constructionCapacity(qing)`（两组）→ 点/月；
-  - 工期 = `ceil(工作量 ÷ 点/月)`（两组除营造所外同 `tech`/`infra`/`access`）；
-  - 金价：`constructionGoldPerPoint(draftProject(id, 1, tier))`；总金 = 工作量 × 金/点；
+  - 工作量：`projectWorkload(draft(id, 100, tier))`，tier = I..V；
+  - 产能：`constructionCapacity(qing)`（五组）→ 点/月；
+  - 工期 = `ceil(工作量 ÷ 点/月)`（各组除营造所外同 `tech`/`infra`/`access`）；
+  - 金价：`constructionGoldPerPoint(draft(id, 100, tier), qing)`；总金 = 工作量 × 金/点；
   - 电力：`inspectEconomy(qing)` 的 `demand.electricity` / `production.electricity`（电力**不可贸易**，无进口项）；
-  - 毛利：`computeEconomy` 后 `snapshot.buildingProfits[id]`，对 `FAMILY_BANDS`。
-- **horizon**：快照用 1 个月 `computeEconomy`；工期/建设用固定 **24 月** `advance` 序列（确定性，同 seed 同结果）。
+  - 毛利：settle 后 `qing.econ.buildingProfits[id]`（与 S5 同口径），对 `FAMILY_BANDS`。
+- **horizon**：构造阶梯为静态（不 advance）；T4/T5 在参考库存上 `advance` **60/120 月**后取快照——
+  `FAMILY_BANDS` 与电力带是**结算态**口径，1836 开局（无 IV/V 座）测不出，故按固定 60/120 月取样（确定性，同 seed 同结果）。
 
 ### E.3 调参流程（症状 → 旋钮；每次只动一个，改完重跑 fixture）
 
@@ -603,6 +608,29 @@ II = output ×1.25、labor ×1.10；III = output ×1.25、labor ×1.08（累乘�
 - **(b)** **≤III 逐位不变**（`tier-recipe-data` 的 I–III oracle + `tier-settlement` 的全 I 位等价）；
 - **(c)** **60/120 月确定性** + **两条金币恒等式**全绿；
 - **(d)** **改一个数前先跑 fixture**，改完再跑；最终值**回填附录**（A/B/D），fixture 断言引擎 == 附录。
+
+### E.4 S8 校准结果（2026-10-26 执行，`tests/tier-calibration.test.ts`）
+
+> 结论：**S0/S7 的起始派生值已全部落在附录 E.1 目标带内，S8 未改动任何引擎常量**（A/B/D 逐位保持）。
+> 下表为 fixture 实测值 vs 目标；`净每金产能 < WORKLOAD` 闸门 (a) 在 II–V 每级成立（难度比 >1）。
+
+| # | 实测（I→V） | 目标 | 容差 | 判定 |
+| --- | --- | --- | --- | --- |
+| T1 难度比 | 1.000 / 1.029 / 1.055 / 1.069 / 1.067 | 1.00 / 1.03 / 1.06 / 1.07 / 1.07 | ±0.05 | ✅ |
+| T1b 错配（I 营造所建 V） | 2.800 | 2.80 | ±0.10 | ✅ |
+| T2 工期 @I 营造所 | 1.000 / 1.289 / 1.687 / 2.181 / 2.783 | 1.00 / 1.30 / 1.70 / 2.20 / 2.80 | ±0.10 | ✅ |
+| T2 工期 @配套营造所 | 1.000 / 1.084 / 1.169 / 1.253 / 1.325 | 1.00 / 1.08 / 1.17 / 1.26 / 1.33 | ±0.10 | ✅ |
+| T3 总金 @配套营造所 | 1.000 / 1.235 / 1.530 / 1.870 / 2.240 | 1.00 / 1.24 / 1.53 / 1.87 / 2.24 | ±0.10 | ✅ |
+| T3 总金 @I 营造所建 V | 2.800 | 2.80 | ±0.10 | ✅ |
+| T4 电力供需比（全 I 混级，m60/m120） | 0.673 / 0.697 | 0.60–0.95 | ±0.05 | ✅ |
+| T4 电力供需比（全 V 混级，m60） | 0.922（> 全 I，电气化营造所收紧余量） | 0.60–0.95 | ±0.05 | ✅ |
+| T5 逐类毛利（m60/m120） | 六族全落 `FAMILY_BANDS` | 0 越界 | — | ✅ |
+| T5b 增值 I→V 单调不减 | 15 类产出型分级建筑全单调 | 每级 ≥ 前级 | — | ✅ |
+
+> fixture 内嵌 **附录 B 的 5 张表**（`WORKLOAD` / `CONSTRUCTION_CAPACITY` / `CONSTRUCTION_COST` /
+> `INFRA_SUPPLY.infrastructure` / `SHIPS_PER_NAVAL_BASE`）并逐位断言引擎常量相等——**文档即单一真源**。
+> 另测：全 I–III 座时电力需求 = 0（≤III 逐位不变，由 `tier-recipe-data` / `tier-settlement` 守护），
+> 两个同构参考世界 60 月后经济逐字节相同（闸门 (c)）。
 
 ## 2. 迁移与兼容
 
