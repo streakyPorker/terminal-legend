@@ -91,6 +91,7 @@
 | PT-090 | 出租优先下私人项目租了建造力却不涨进度 | 0013 / 手册 §4.6 | fixed（96310cd） |
 | PT-091 | 航线等级封顶 5，有船也扩张不了出口 | 0004 / 手册 §4.6 | fixed（f8059a8） |
 | PT-093 | 企业所得税税基只认建筑经营利润，与全国利润池差四倍 | 0007 / ADR 0023 | fixed（a1f6587） |
+| PT-092 | build 报价 0.10 金/点，forecast 仍按 0.20 金/点估 | 0006 / 手册 §4.6 | fixed（ab2720d） |
 
 ---
 
@@ -1913,3 +1914,19 @@
 - 影响：企业税 2% 下从 1.7 → 约 5 金/月；所有工厂开工率由 88% 回升至 100%，产出与 GDP 上行。
 - 关联：`engine/economy.ts`、`engine/data/buildings.ts`、`engine/fiscal.ts`、手册 §4.4/§4.7、ADR 0023。
 - 状态：**fixed（a1f6587）**
+
+### PT-092 建造花费修正前后：build 报价 0.10 金/点，forecast 仍按 0.20 金/点
+
+- 日期：2026-10-26
+- 世界：1837.11
+- 存档：seed=9100 / 玩家=QING
+- 现象：同一个月内，`v3_action build` 报价「每点 0.10 金」（土木总办 −50% 生效中），
+  而 `v3_forecast` 按「本月建造点 × 0.2」计算建设支出，把花费高估一倍。
+- 原因：`engine/inspect/forecast.ts` 里硬编码了 `0.2`（旧的基点价），
+  未走 `constructionGoldPerPoint`，因此建筑系数、营造所等级与 `constructionCost` 修正全被忽略；
+  同一处租金也硬编码 `0.3`（实际常量早在 PT-088 已降到 0.1）。
+- 处置：逐国有项目按 `constructionGoldPerPoint(project, country)` 计费，租金改读
+  `CONSTRUCTION_RENT_PER_POINT`，预告行显示「建造点 × 均价」；补测试（折扣 −50% 时均价减半）。
+- 影响：预估净额与实际结算对齐；此前按高估值做财政决策会过度紧缩。
+- 关联：`engine/inspect/forecast.ts`、`engine/construction.ts`、手册 §4.6。
+- 状态：**fixed（ab2720d）**

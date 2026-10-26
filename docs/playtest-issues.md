@@ -52,7 +52,7 @@
 | PT-089 | 无法选择“优先出租建造力给私人资本” | 0013 / 手册 §4.6 | fixed（2f481e0，玩家专属开关） |
 | PT-090 | 出租优先下私人项目租了建造力却不涨进度 | 0013 / 手册 §4.6 | fixed（96310cd） |
 | PT-091 | 航线等级封顶 5，有船也扩张不了出口 | 0004 / 手册 §4.3 | fixed（f8059a8） |
-| PT-092 | build 报价 0.10 金/点，forecast 仍按 0.20 金/点估 | 0006 / 手册 §4.6 | open（已登记） |
+| PT-092 | build 报价 0.10 金/点，forecast 仍按 0.20 金/点估 | 0006 / 手册 §4.6 | fixed（ab2720d） |
 | PT-093 | 企业所得税税基只认建筑经营利润，与全国利润池差四倍 | 0007 / ADR 0023 | fixed（a1f6587） |
 
 <details><summary>已结（59 条，详情见 archive）</summary>
@@ -306,21 +306,4 @@
 - 关联：`engine/country.ts`（士气更新）、`engine/config/military.ts`（`MORALE_GAIN/LOSS`）、
   `engine/modifiers.ts`、手册 §8、PT-054（修正撤销）。
 - 优先级：**P2**（影响所有士气类 buff 的强度认知）
-- 状态：**open（已登记）**
-
-
-### PT-092 建造花费修正前后：build 报价 0.10 金/点，forecast 仍按 0.20 金/点
-
-- 日期：2026-10-26
-- 世界：1837.11
-- 存档：seed=9100 / 玩家=QING
-- 现象：同一个月内，`v3_action build` 报价「每点 0.10 金」（土木总办 −50% 生效中），
-  而 `v3_forecast` 的建设支出按「本月建造点 744.8 × 0.2」计算，等于把花费高估一倍：
-  预估支出 195.8 金、净额 −116、结算后国库 26.5。
-- 数据：`v3_inspect modifiers` 显示 `coup:liudafei:cost`（建造花费 −50%，长期）在册；
-  `v3_inspect construction` 上月建设实付国有 70.8 金，与 0.10 金/点口径一致。
-- 判断：**预估口径未应用 `constructionCost` 修正**（或与 build 报价用了不同的单价入口）。
-  若按 0.2 规划，会误判财政危机，可能做出不必要的砍补贴/加税决定。
-- 关联：`engine/forecast`（建设支出行）、`engine/construction.ts`（`constructionGoldPerPoint`）、手册 §4.6。
-- 优先级：**P2**（预估误导财政决策）
 - 状态：**open（已登记）**
