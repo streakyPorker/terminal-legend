@@ -14,12 +14,15 @@
 **本轮做**：
 
 - 13 类现有分级建筑的 `tiers` 从 2 项扩到 **4 项**（新增 IV/V；II/III 逐位不变）；
-- 17 类生产建筑全覆盖（13 现有 + `farms` + `chemicalWorks`/`powerPlants`/`locomotiveWorks`）；
+- 18 类生产建筑全覆盖（13 现有 + `farms` + `chemicalWorks`/`powerPlants`/`locomotiveWorks` + `workshops`）；
 - 电力成为 **IV/V 级投入**（族分档；含煤家族**置换 `coal`**；`powerPlants` 不耗电、`farms` 不耗电）；
 - **退役**全局电力产出乘数；**不可贸易投入按利用率计费**；
 - 新增 **era-4 电气化节点** `industry-6` / `industry-7` 给出 `unlockTier … 4 / 5`；
-- 四张逐级系数表（`INFRA_SUPPLY_TIER_MULTIPLIER`、`SHIPS_PER_NAVAL_BASE_TIER_MULTIPLIER`、`ROMAN_TIERS`、`TIER_COLORS`）扩到 5 项；
-- 面板显示 V 级；**AI 与私人投资具备升级（electrify）路径**。
+- 六张逐级系数表（`INFRA_SUPPLY_TIER_MULTIPLIER`、`SHIPS_PER_NAVAL_BASE_TIER_MULTIPLIER`、
+  `CONSTRUCTION_CAPACITY_TIER_MULTIPLIER`、`CONSTRUCTION_COST_TIER_MULTIPLIER`、`ROMAN_TIERS`、`TIER_COLORS`）扩到 5 项；
+- 面板显示 V 级；**AI 与私人投资具备升级（electrify）路径**；
+- **营造所 `workshops` 也分级**：更高等级用更先进的材料、产出**更多、更便宜的建造力**；
+  移除「不可升级」守卫，正反馈循环**有意保留**为增长引擎（见 S7）。
 
 **本轮不做**：
 
@@ -61,12 +64,19 @@
 **AI / 私人投资（改）**：`engine/ai.ts`（`build` action 枚举与校验，`:210-268`）新增 `upgrade`；
 `engine/investment.ts`（`:172-256` 只 `draftProject(building, 1)` 建 I 级）新增升级判定。
 
+**建造力 / 营造所（改）**：`engine/config/construction.ts` —— `NON_UPGRADABLE_BUILDINGS`（`:59`，清空 `'workshops'`）、
+新增 `CONSTRUCTION_CAPACITY_TIER_MULTIPLIER` 与 `CONSTRUCTION_COST_TIER_MULTIPLIER`（`CONSTRUCTION_COST_PER_POINT`:61 旁）；
+`engine/construction.ts` —— `WORKSHOP_INPUTS`（`:52-53`，`= BUILDING_RECIPES.workshops.input`，改为 tier-aware）、
+`constructionGoldPerPoint`（`:118-125`，乘成本乘数）、`constructionCapacity`（`:147-181`，`gross` 乘容量乘数）。
+
 **测试（改）**：`tests/tier-recipe-data.test.ts`（`TIERED`:29、`FAMILY_RULES` 6 元组:39-54、
 `expandTiersRaw`:79-117、`length===2`:126、`untiered` 守护:139、`CHECK`:165、`checkVA`:174）；
 `tests/tier-settlement.test.ts`（`blend()` 2 级助手在 **:65**，须扩到 4 级）；
 `tests/s3-tech-nodes.test.ts`（`APPENDIX_IDS`:50、节点数/每分支:57-64、era 序列:60）；
-`tests/s4-new-industries.test.ts`:147；
-`tests/tech-ai-selection.test.ts`（120 月 pacing `gained ∈ [2,5]` 在 **:169-171**，新增 2 个 era-4 节点后须复核）。
+`tests/s4-new-industries.test.ts`（`:7` import、`:92-115` 电力加成用例：S1 退役后删除/改写）；
+`tests/tech-ai-selection.test.ts`（120 月 pacing `gained ∈ [2,5]` 在 **:169-171**，新增 2 个 era-4 节点后须复核）；
+`tests/construction-capacity.test.ts`（容量乘数）、`tests/s2-upgrade.test.ts`（营造所可升级）、
+`tests/building-recipes.test.ts`（非可升级断言）。
 
 **面板（改）**：`view/panels/economy.tsx:52,104`（`TIER_COLORS`）、
 `view/panels/construction.tsx:14,24`（用 `tierName` 显示 `IV→V`）、
@@ -80,7 +90,7 @@
 
 ## 1. 切片
 
-七个切片，**按顺序提交**。S0 先让 13 类的数据与守护自洽，≤III 行为不变。
+八个切片，**按顺序提交**。S0 先让 13 类的数据与守护自洽，≤III 行为不变。
 
 ### S0 数据片：13 类 tiers 扩到 4 项 + 系数表 + 守护余量 〔评审〕
 
@@ -140,6 +150,7 @@
 
 1. 新增 `industry-6 电力工业`（era 4，前置 `industry-4`）：对 **17 类**给 `unlockTier … 4`；
    新增 `industry-7 第二次工业革命`（era 4，前置 `industry-6`）：对 **17 类**给 `unlockTier … 5`（附录 C）。
+   （S3 后为 17 类；**S7 加入 `workshops` 后扩到 18 类**——见 S7#7 与附录 C.1。）
 2. 更新 `tests/s3-tech-nodes.test.ts`（`APPENDIX_IDS`、节点总数 20 → 22、每分支数量、era 序列）。
 3. **复核 `tests/tech-ai-selection.test.ts:169-171`** 的 120 月 pacing 上界 `gained ∈ [2,5]`——
    新增 2 个 era-4 节点可能改变可得节点数；如越界，按新节点数更新上界（并注明理由）。
@@ -234,10 +245,48 @@
 - **S6 后 `tests/economy-recipe-calibration.test.ts` 重跑通过**：私人投资升级导致的 II/III 毛利率偏移
   要么仍落在既有 `FAMILY_BANDS` 内，要么按新基线**重定 `FAMILY_BANDS` 并注明理由**（不得静默放过）。
 
+### S7 营造所分级：更多、更便宜的建造力（自我加速循环**有意保留**）〔评审〕
+
+> **切片选择**：营造所独立成 **S7**（不并入 S3）。理由：S3 是纯配方数据（farms + 三新厂），而营造所
+> 触及**结算接缝**（`constructionCapacity` / `constructionGoldPerPoint` / `WORKSHOP_INPUTS`）与
+> 「可升级」守卫的移除，风险面与测试面独立，需单独验收。
+
+**做**
+
+1. 给 `workshops` 补 `tiers` II–V（附录 A.5：II 起原始 `iron` 换加工 `steel`、III 加 `machinery`、
+   IV/V 加 `electricity`；`output:{}`，产出仍由 `constructionCapacity` 特别处理）。
+2. **更多建造力**：新增 `CONSTRUCTION_CAPACITY_TIER_MULTIPLIER = [1,1.20,1.45,1.75,2.10]`；
+   `constructionCapacity`（`engine/construction.ts:147`）的 `gross` 乘
+   `tierWeightedMultiplier(country,'workshops',…)`（全 I 级时 ×1，逐位不变）。
+3. **每点更便宜**：新增 `CONSTRUCTION_COST_TIER_MULTIPLIER = [1,0.95,0.90,0.85,0.80]`；
+   `constructionGoldPerPoint`（`:118`）乘 `tierWeightedMultiplier(country,'workshops',…)`，即
+   `每点金价 = CONSTRUCTION_COST_PER_POINT × BUILDING_COST_MULTIPLIER[b] × 营造所成本乘数 + 附加项/工程量`。
+4. **材料进阶接线**：`WORKSHOP_INPUTS`（`:52-53`）由 `BUILDING_RECIPES.workshops.input`
+   改为 `mixedRecipe(country,'workshops').input`（tier-aware），使 IV/V 的 `steel`/`machinery`/`electricity`
+   真实进入 `constructionCapacity` 的供给约束（缺料则建造力下降）。
+5. **移除守卫**：`NON_UPGRADABLE_BUILDINGS`（`engine/config/construction.ts:59`）清空为 `[]`；
+   **Supersedes plan 0015 §S2 / ADR 0031 §5「营造所不可升级、升级不提高建造力」**；
+   「升级项目工程量不计入建造力产出」的守卫**保留**（升级是消耗方）。
+6. **守护/测试**：`tests/tier-recipe-data.test.ts` 的 `TIERED` 17 → **18**，`expandTiersRaw` 增加 `workshops`
+   分支（`output:{}` + A.5 输入/用工）；`tests/construction-capacity.test.ts` 增容量乘数与成本乘数用例；
+   `tests/s2-upgrade.test.ts` 改「营造所可升级」；`tests/building-recipes.test.ts` 更新非可升级断言。
+7. **解锁来源**：把 `workshops` 加入 `industry-6`/`industry-7` 的 `unlockTier` 覆盖（**17 → 18 类**），
+   并给 `industry-1` 加 `unlockTier workshops 2`、`industry-3` 加 `unlockTier workshops 3`（附录 C.2）。
+
+**验收**
+
+- 全 I 级时建造力与 v14 **逐位一致**（`CONSTRUCTION_CAPACITY_TIER_MULTIPLIER[0]=1`，成本乘数亦 ×1）；
+- 高等级营造所**按座加权**产出更多建造力；**每点金价按公式下降**（容量与成本各一条测试）；
+- IV/V 的 `steel`/`machinery`/`electricity` 计入 `WORKSHOP_INPUTS` 供给约束，缺料则建造力同比下降；
+- `upgrade` 对 `workshops` 不再被拒（正反用例）；**正反馈循环存在但被约束**——
+  fixture 断言升级后建造力增幅受材料/电力供给上限约束、且每点成本随级下降；
+- 60/120 月确定性与金币守恒不破。
+
 ## 附录 A：IV/V 分级配方（规则 + 派生值）
 
 > 评审：IV/V 数值为**派生值（非既有冻结值）**，可调。I 级 = 现有 `BUILDING_RECIPES`，**不动**；
-> II/III 级 = plan 0015 §附录 B 的**既有冻结值**，逐位不变。以下只定义 IV/V（及 `farms` 的 II/III）。
+> II/III 级 = plan 0015 §附录 B 的**既有冻结值**，逐位不变。以下定义 IV/V（族规则）、`farms` 的 II/III
+> 与 `workshops` 的 I–V 进阶（A.5）。
 > 乘数为**累乘**口径：IV 在 III 之上再乘、V 在 IV 之上再乘；展开结果入库到 `engine/data/buildings.ts` 的 `tiers`。
 
 ### A.1 族规则（IV/V）
@@ -270,6 +319,7 @@ II = output ×1.25、labor ×1.10；III = output ×1.25、labor ×1.08（累乘�
 | 化工：`chemicalWorks` | 0.35 | 0.45 |
 | 机车：`locomotiveWorks` | 0.25 | 0.32 |
 | 轻工业：`textileMills`/`furnitureWorks`/`distilleries`/`luxuryWorks` | 0.15 | 0.20 |
+| 营造所：`workshops` | 0.15 | 0.22 |
 | 船坞：`navalYards` | 0.20 | 0.28 |
 | 基础设施：`infrastructure` | 0.30 | 0.40 |
 | 海军营地：`navalBases` | 0.10 | 0.15 |
@@ -278,7 +328,7 @@ II = output ×1.25、labor ×1.10；III = output ×1.25、labor ×1.08（累乘�
 | 农场：`farms` | — （不接电） | — （不接电） |
 
 > **耗电强度排序（由高到低）：化工 0.35 > 重工业 0.30 = 基础设施 0.30 > 机车 0.25 > 船坞 0.20 >
-> 轻工业 0.15 > 海军营地 0.10 > 采掘 0.08**（`powerPlants`/`farms` 为 0）。
+> 轻工业 0.15 = 营造所 0.15 > 海军营地 0.10 > 采掘 0.08**（`powerPlants`/`farms` 为 0）。
 > 派生依据：`powerPlants` I 级产 `electricity` 2.8/座/月（V 级 8.49），故一座 V 级电厂约可支撑
 > 20+ 座 V 级重工业座位的用电。全部为**派生值**，S5 按电力供需回归校准。
 > **drift guard 须逐建筑编码本表**（重工业内部并不一致：`steelMills` 0.30 ≠ `chemicalWorks` 0.35 ≠ `locomotiveWorks` 0.25）。
@@ -358,19 +408,41 @@ II = output ×1.25、labor ×1.10；III = output ×1.25、labor ×1.08（累乘�
 | farms | II | `{grain:0.25, wood:0.05, opium:0.005}` | `{}` | 0.33 |
 | farms | III | `{grain:0.313, wood:0.063, opium:0.006}` | `{}` | 0.356 |
 
+### A.5 营造所（`workshops`）I–V 进阶（新补）
+
+> 营造所产出**建造力**（非 goods），故无增值 oracle（同基础设施/海军营地）。I 级 = 现有
+> `BUILDING_RECIPES.workshops`（`output:{}`，`input:{wood:1, grain:0.6, iron:0.3}`，labor 0.8），**不动**；
+> 以下 II–V 为**派生值**。规则：高级营造所把原始 `iron` 换成加工 `steel`（II 起），III 加 `machinery`，
+> IV/V 加 `electricity`；`wood`/`grain` 随级小幅下降；labor 累乘 ×1.10/×1.10/×1.08/×1.08（`round3`）。
+
+| 级 | output | input | labor |
+| --- | --- | --- | ---: |
+| I（基准，不动） | `{}` | `{wood:1, grain:0.6, iron:0.3}` | 0.8 |
+| II（`tiers[0]`） | `{}` | `{wood:1.0, grain:0.58, iron:0.15, steel:0.15}` | 0.88 |
+| III（`tiers[1]`） | `{}` | `{wood:0.98, grain:0.55, iron:0.06, steel:0.2, machinery:0.06}` | 0.968 |
+| IV（`tiers[2]`） | `{}` | `{wood:0.95, grain:0.52, steel:0.26, machinery:0.1, electricity:0.15}` | 1.045 |
+| V（`tiers[3]`） | `{}` | `{wood:0.92, grain:0.5, steel:0.3, machinery:0.14, electricity:0.22}` | 1.129 |
+
+> 建造力与每点金价另由 `CONSTRUCTION_CAPACITY_TIER_MULTIPLIER` / `CONSTRUCTION_COST_TIER_MULTIPLIER`
+> 按座加权给出（附录 B），**不写进 recipe.tiers**。
+> drift guard 须为 `workshops` 加一条 `output:{}` 分支并逐位断言 A.5 的输入/用工。
+
 ## 附录 B：逐级系数表（5 项）
 
-| 常量 | 位置 | v14 值 | 建议值（**派生**，每级 ≈×1.30） |
+| 常量 | 位置 | v14 值 | 建议值（**派生**） |
 | --- | --- | --- | --- |
 | `INFRA_SUPPLY_TIER_MULTIPLIER.infrastructure` | `engine/data/buildings.ts:666` | `[1, 1.3, 1.6]` | `[1, 1.3, 1.6, 2.08, 2.70]` |
 | `SHIPS_PER_NAVAL_BASE_TIER_MULTIPLIER` | `engine/config/military.ts:34` | `[1, 1.25, 1.5]` | `[1, 1.25, 1.5, 1.95, 2.54]` |
+| `CONSTRUCTION_CAPACITY_TIER_MULTIPLIER`（**新**） | `engine/config/construction.ts`（`:61` 旁） | — （新增） | `[1, 1.20, 1.45, 1.75, 2.10]` |
+| `CONSTRUCTION_COST_TIER_MULTIPLIER`（**新**） | `engine/config/construction.ts` | — （新增） | `[1, 0.95, 0.90, 0.85, 0.80]` |
 | `ROMAN_TIERS` | `view/format.ts:110`、`engine/inspect/construction.ts:7` | `['I','II','III']` | `['I','II','III','IV','V']` |
 | `TIER_COLORS` | `view/panels/economy.tsx:52` | `['cyan','yellow','green']` | `['cyan','yellow','green','magenta','blue']` |
 
-> 唯一口径：`INFRA`/`NAVAL` 的 IV/V 取自「在 III 之上每级 ≈×1.30」
-> （`2.08≈1.6×1.30`、`2.70≈2.08×1.30`；`1.95=1.5×1.30`、`2.54≈1.95×1.30`）。
-> 绝对系数只写在本表与 §A.1 的「按系数表」引用；正文不另写绝对值。
-> ROMAN/COLORS 的第 4/5 项为**派生值**，配色以 UI kit 实际支持的色名为准（`magenta` 已在其他面板使用）。
+> 唯一口径：`INFRA`/`NAVAL` 取自「在 III 之上每级 ≈×1.30」；`CONSTRUCTION_CAPACITY` 每级 ≈×1.20、
+> `CONSTRUCTION_COST` 每级 ≈×0.95（越升越便宜）。**每点金价公式**：
+> `每点 = CONSTRUCTION_COST_PER_POINT × BUILDING_COST_MULTIPLIER[b] × constructionCostTierMultiplier(country) + 附加项/工程量`，
+> 其中 `constructionCostTierMultiplier(country) = tierWeightedMultiplier(country, 'workshops', CONSTRUCTION_COST_TIER_MULTIPLIER)`
+> （全 I 级 = ×1，逐位不变）。绝对系数只写在本表与 §A.5 的「按系数表」引用。
 
 ## 附录 C：新增科技节点与增补效果（**派生值**）
 
@@ -378,20 +450,22 @@ II = output ×1.25、labor ×1.10；III = output ×1.25、labor ×1.08（累乘�
 
 | id | era | 名称 | 前置 | 成本 | 效果 |
 | --- | ---: | --- | --- | ---: | --- |
-| `industry-6` | 4 | 电力工业 | `industry-4` | `techNodeCost(4)` | `unlockTier` ×17 类 → **4** |
-| `industry-7` | 4 | 第二次工业革命 | `industry-6` | `techNodeCost(4)` | `unlockTier` ×17 类 → **5** |
+| `industry-6` | 4 | 电力工业 | `industry-4` | `techNodeCost(4)` | `unlockTier` ×18 类 → **4** |
+| `industry-7` | 4 | 第二次工业革命 | `industry-6` | `techNodeCost(4)` | `unlockTier` ×18 类 → **5** |
 
-`unlockTier` 覆盖的 17 类：`coalMines`、`ironMines`、`lumberMills`、`textileMills`、`furnitureWorks`、
+`unlockTier` 覆盖的 18 类：`coalMines`、`ironMines`、`lumberMills`、`textileMills`、`furnitureWorks`、
 `distilleries`、`machineryWorks`、`steelMills`、`arsenals`、`luxuryWorks`、`infrastructure`、
-`navalYards`、`navalBases`、`farms`、`chemicalWorks`、`powerPlants`、`locomotiveWorks`。
+`navalYards`、`navalBases`、`farms`、`workshops`、`chemicalWorks`、`powerPlants`、`locomotiveWorks`。
 
 > **已定**：解锁**集中在工业线这两个节点**（ADR 0032 §4）——不再保留「分散到各分支」的备选。
-> `unlockTier` 是全局派生（`maxUnlockedTier`），任何国家研究到这两个节点即对全部 17 类解锁 IV/V。
+> `unlockTier` 是全局派生（`maxUnlockedTier`），任何国家研究到这两个节点即对全部 18 类解锁 IV/V。
 
 ### C.2 既有节点增补效果（补全农场/新建筑的 II/III 来源）
 
 | 节点 | 追加效果 | 说明 |
 | --- | --- | --- |
+| `industry-1`（era 1） | `unlockTier workshops 2` | 营造所 II 级来源 |
+| `industry-3`（era 3） | `unlockTier workshops 3` | 营造所 III 级来源（IV/V 由 `industry-6`/`industry-7` 给出） |
 | `general-1865`（era 3） | `unlockTier farms 3` | 农场 III 级来源；农场 II 级由 `general-1836`（既有，S3 后生效） |
 | `industry-5`（era 3） | `unlockTier chemicalWorks 2` | 与既有 `unlockBuilding chemicalWorks` 同节点 |
 | `industry-4`（era 4） | `unlockTier chemicalWorks 3`、`unlockTier powerPlants 3`、`unlockTier locomotiveWorks 3` | 三座新厂的 II/III 来源 |
@@ -400,10 +474,10 @@ II = output ×1.25、labor ×1.10；III = output ×1.25、labor ×1.08（累乘�
 
 ## 2. 迁移与兼容
 
-- **不升世界版本**（ADR 0032 §7）：本轮全部是数据（`tiers` 数组、系数表、节点表）+ 一处结算口径
+- **不升世界版本**（ADR 0032 §8）：本轮全部是数据（`tiers` 数组、系数表、节点表）+ 一处结算口径
   （退役电力乘数、不可贸易按利用率计费），**无结构字段变更**。
 - v14 存档**结构上不被破坏**：其 `buildingTiers` 最长 3 项，载入后全部建筑停在 ≤ III 级——合法状态；
-  `recipeAt` 对越界 tier 回落 I 级；四张系数表的越界兜底分支保留。**不做兼容层**（ADR 0005 不适用——版本未变）。
+  `recipeAt` 对越界 tier 回落 I 级；六张系数表的越界兜底分支保留。**不做兼容层**（ADR 0005 不适用——版本未变）。
 - **同版本前向风险（必须记录）**：
   - **新档被旧 v14 代码读**：新档的 `buildingTiers` 可能长 5 项、含 IV/V 座位；
     旧代码的 `recipeAt(id, 4)` 取 `tiers[3]`（旧表只有 2–3 项）→ `undefined` → **回落 I 级**，
@@ -427,6 +501,7 @@ II = output ×1.25、labor ×1.10；III = output ×1.25、labor ×1.08（累乘�
 | **闲置座位满负荷吃电** | S1：`NON_TRADABLE` 投入按 `effectiveCount × storedUtilization` 计费；可贸易不变 |
 | **非玩家帝国不电气化** | S6 新增 AI / 私人投资升级路径（否则特性对非玩家形同虚设） |
 | **S6 移动 II/III 基线**：私人投资升级跑在基线 `advance` 内，会改变 `tests/economy-recipe-calibration.test.ts` 的 II/III 毛利 | S6 内重跑该测试；必要时**在 S6（非 S5）重定 `FAMILY_BANDS`** 并注明理由，作为 S6 验收的显式断言 |
+| **营造所正反馈循环（有意保留）**：升级营造所 → 建造力↑ → 更快升级，可能失控 | **有意保留为增长引擎**（Supersedes plan 0015 §S2 守卫）；三重闸门约束：IV/V 需 `steel`/`machinery`/不可贸易的 `electricity`（缺料即减产）、每点成本曲线 + 每槽 5 座、升级工程量不产建造力（守卫保留）。S7 用 fixture 断言增幅受限 |
 | **分级乘数通胀** | IV/V 以 `coal` 置换对冲；S5 跑经济回归，必要时下调（派生值，可调） |
 | **≤III 行为漂移** | drift guard 断言存储值 === 规则展开；「全 I–III 逐位等价 v14」冻结 oracle |
 | **测试守护过期** | `length===2` / 6 元组 / 20 节点写死 → S0/S2/S3 同步扩守护；每切片先改守护再改数据 |
@@ -441,9 +516,11 @@ II = output ×1.25、labor ×1.10；III = output ×1.25、labor ×1.08（累乘�
   - **时代**：保持 1836–1880 四层，补「IV/V 级由 era 4 电气化节点解锁」；
   - **科技分支**（**已过时**条目）：改为「通用 + 工业 / 行政 / 军事」四线，并明确工业线 5→7 节点（本计划后）；
   - 新增 **电力（electricity）** 词条：不可贸易的中间品，IV/V 级生产建筑的投入（置换煤），
-    由 `powerPlants` 供给；**不再有全局产出加成**。
-- `docs/architecture.md`：§1 规模行（建筑等级 I–V、电力投入链、退役电力乘数）、§世界版本行（注「不升版本的原因」）、
-  建筑配方小节（§4.3）补 IV/V 规则与电力。
+    由 `powerPlants` 供给；**不再有全局产出加成**；
+  - 更新 **营造所** 词条：I–V 分级，高等级用先进材料（钢/机械/电力）产出**更多、更便宜的建造力**；
+    **可升级**（正反馈循环有意保留）。同时删除/改写 GLOSSARY 里「营造所不可升级」的旧表述。
+- `docs/architecture.md`：§1 规模行（建筑等级 I–V、电力投入链、退役电力乘数、18 类分级）、§世界版本行（注「不升版本的原因」）、
+  建筑配方小节（§4.3）补 IV/V 规则与电力、建造力小节补营造所分级（容量/成本乘数）。
 - `docs/gm-handbook.md`：§4.3 配方表加 IV/V 与电力；§3 工具示例补 `v3_action build tier=4` / `upgrade toTier=5`。
 - `README.md`：世界模型摘要行（建筑「1–3 级」→「1–5 级」、补电力）。
 - `docs/plans/0015-tech-and-building-tiers.md`：加一条「§S4 全局电力乘数已由 plan 0016 退役；

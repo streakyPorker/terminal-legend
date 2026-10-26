@@ -1,6 +1,6 @@
 # 建筑五级化与电气化投入（five building tiers & electrified inputs）
 
-- Status: accepted（**World v14**：建筑等级 I–V；电力成为 IV/V 级投入并**置换燃料**；退役 plan 0015 的全局电力产出乘数；**不升世界版本**）
+- Status: accepted（**World v14**：建筑等级 I–V；电力成为 IV/V 级投入并**置换燃料**；退役 plan 0015 的全局电力产出乘数；**营造所 `workshops` 也分级**（更多、更便宜的建造力，自我加速循环**有意保留**）；**不升世界版本**）
 - Fixes:
   - **电力没有任何消费者**——`powerPlants` 产出的 `electricity` 只进市场、不进任何 `recipe.input`
     （`engine/data/buildings.ts:510-517` 产出、全表无一处消费），`NON_TRADABLE`
@@ -13,8 +13,9 @@
     硫化换入橡胶）的模式在引擎中缺席，III 级之后只剩「再乘一个系数」。
 - Depends on: `docs/adr/0031-tech-tiers-and-sea-control.md`、`docs/plans/0015-tech-and-building-tiers.md`、
   ADR 0021（建筑配方单一真源）、ADR 0022（利用率与利润）
-- Supersedes: **plan 0015 §S4 的「自产电力给全局产出乘数」**（`electricityOutputMultiplier`）——
-  本 ADR 退役该乘数，电力的价值改为**纯粹作为 IV/V 级的投入**。
+- Supersedes:
+  - **plan 0015 §S4 的「自产电力给全局产出乘数」**（`electricityOutputMultiplier`）——本 ADR 退役该乘数，电力的价值改为**纯粹作为 IV/V 级的投入**；
+  - **plan 0015 §S2 / ADR 0031 §5 的「营造所不可升级、升级不提高建造力」守卫**——营造所现在可升级、高等级产出更多更便宜的建造力，其自我加速循环**有意保留**（见 §6）。
 - Superseded by: —
 
 ## 背景
@@ -101,17 +102,18 @@ plan 0015 / ADR 0031 把建筑做成「同 id 内 1–3 级、混级共存、按
 计费（闲置座位按比例少耗电）；**可贸易商品的收费口径不变**（因此全 I 级 oracle 逐位保持）。
 这与「产出按利用率折算」的口径对齐，也让电力紧张时可以**关停**高耗电座位。
 
-### 3. 覆盖：17 类生产建筑
+### 3. 覆盖：18 类生产建筑
 
 | 组 | 建筑 | 处理 |
 | --- | --- | --- |
 | 现有 13 类（已有 II/III） | `coalMines`、`ironMines`、`lumberMills`、`textileMills`、`furnitureWorks`、`distilleries`、`machineryWorks`、`steelMills`、`arsenals`、`luxuryWorks`、`infrastructure`、`navalYards`、`navalBases` | 追加 IV/V 两项 |
 | 农场 | `farms` | 新增 II/III/IV/V 四项 |
 | S4 三座新厂 | `chemicalWorks`、`powerPlants`、`locomotiveWorks` | 新增 II/III/IV/V 四项 |
-| **合计** | **17 类** | — |
+| 营造所 | `workshops` | 新增 II/III/IV/V 四项（产出**建造力**，见 §6） |
+| **合计** | **18 类** | — |
 
-**不分级**（保持现状）：`schools`、`universities`、`offices`、`barracks`、`forts`、`workshops`
-（公共服务/行政，或按容量排除——`workshops` 不可升级见 plan 0015 F4）。
+**不分级**（保持现状，**5 类**）：`schools`、`universities`、`offices`、`barracks`、`forts`
+（公共服务/行政建筑，无 goods 生产扩张语义）。
 
 > 附带修复：`farms` 目前**没有 `tiers`**，而 `general-1836` 等节点早已给出 `unlockTier farms 2`
 > ——该效果长期是**死字段**（上限 2，但 `recipeAt('farms', 1)` 回落到 I 级）。为 `farms` 补 II–V
@@ -122,12 +124,12 @@ plan 0015 / ADR 0031 把建筑做成「同 id 内 1–3 级、混级共存、按
 第 5 时代（1900）本轮不做，`TECH_MAX_ERA` 仍为 4（`engine/config/tech.ts:27`）。
 IV/V 级由**新增的 era-4 电气化节点**给出 `unlockTier … 4 / 5`：
 
-- `industry-6 电力工业`（era 4，前置 `industry-4`）：对 **17 类**给 `unlockTier … 4`；
-- `industry-7 第二次工业革命`（era 4，前置 `industry-6`）：对 **17 类**给 `unlockTier … 5`。
+- `industry-6 电力工业`（era 4，前置 `industry-4`）：对 **18 类**给 `unlockTier … 4`；
+- `industry-7 第二次工业革命`（era 4，前置 `industry-6`）：对 **18 类**给 `unlockTier … 5`。
 
 **已定（不再待确认）**：解锁**集中在工业线的这两个节点**——电气化是工业技术，改动最小、语义最简，
 且 `unlockTier` 是全局派生（`maxUnlockedTier`，`engine/data/tech.ts:318`，无上限、默认 1），
-任何国家研究到这两个节点即可对全部 17 类解锁 IV/V，无论其主攻哪条分支。
+任何国家研究到这两个节点即可对全部 18 类解锁 IV/V，无论其主攻哪条分支。
 
 ### 5. IV/V 乘数延展附录 B 的族规则，并**置换燃料**（不是纯累乘）
 
@@ -144,25 +146,53 @@ IV/V 沿用 plan 0015 §附录 B 的**族（family）**划分与「累乘」口�
 **`powerPlants` 不置换**（它的煤是发电燃料，改成「少煤」在语义上不成立；V3 的电厂是
 `coal-fired → oil-fired` 换燃料，不是换电）。
 
-### 6. 逐级系数表从 3 项扩到 5 项
+### 6. 营造所 `workshops` 也分级：更多、更便宜的建造力（自我加速循环**有意保留**）
 
-四张「按级系数」表必须与 4 项 `tiers` 同步扩到 5 项（索引 0=I … 4=V）：
+营造所（`engine/data/buildings.ts:488-494`）现为 `output:{}`、`input:{wood:1, grain:0.6, iron:0.3}`、
+labor 0.8，产出的**建造点**由 `constructionCapacity` 特别处理（`engine/construction.ts:147-181`）。
+本 ADR 把营造所纳入分级（I–V），让**更高等级**：
 
-| 表 | 位置 | 现值 | 建议值（**派生**，每级 ≈×1.30） |
+1. **用更先进的材料**：II 起把原始 `iron` 逐步换成加工 `steel`，III 加 `machinery`，IV/V 加 `electricity`
+   （完整系数见 plan 0016 §附录 A.5）；`wood`/`grain` 随级小幅下降，labor 累乘上升。
+2. **产出更多建造力**：新增 `CONSTRUCTION_CAPACITY_TIER_MULTIPLIER`，按座加权
+   （`tierWeightedMultiplier`）乘进 `constructionCapacity` 的 `gross`（`engine/construction.ts:162`）。
+3. **每点更便宜**：新增 `CONSTRUCTION_COST_TIER_MULTIPLIER`（随等级递减），按座加权乘进
+   `constructionGoldPerPoint`（`engine/construction.ts:118-125`）：
+   `每点金价 = CONSTRUCTION_COST_PER_POINT × BUILDING_COST_MULTIPLIER[b] × constructionCostTierMultiplier(country) + 附加项/工程量`。
+
+**移除 `NON_UPGRADABLE_BUILDINGS` 里的 `workshops`**（`engine/config/construction.ts:59`），
+**Supersedes plan 0015 §S2 / ADR 0031 §5 的「营造所不可升级、升级不提高建造力」守卫**。
+被该守卫拦下的**正反馈循环（升级营造所 → 建造力↑ → 更快升级）现在是有意保留的**——
+它是本作的**增长引擎**。它由三重闸门约束，不会失控：
+
+- **先进材料供给**：IV/V 的营造所需要 `steel`/`machinery`/`electricity`（电力**不可贸易**，只能自产），缺料即减产；
+- **每点成本曲线 + 座数上限**：高等级单价虽降，但每槽仍限 5 座、工程量与建造力抽取规则不变；
+- **升级工程量不产建造力**：现有守卫「升级项目的工程量不计入建造力产出」**保留**（升级是消耗方，不是产出方）。
+
+> 营造所的 II/III 解锁来源已定：`industry-1`（era 1）给 II、`industry-3`（era 3）给 III；IV/V 由
+> `industry-6`/`industry-7` 给出（见 plan 附录 C.2）。
+
+### 7. 逐级系数表扩到 5 项（含两张新的营造所表）
+
+六张「按级系数」表必须与 4 项 `tiers` 同步扩到 5 项（索引 0=I … 4=V）：
+
+| 表 | 位置 | 现值 | 建议值（**派生**） |
 | --- | --- | --- | --- |
 | `INFRA_SUPPLY_TIER_MULTIPLIER` | `engine/data/buildings.ts:666` | `[1, 1.3, 1.6]` | `[1, 1.3, 1.6, 2.08, 2.70]` |
 | `SHIPS_PER_NAVAL_BASE_TIER_MULTIPLIER` | `engine/config/military.ts:34` | `[1, 1.25, 1.5]` | `[1, 1.25, 1.5, 1.95, 2.54]` |
+| `CONSTRUCTION_CAPACITY_TIER_MULTIPLIER`（**新**） | `engine/config/construction.ts`（`CONSTRUCTION_COST_PER_POINT`:61 旁） | — （新增） | `[1, 1.20, 1.45, 1.75, 2.10]` |
+| `CONSTRUCTION_COST_TIER_MULTIPLIER`（**新**） | `engine/config/construction.ts` | — （新增） | `[1, 0.95, 0.90, 0.85, 0.80]` |
 | `ROMAN_TIERS` | `view/format.ts:110` **与** `engine/inspect/construction.ts:7` | `['I','II','III']` | `['I','II','III','IV','V']` |
 | `TIER_COLORS` | `view/panels/economy.tsx:52` | `['cyan','yellow','green']` | `['cyan','yellow','green','magenta','blue']` |
 
 - **唯一口径**：`INFRA`/`NAVAL` 的 IV/V 取自「在 III 之上每级 ≈×1.30」（`2.08 ≈ 1.6×1.30`、
-  `2.70 ≈ 2.08×1.30`；`1.95 = 1.5×1.30`、`2.54 ≈ 1.95×1.30`）。**绝对系数只写在本表与 plan 附录 B**，
-  正文（plan §A.1）只写「按系数表」。
+  `2.70 ≈ 2.08×1.30`；`1.95 = 1.5×1.30`、`2.54 ≈ 1.95×1.30`）；`CONSTRUCTION_CAPACITY` 每级 ≈×1.20、
+  `CONSTRUCTION_COST` 每级 ≈×0.95（越升越便宜）。**绝对系数只写在本表与 plan 附录 B**，正文只写「按系数表」。
 - 越界回落（`?? base` / `?? 'cyan'` / `?? String(tier)`）**保留**，旧档/新档都不会抛错。
 
-### 7. 世界版本：**不升**（保持 v14）
+### 8. 世界版本：**不升**（保持 v14）
 
-本轮改动**全部是数据 + 一处结算口径**：`tiers` 数组、四张系数表、科技节点表、以及 §2(b) 的乘数退役与
+本轮改动**全部是数据 + 一处结算口径**：`tiers` 数组、六张系数表、科技节点表、以及 §2(b) 的乘数退役与
 §2(c) 的不可贸易计费口径。**没有新增/变更任何结构字段**（`BuildingRecipe`/`BuildTierDef`/`Country.econ`/
 `WorldState` 形状不变）。因此：
 
@@ -173,11 +203,12 @@ IV/V 沿用 plan 0015 §附录 B 的**族（family）**划分与「累乘」口�
 
 **明确结论：不升版本。** 但需注意**同版本前向风险**（新档被旧代码读），见 plan 0016 §2。
 
-### 8. 文档同步
+### 9. 文档同步
 
 见 plan `0016` §4。要点：`GLOSSARY.md` 的「建筑等级」（I/II/III → I–V）、「时代」、
-**过时的「科技分支」**条目（4 分支、20 → 22 节点）、新增「电力」词条；
-`docs/architecture.md`（§1 规模行、世界版本行、建筑配方 §4.3）；`docs/gm-handbook.md`
+**过时的「科技分支」**条目（4 分支、20 → 22 节点）、新增「电力」词条、**「营造所」词条**（分级 +
+更多更便宜的建造力 + 有意保留的正反馈）；
+`docs/architecture.md`（§1 规模行、世界版本行、建筑配方 §4.3、建造力一节）；`docs/gm-handbook.md`
 （§4.3 配方表、工具示例）；`README.md` 世界模型摘要。
 
 ## 后果
@@ -186,14 +217,18 @@ IV/V 沿用 plan 0015 §附录 B 的**族（family）**划分与「累乘」口�
   - 分级系统终于有 5 档，1880 之后的工业有继续投资/升级的意义；
   - 电力从死商品变成**后期瓶颈品**：需要自建 `powerPlants`、配平电网、并在电力紧张时取舍；
   - 「高级形态换入新中间品 + 置换旧投入」这条 V3 范式首次在引擎里成立；
+  - **营造所分级**让建造力成为可投资的**增长引擎**：高等级营造所产出更多、每点更便宜；
   - 退役全局电力乘数消除了「电力重复计功」和「电厂给自己加成」的自反馈。
 - **负面**：
-  - 分级配方从 13×2 变为 17×4，`tier-recipe-data.test.ts` 的 drift guard 与 oracle 显著变大；
+  - 分级配方从 13×2 变为 **18 类的 4 档**配方，`tier-recipe-data.test.ts` 的 drift guard 与 oracle 显著变大；
   - 退役全局乘数是一次**行为变化**（1880 后有电厂的国家产出下降），需要专门的回归测试；
   - 电力**不可贸易**，供需失衡无法靠进口修补，只能靠补 `powerPlants`。
 - **风险**：
   - **电力供给瓶颈 / 自举问题**：IV/V 铺开后若 `powerPlants` 跟不上，电力缺口会传导成普遍产出短缺；
     且「电气化的上游（钢/机械）自己也要电」形成自举难题。需要 S5 用可复现 fixture 证明闭合平衡与可行启动顺序。
+  - **营造所正反馈循环（有意保留）**：升级营造所 → 建造力↑ → 更快升级。这是**增长引擎**，但若材料/电力
+    供给过松会失控；由三重闸门约束（IV/V 需 `steel`/`machinery`/不可贸易的 `electricity`、每点成本曲线、
+    每槽 5 座 + 升级工程量不产建造力），并由 S7 用 fixture 断言增幅受限。
   - **非玩家帝国不电气化**：`engine/ai.ts` 与 `engine/investment.ts` 目前**只建 I 级**（从不下 `upgrade`），
     若不加 AI/私人投资升级路径，本特性对非玩家国家形同虚设（见 plan S6）。
   - **分级乘数通胀**：5 档累乘会放大高等级产出，虽以煤置换对冲，仍需 S5 跑经济回归，必要时下调（派生值，可调）。
@@ -201,7 +236,8 @@ IV/V 沿用 plan 0015 §附录 B 的**族（family）**划分与「累乘」口�
 ## 关联
 
 - `docs/plans/0016-five-tiers-and-electrified-inputs.md`（切片、附录与验收）
-- `docs/adr/0031-tech-tiers-and-sea-control.md`、`docs/plans/0015-tech-and-building-tiers.md`（分级与三新建筑的来源；本 ADR 退役其 §S4 电力乘数）
+- `docs/adr/0031-tech-tiers-and-sea-control.md`、`docs/plans/0015-tech-and-building-tiers.md`（分级与三新建筑的来源；本 ADR 退役其 §S4 电力乘数与 §S2 营造所守卫）
 - `docs/adr/0021-building-recipes.md`（配方单一真源）、`docs/adr/0022-utilization-and-profit-investment.md`（利用率与利润）
 - `engine/data/tiers.ts`、`engine/data/buildings.ts`、`engine/data/derivations.ts`、`engine/data/tech.ts`、
-  `engine/config/military.ts`、`engine/trade.ts`、`engine/ai.ts`、`engine/investment.ts`
+  `engine/config/construction.ts`、`engine/construction.ts`、`engine/config/military.ts`、`engine/trade.ts`、
+  `engine/ai.ts`、`engine/investment.ts`
