@@ -1,7 +1,13 @@
 import type { ConstructionProject, Country } from '../../types'
 import { CONSTRUCTION_SUBSIDY_POINTS_PER_LEVEL } from '../fiscal'
 import { BUILDINGS } from '../data'
-import { constructionLoad, constructionSchedule, projectKind, projectWorkload } from '../sim'
+import {
+  CONSTRUCTION_RENT_PER_POINT,
+  constructionLoad,
+  constructionSchedule,
+  projectKind,
+  projectWorkload,
+} from '../sim'
 import { n } from './shared'
 
 const ROMAN_TIERS = ['I', 'II', 'III', 'IV', 'V']
@@ -31,8 +37,8 @@ export function constructionSection(country: Country): string[] {
   const lines: string[] = [
     `建造力 ${n(load.capacity)} 点/月 = 营造所 ${n(country.econ.buildings.workshops, 0)} 座的产出 + 建设补贴 ${n(subsidy, 0)} 级 × ${n(CONSTRUCTION_SUBSIDY_POINTS_PER_LEVEL)} 点（补贴另花 ${n(subsidy * 0.45)} 金/月）`,
     `上月建设实付：国有 ${n(stateSpend)} 金 + 私人 ${n(privateSpend)} 金 = ${n(stateSpend + privateSpend)} 金（私人项目自有 ${n(load.privateOwn)} 点/月 + 租用 ${n(load.privateRented)} 点）`,
-    `私人资本 ${n(country.econ.privateCapital)} 金，按 0.3 金/点可负担约 ${n(Math.max(0, country.econ.privateCapital) / 0.3, 0)} 点租金；能否租到取决于国有闲置点`,
-    `队列剩余工程量 ${n(load.requested)}，已分配 ${n(load.allocated)}，闲置 ${n(load.remaining)}；私人自有 ${n(load.privateOwn)}，租用国有 ${n(load.privateRented)}，市场 ${n(load.privateMarket)}（租金 ${n((load.privateRented + load.privateMarket) * 0.3)} 金/月）`,
+    `私人资本 ${n(country.econ.privateCapital)} 金，按 ${n(CONSTRUCTION_RENT_PER_POINT)} 金/点可负担约 ${n(Math.max(0, country.econ.privateCapital) / CONSTRUCTION_RENT_PER_POINT, 0)} 点租金；能否租到取决于国有闲置点`,
+    `队列剩余工程量 ${n(load.requested)}，已分配 ${n(load.allocated)}，闲置 ${n(load.remaining)}；私人自有 ${n(load.privateOwn)}，租用国有 ${n(load.privateRented)}，市场 ${n(load.privateMarket)}（租金 ${n((load.privateRented + load.privateMarket) * CONSTRUCTION_RENT_PER_POINT)} 金/月）`,
   ]
   for (const project of state.slice(0, 12)) {
     lines.push(
