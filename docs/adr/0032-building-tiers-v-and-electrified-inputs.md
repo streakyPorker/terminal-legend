@@ -146,7 +146,7 @@ IV/V 沿用 plan 0015 §附录 B 的**族（family）**划分与「累乘」口�
 **`powerPlants` 不置换**（它的煤是发电燃料，改成「少煤」在语义上不成立；V3 的电厂是
 `coal-fired → oil-fired` 换燃料，不是换电）。
 
-### 6. 营造所 `workshops` 也分级：更多、更便宜的建造力（自我加速循环**有意保留**）
+### 6. 营造所 `workshops` 分级与高级建筑工程量膨胀：更多、更便宜的建造力（自我加速循环**有意保留**）
 
 营造所（`engine/data/buildings.ts:488-494`）现为 `output:{}`、`input:{wood:1, grain:0.6, iron:0.3}`、
 labor 0.8，产出的**建造点**由 `constructionCapacity` 特别处理（`engine/construction.ts:147-181`）。
@@ -159,6 +159,14 @@ labor 0.8，产出的**建造点**由 `constructionCapacity` 特别处理（`eng
 3. **每点更便宜**：新增 `CONSTRUCTION_COST_TIER_MULTIPLIER`（随等级递减），按座加权乘进
    `constructionGoldPerPoint`（`engine/construction.ts:118-125`）：
    `每点金价 = CONSTRUCTION_COST_PER_POINT × BUILDING_COST_MULTIPLIER[b] × constructionCostTierMultiplier(country) + 附加项/工程量`。
+4. **高级建筑的工程量随等级膨胀（需求侧）**：新增 `WORKLOAD_TIER_MULTIPLIER = [1, 1.3, 1.7, 2.2, 2.8]`——
+   **新建**在 tier N 的工程量 `= CAPACITY_COST[id] × WORKLOAD_MULTIPLIER × WORKLOAD_TIER_MULTIPLIER[N-1]`
+   （`engine/construction.ts:102`）；升级沿用 §S2 的「`≤60% × 同级新建工程量`」，因此**自动继承膨胀**。
+
+**耦合（本设计的关键，也是需求 1–3 的落点）**：工程量随等级膨胀后，**只有升级过的营造所**
+（容量 ×↑、每点金价 ×↓）才付得起——「**用旧（I 级）营造所建 IV/V 建筑会非常困难；升级营造所
+正是让这份膨胀的工程量变得可负担的手段**」。两条曲线按座加权后「每金产能」（容量/成本）随营造所
+等级上升，但**始终略低于**工程量膨胀，故难度被**保留**而非送掉（平衡表见 plan 0016 附录 D）。
 
 **移除 `NON_UPGRADABLE_BUILDINGS` 里的 `workshops`**（`engine/config/construction.ts:59`），
 **Supersedes plan 0015 §S2 / ADR 0031 §5 的「营造所不可升级、升级不提高建造力」守卫**。
@@ -172,9 +180,9 @@ labor 0.8，产出的**建造点**由 `constructionCapacity` 特别处理（`eng
 > 营造所的 II/III 解锁来源已定：`industry-1`（era 1）给 II、`industry-3`（era 3）给 III；IV/V 由
 > `industry-6`/`industry-7` 给出（见 plan 附录 C.2）。
 
-### 7. 逐级系数表扩到 5 项（含两张新的营造所表）
+### 7. 逐级系数表扩到 5 项（含三张新表：两张营造所 + 一张工程量）
 
-六张「按级系数」表必须与 4 项 `tiers` 同步扩到 5 项（索引 0=I … 4=V）：
+七张「按级系数」表必须与 4 项 `tiers` 同步扩到 5 项（索引 0=I … 4=V）：
 
 | 表 | 位置 | 现值 | 建议值（**派生**） |
 | --- | --- | --- | --- |
@@ -182,17 +190,21 @@ labor 0.8，产出的**建造点**由 `constructionCapacity` 特别处理（`eng
 | `SHIPS_PER_NAVAL_BASE_TIER_MULTIPLIER` | `engine/config/military.ts:34` | `[1, 1.25, 1.5]` | `[1, 1.25, 1.5, 1.95, 2.54]` |
 | `CONSTRUCTION_CAPACITY_TIER_MULTIPLIER`（**新**） | `engine/config/construction.ts`（`CONSTRUCTION_COST_PER_POINT`:61 旁） | — （新增） | `[1, 1.20, 1.45, 1.75, 2.10]` |
 | `CONSTRUCTION_COST_TIER_MULTIPLIER`（**新**） | `engine/config/construction.ts` | — （新增） | `[1, 0.95, 0.90, 0.85, 0.80]` |
+| `WORKLOAD_TIER_MULTIPLIER`（**新**） | `engine/config/construction.ts` | — （新增） | `[1, 1.3, 1.7, 2.2, 2.8]` |
 | `ROMAN_TIERS` | `view/format.ts:110` **与** `engine/inspect/construction.ts:7` | `['I','II','III']` | `['I','II','III','IV','V']` |
 | `TIER_COLORS` | `view/panels/economy.tsx:52` | `['cyan','yellow','green']` | `['cyan','yellow','green','magenta','blue']` |
 
 - **唯一口径**：`INFRA`/`NAVAL` 的 IV/V 取自「在 III 之上每级 ≈×1.30」（`2.08 ≈ 1.6×1.30`、
   `2.70 ≈ 2.08×1.30`；`1.95 = 1.5×1.30`、`2.54 ≈ 1.95×1.30`）；`CONSTRUCTION_CAPACITY` 每级 ≈×1.20、
-  `CONSTRUCTION_COST` 每级 ≈×0.95（越升越便宜）。**绝对系数只写在本表与 plan 附录 B**，正文只写「按系数表」。
+  `CONSTRUCTION_COST` 每级 ≈×0.95（越升越便宜）、`WORKLOAD` 每级 ≈×1.28–1.30（越升越贵）。
+  **绝对系数只写在本表与 plan 附录 B**，正文只写「按系数表」。
 - 越界回落（`?? base` / `?? 'cyan'` / `?? String(tier)`）**保留**，旧档/新档都不会抛错。
+- **数值校准（本轮的关键）**：本表的 IV/V 为**起始派生值**，由 plan 0016 §S8 用可复现 fixture 校准并
+  **回填**（附录 A/B/D = 单一真源）；闸门：每一级 `净每金产能 < WORKLOAD_TIER_MULTIPLIER`、≤III 逐位不变。
 
 ### 8. 世界版本：**不升**（保持 v14）
 
-本轮改动**全部是数据 + 一处结算口径**：`tiers` 数组、六张系数表、科技节点表、以及 §2(b) 的乘数退役与
+本轮改动**全部是数据 + 一处结算口径**：`tiers` 数组、七张系数表、科技节点表、以及 §2(b) 的乘数退役与
 §2(c) 的不可贸易计费口径。**没有新增/变更任何结构字段**（`BuildingRecipe`/`BuildTierDef`/`Country.econ`/
 `WorldState` 形状不变）。因此：
 
@@ -218,6 +230,8 @@ labor 0.8，产出的**建造点**由 `constructionCapacity` 特别处理（`eng
   - 电力从死商品变成**后期瓶颈品**：需要自建 `powerPlants`、配平电网、并在电力紧张时取舍；
   - 「高级形态换入新中间品 + 置换旧投入」这条 V3 范式首次在引擎里成立；
   - **营造所分级**让建造力成为可投资的**增长引擎**：高等级营造所产出更多、每点更便宜；
+  - **工程量随等级膨胀**（`WORKLOAD_TIER_MULTIPLIER`）与营造所阶梯咬合：用旧营造所建 IV/V 建筑很困难，
+    升级营造所才可负担——「**何时把建造业升级**」第一次成为一个真实决策；
   - 退役全局电力乘数消除了「电力重复计功」和「电厂给自己加成」的自反馈。
 - **负面**：
   - 分级配方从 13×2 变为 **18 类的 4 档**配方，`tier-recipe-data.test.ts` 的 drift guard 与 oracle 显著变大；
