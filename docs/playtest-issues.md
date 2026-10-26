@@ -41,6 +41,7 @@
 | PT-078 | `v3_action build` 无法聚合下单（x*y 要连发 y 次） | 0013 / ADR 0027 | fixed（aaf6978） |
 | PT-079 | 建造队列「预计 N 回合」忽略 constructionSpeed | 0013 / 手册 §4.6 | fixed（aaf6978） |
 | PT-080 | 船只数值全套重调（船坞产量/营地消耗/航线占用） | 0004 / 手册 §4.3·§5 | fixed（506e6e9） |
+| PT-081 | 建造队列超过 12 项时，inspect 不说明省略数量 | 0006 / inspect | fixed（68188b2） |
 
 <details><summary>已结（59 条，详情见 archive）</summary>
 
