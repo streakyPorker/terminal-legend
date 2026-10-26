@@ -53,7 +53,9 @@ describe('E2 private investment', () => {
     advance(withProject, 1, [], makeRngForWorld(withProject))
     // Both economies earned the same small savings; only the seeded project
     // drew the private pool down.
-    expect(a.econ.privateCapital).toBeLessThan(10)
+    // PT-094: mines are more profitable, so one month's savings are a bit
+    // larger; the point is that neither side ran a big private pool.
+    expect(a.econ.privateCapital).toBeLessThan(15)
     expect(b.econ.privateCapital).toBeLessThan(100)
     expect(b.econ.privateCapital).toBeLessThan(a.econ.privateCapital + 99)
   })

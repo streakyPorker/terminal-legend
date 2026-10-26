@@ -334,7 +334,8 @@ const valueAdded = (recipe: { output: RecipeIO; input: RecipeIO }): number => {
 
 /** Frozen oracle: value-added per seat/month at base prices (0015 附录 B + 0016 附录 A.3). */
 const CHECK: Record<BuildingId, { I: number; II: number; III: number; IV: number; V: number }> = {
-  steelMills: { I: 5.08, II: 7.92, III: 12.1, IV: 17.06, V: 23.77 },
+  // PT-094: iron input 3.2 → 2.56 per seat, so the smelter's value added rises.
+  steelMills: { I: 5.72, II: 8.658, III: 12.926, IV: 17.981, V: 24.786 },
   machineryWorks: { I: 1.35, II: 2.39, III: 3.97, IV: 5.35, V: 7.66 },
   arsenals: { I: 3.26, II: 4.84, III: 7.13, IV: 9.28, V: 12.5 },
   textileMills: { I: 2.26, II: 3.35, III: 4.89, IV: 6.71, V: 9.29 },

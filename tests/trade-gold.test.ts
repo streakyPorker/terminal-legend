@@ -448,7 +448,10 @@ describe('T1b payment capacity (plan §10)', () => {
       // 0005 K2 installs the tech-node effects and lifts QING's industry, which
       // trims the imported quantity ~1.5%; the floor tracks that equilibrium
       // (K4 restores the plan's 2 once the tech pacing is tuned).
-      expect(imports).toBeGreaterThanOrEqual(1.9)
+      // PT-094 rebalanced the mines (coal/iron 0.96 → 1.2, steel's ore draw
+      // 3.2 → 2.56 per seat), which shifts the general equilibrium and trims
+      // the imported quantity another ~10%; the floor tracks the new one.
+      expect(imports).toBeGreaterThanOrEqual(1.6)
       expect(share).toBeGreaterThanOrEqual(0.2)
     }
     expect(windowMonths).toBe(48)

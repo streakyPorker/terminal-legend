@@ -57,8 +57,8 @@ export const INVESTMENT_DEMAND: Record<BuildingId, Partial<Record<GoodId, number
  */
 export const BUILDING_OUTPUT: Record<BuildingId, Partial<Record<GoodId, number>>> = {
   farms: { grain: 1.05, wood: 0.16 },
-  coalMines: { coal: 0.96 },
-  ironMines: { iron: 0.96 },
+  coalMines: { coal: 1.2 },
+  ironMines: { iron: 1.2 },
   lumberMills: { wood: 0.96 },
   // F3: legacy shortage weights split off the old factories row (kept in the
   // same proportions so the private-investment ranking signal is unchanged).
@@ -187,29 +187,29 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     ],
   },
   coalMines: {
-    output: { coal: 0.96 },
+    output: { coal: 1.2 },
     input: {},
     labor: 0.6,
     gates: { tech: true },
     outputModifier: 'mineOutput',
     tiers: [
-      { output: { coal: 1.248 }, input: {}, labor: 0.69 },
-      { output: { coal: 1.622 }, input: {}, labor: 0.759 },
-      { output: { coal: 2.109 }, input: { electricity: 0.08 }, labor: 0.835 },
-      { output: { coal: 2.7 }, input: { electricity: 0.12 }, labor: 0.902 },
+      { output: { coal: 1.56 }, input: {}, labor: 0.69 },
+      { output: { coal: 2.028 }, input: {}, labor: 0.759 },
+      { output: { coal: 2.636 }, input: { electricity: 0.08 }, labor: 0.835 },
+      { output: { coal: 3.375 }, input: { electricity: 0.12 }, labor: 0.902 },
     ],
   },
   ironMines: {
-    output: { iron: 0.96 },
+    output: { iron: 1.2 },
     input: {},
     labor: 0.6,
     gates: { tech: true },
     outputModifier: 'mineOutput',
     tiers: [
-      { output: { iron: 1.248 }, input: {}, labor: 0.69 },
-      { output: { iron: 1.622 }, input: {}, labor: 0.759 },
-      { output: { iron: 2.109 }, input: { electricity: 0.08 }, labor: 0.835 },
-      { output: { iron: 2.7 }, input: { electricity: 0.12 }, labor: 0.902 },
+      { output: { iron: 1.56 }, input: {}, labor: 0.69 },
+      { output: { iron: 2.028 }, input: {}, labor: 0.759 },
+      { output: { iron: 2.636 }, input: { electricity: 0.08 }, labor: 0.835 },
+      { output: { iron: 3.375 }, input: { electricity: 0.12 }, labor: 0.902 },
     ],
   },
   lumberMills: {
@@ -382,7 +382,7 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
   steelMills: {
     output: { steel: 4.0 },
     // Ore (raw `iron`) + coal are smelted into steel: the only consumer of ore.
-    input: { iron: 3.2, coal: 1.0, machinery: 0.1 },
+    input: { iron: 2.56, coal: 1.0, machinery: 0.1 },
     labor: 1.0,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
@@ -390,20 +390,20 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     // II = output ×1.35, input ×1.15, labor ×1.10; III = II × output ×1.35,
     // input ×1.12, labor ×1.05 (cumulative, rounded to 3 decimals only here).
     tiers: [
-      { output: { steel: 5.4 }, input: { iron: 3.68, coal: 1.15, machinery: 0.115 }, labor: 1.1 },
+      { output: { steel: 5.4 }, input: { iron: 2.944, coal: 1.15, machinery: 0.115 }, labor: 1.1 },
       {
         output: { steel: 7.29 },
-        input: { iron: 4.122, coal: 1.288, machinery: 0.129 },
+        input: { iron: 3.297, coal: 1.288, machinery: 0.129 },
         labor: 1.155,
       },
       {
         output: { steel: 9.477 },
-        input: { iron: 4.616, coal: 1.01, machinery: 0.144, electricity: 0.3 },
+        input: { iron: 3.693, coal: 1.01, machinery: 0.144, electricity: 0.3 },
         labor: 1.213,
       },
       {
         output: { steel: 12.131 },
-        input: { iron: 5.078, coal: 0.666, machinery: 0.159, electricity: 0.4 },
+        input: { iron: 4.062, coal: 0.666, machinery: 0.159, electricity: 0.4 },
         labor: 1.237,
       },
     ],

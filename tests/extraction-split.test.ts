@@ -54,8 +54,8 @@ const globalMarket = (world: WorldState): Record<GoodId, { bid: number; offer: n
 describe('F2 extraction split: mines → coalMines / ironMines / lumberMills', () => {
   test('each new building produces exactly one good with the mine technology gate', () => {
     const specs = new Map<BuildingId, { good: GoodId; coef: number; labor: number }>([
-      ['coalMines', { good: 'coal', coef: 0.96, labor: 0.6 }],
-      ['ironMines', { good: 'iron', coef: 0.96, labor: 0.6 }],
+      ['coalMines', { good: 'coal', coef: 1.2, labor: 0.6 }],
+      ['ironMines', { good: 'iron', coef: 1.2, labor: 0.6 }],
       ['lumberMills', { good: 'wood', coef: 0.96, labor: 0.4 }],
     ])
     for (const id of NEW_EXTRACTION) {
