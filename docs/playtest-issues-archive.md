@@ -76,6 +76,7 @@
 | PT-072 | 提示条上的「打开议事」点了没反应 | 0006 / UI | fixed（702a4d5） |
 | PT-074 | 看不到他国的税率与基本经济数据 | 0006 / inspect | fixed（fffca38） |
 | PT-075 | AI 不会撤销/重排建造，也从不开贸易航线 | 0003 / AI | fixed（90345e1） |
+| PT-076 | 建造造价无法被修正：只有建造速度，没有建造花费 | 0006 / 手册 §4.6 | fixed（7cb54a9） |
 
 ---
 
@@ -1567,3 +1568,34 @@
 - 优先级：**P1**（世界活力的核心）
 - 状态：**fixed（90345e1）**
 
+
+### PT-076 建造造价无法被修正：只有建造速度，没有建造花费
+
+- 日期：2026-10-26
+- 游戏内日期：1836.01
+- 来源：天命 buff「建筑花费 −50%」（柳大飞篡位局，玩家要求「在引擎里实现」）
+- 存档：新开 QING 局（`/v3 new QING`，本轮未记种子）
+- 现象：`v3_cheat { action: "modifier", stat: "constructionCost" }` 返回
+  `未知修正对象 constructionCost`；可用列表里与建造相关的只有 `constructionSpeed`（建造速度）。
+  也就是说，能给「盖得更快」，不能给「盖得更便宜」。
+- 数据：
+  - `CONSTRUCTION_COST_PER_POINT = 0.2` 金/点，`constructionGoldPerPoint` 只乘建筑系数与
+    营造所等级系数，**没有任何修正接缝**；
+  - `constructionSpeed` 在 `settleConstruction` 里乘的是**每月进度**（`engine/construction.ts`），
+    建造力显示（55.6 点/月）不会因它变化；建造力受限时它同时缩短工期与总点数消耗，
+    但**全速推进、一月完工**的项目仍按满工程量付费——与「单价减半」不是同一回事；
+  - UI / v3_status 的「每点造价 0.2 金」是硬编码常量，不读任何修正。
+- 判断：**设计缺口**。工期与单价是两条独立的经济杠杆，政策/天命应该能分别调节；
+  只有速度时，想做「土木便宜」的叙事只能靠注资或削减全局支出，语义都不对。
+- 修复（7cb54a9）：
+  1. `ModifierStat` 新增 `constructionCost`，显示名「建造花费」，域钳在 `[0, 10]` 倍
+     （堆叠减免最多把单价压到 0，不会变成倒收钱）；
+  2. `constructionGoldPerPoint` 读该修正，`constructionTotalCost` / `constructionMonthlyCost`
+     随之缩放；`normalizeConstructionQueue` 每月重算 `monthlyCost`，存量项目也会跟上；
+  3. 显示口径同步：`v3_status` 的每点造价、队列行的总造价、建造面板的造价都读修正后的值；
+  4. 测试：−50% 时单价 0.2→0.1、总造价减半；−250% 时钳到 0；
+  5. 手册 §4.6 补「两条独立的建造杠杆」小节。
+- 关联：`engine/modifiers.ts`、`engine/construction.ts`、`types/index.d.ts`、
+  `hooks/prompt.ts`、`view/panels/construction.tsx`、手册 §4.6、ADR 0004（修正叠算）。
+- 优先级：**P1**（本轮天命 buff 直接依赖）
+- 状态：**fixed（7cb54a9）**
