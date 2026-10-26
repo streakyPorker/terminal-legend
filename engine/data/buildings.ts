@@ -216,6 +216,15 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     gates: { tech: true, access: true },
     outputGates: { wood: {} },
     outputModifier: 'farmOutput',
+    // Plan 0016 §S3 / 附录 A (farm family): output ×1.25 per tier, labor
+    // ×1.10/×1.08/×1.08/×1.05. No input basket and no electricity — farms are a
+    // land/labour upgrade only.
+    tiers: [
+      { output: { grain: 0.25, wood: 0.05, opium: 0.005 }, input: {}, labor: 0.33 },
+      { output: { grain: 0.313, wood: 0.063, opium: 0.006 }, input: {}, labor: 0.356 },
+      { output: { grain: 0.391, wood: 0.078, opium: 0.008 }, input: {}, labor: 0.385 },
+      { output: { grain: 0.488, wood: 0.098, opium: 0.01 }, input: {}, labor: 0.404 },
+    ],
   },
   coalMines: {
     output: { coal: 0.96 },
@@ -618,6 +627,23 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     labor: 1.0,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
+    // Plan 0016 §S3 / 附录 A: heavy-industry family (output ×1.35/×1.35/×1.30/×1.28,
+    // input ×1.15/×1.12/×1.12/×1.10, labor ×1.10/×1.05/×1.05/×1.02) with coal
+    // substitution (×0.70 IV, ×0.60 V, cumulative) and its own electricity draw.
+    tiers: [
+      { output: { chemicals: 2.025 }, input: { coal: 0.575, iron: 1.438, machinery: 0.23 }, labor: 1.1 },
+      { output: { chemicals: 2.734 }, input: { coal: 0.644, iron: 1.61, machinery: 0.258 }, labor: 1.155 },
+      {
+        output: { chemicals: 3.554 },
+        input: { coal: 0.505, iron: 1.803, machinery: 0.289, electricity: 0.35 },
+        labor: 1.213,
+      },
+      {
+        output: { chemicals: 4.549 },
+        input: { coal: 0.333, iron: 1.984, machinery: 0.317, electricity: 0.45 },
+        labor: 1.237,
+      },
+    ],
   },
   powerPlants: {
     // VA = 2.8×2 − (0.6×1.6 + 0.2×5.2 + 0.7×2.6) = 1.78 → 0.318 of revenue.
@@ -626,6 +652,14 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     labor: 1.0,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
+    // Plan 0016 §S3 / 附录 A: heavy-industry OUTPUT rule, but a plant produces
+    // electricity, so its own input takes NO electricity and substitutes NO coal.
+    tiers: [
+      { output: { electricity: 3.78 }, input: { coal: 0.69, machinery: 0.23, steel: 0.805 }, labor: 1.1 },
+      { output: { electricity: 5.103 }, input: { coal: 0.773, machinery: 0.258, steel: 0.902 }, labor: 1.155 },
+      { output: { electricity: 6.634 }, input: { coal: 0.866, machinery: 0.289, steel: 1.01 }, labor: 1.213 },
+      { output: { electricity: 8.491 }, input: { coal: 0.952, machinery: 0.317, steel: 1.111 }, labor: 1.237 },
+    ],
   },
   locomotiveWorks: {
     // VA = 0.8×8 − (1.0×2.6 + 0.2×5.2 + 0.4×1.6) = 2.12 → 0.331 of revenue.
@@ -634,6 +668,22 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     labor: 1.0,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
+    // Plan 0016 §S3 / 附录 A: heavy-industry family with coal substitution and
+    // its own (lighter, 0.25/0.32) electricity draw.
+    tiers: [
+      { output: { locomotives: 1.08 }, input: { steel: 1.15, machinery: 0.23, coal: 0.46 }, labor: 1.1 },
+      { output: { locomotives: 1.458 }, input: { steel: 1.288, machinery: 0.258, coal: 0.515 }, labor: 1.155 },
+      {
+        output: { locomotives: 1.895 },
+        input: { steel: 1.443, machinery: 0.289, coal: 0.404, electricity: 0.25 },
+        labor: 1.213,
+      },
+      {
+        output: { locomotives: 2.426 },
+        input: { steel: 1.587, machinery: 0.317, coal: 0.267, electricity: 0.32 },
+        labor: 1.237,
+      },
+    ],
   },
 }
 

@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { BUILDING_IDS, BUILDING_RECIPES, applyBuildingDecay, applyBuildingDelta, recipeAt } from '../engine/data'
+import {
+  BUILDING_IDS,
+  BUILDING_RECIPES,
+  applyBuildingDecay,
+  applyBuildingDelta,
+  mixedRecipe,
+  recipeAt,
+} from '../engine/data'
 import { newWorld } from '../engine/sim'
 import type { BuildingId, Country, WorldState } from '../types'
 
@@ -33,12 +40,33 @@ describe('recipeAt: tier → recipe accessor', () => {
   })
 
   test('an untiered building falls back to tier I at any tier', () => {
-    expect(recipeAt('farms', 1)).toBe(BUILDING_RECIPES.farms)
-    expect(recipeAt('farms', 3)).toBe(BUILDING_RECIPES.farms)
+    expect(recipeAt('schools', 1)).toBe(BUILDING_RECIPES.schools)
+    expect(recipeAt('schools', 3)).toBe(BUILDING_RECIPES.schools)
   })
 
   test('an out-of-range tier falls back to tier I', () => {
     expect(recipeAt('steelMills', 5)).toBe(BUILDING_RECIPES.steelMills)
+  })
+
+  test('S3: farms and the three new works serve their stored II–V tiers', () => {
+    for (const id of ['farms', 'chemicalWorks', 'powerPlants', 'locomotiveWorks'] as const) {
+      expect(recipeAt(id, 1)).toBe(BUILDING_RECIPES[id].tiers?.[0])
+      expect(recipeAt(id, 2)).toBe(BUILDING_RECIPES[id].tiers?.[1])
+      expect(recipeAt(id, 4)).toBe(BUILDING_RECIPES[id].tiers?.[3])
+    }
+  })
+
+  test('S3: mixedRecipe reads tier IV of the new buildings (length-agnostic)', () => {
+    const world = newWorld(9204, 'QING')
+    const country = countryOf(world, 'QING')
+    for (const id of ['farms', 'chemicalWorks', 'powerPlants', 'locomotiveWorks'] as const) {
+      country.econ.buildingTiers[id] = [0, 0, 0, 3]
+      country.econ.buildings[id] = 3
+      const mixed = mixedRecipe(country, id)
+      expect(mixed.output, `${id} output`).toEqual(BUILDING_RECIPES[id].tiers?.[2]?.output)
+      expect(mixed.input, `${id} input`).toEqual(BUILDING_RECIPES[id].tiers?.[2]?.input)
+      expect(mixed.labor, `${id} labor`).toBe(BUILDING_RECIPES[id].tiers?.[2]?.labor)
+    }
   })
 })
 
@@ -94,6 +122,17 @@ describe('applyBuildingDelta / applyBuildingDecay: Σ tiers ≡ buildings', () =
       expect(sum(country.econ.buildingTiers[id]), `${id} after decay`).toBe(
         country.econ.buildings[id],
       )
+    }
+  })
+
+  test('S3: the new tiered buildings accept a delta at tier IV and keep the Σ identity', () => {
+    const world = newWorld(9203, 'QING')
+    const country = countryOf(world, 'QING')
+    for (const id of ['farms', 'chemicalWorks', 'powerPlants', 'locomotiveWorks'] as const) {
+      applyBuildingDelta(country, id, 4, 2)
+      expect(country.econ.buildingTiers[id].length, `${id} pads to V`).toBe(5)
+      expect(country.econ.buildingTiers[id][4], `${id} IV seats`).toBe(2)
+      expect(sum(country.econ.buildingTiers[id]), `${id} Σ`).toBe(country.econ.buildings[id])
     }
   })
 })

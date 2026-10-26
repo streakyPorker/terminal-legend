@@ -27,8 +27,11 @@ const LIGHT: BuildingId[] = ['textileMills', 'furnitureWorks', 'distilleries', '
 const SHIPYARD: BuildingId[] = ['navalYards']
 const INFRA: BuildingId[] = ['infrastructure']
 const NAVAL_BASE: BuildingId[] = ['navalBases']
-// S3 forward-compat: these two are untiered in S0 (not in `TIERED`), but the
-// guard already knows their special rules so S3 only has to widen `TIERED`.
+// S3: the three new works + farms. chemicalWorks/locomotiveWorks are heavy-family
+// members (coal substitution + their own electricity); powerPlants shares the
+// heavy OUTPUT rule but takes no electricity and substitutes no coal; farms is
+// its own land/labour family.
+const NEW_WORKS: BuildingId[] = ['chemicalWorks', 'locomotiveWorks']
 const POWER_PLANTS: BuildingId[] = ['powerPlants']
 const FARMS: BuildingId[] = ['farms']
 
@@ -39,6 +42,9 @@ const TIERED: BuildingId[] = [
   ...SHIPYARD,
   ...INFRA,
   ...NAVAL_BASE,
+  ...NEW_WORKS,
+  ...POWER_PLANTS,
+  ...FARMS,
 ]
 
 /**
@@ -65,6 +71,8 @@ const FAMILY_RULES: Record<BuildingId, FamilyRule> = {
   steelMills: [1.35, 1.15, 1.1, 1.35, 1.12, 1.05, 1.3, 1.12, 1.05, 1.28, 1.1, 1.02],
   machineryWorks: [1.35, 1.15, 1.1, 1.35, 1.12, 1.05, 1.3, 1.12, 1.05, 1.28, 1.1, 1.02],
   arsenals: [1.35, 1.15, 1.1, 1.35, 1.12, 1.05, 1.3, 1.12, 1.05, 1.28, 1.1, 1.02],
+  chemicalWorks: [1.35, 1.15, 1.1, 1.35, 1.12, 1.05, 1.3, 1.12, 1.05, 1.28, 1.1, 1.02],
+  locomotiveWorks: [1.35, 1.15, 1.1, 1.35, 1.12, 1.05, 1.3, 1.12, 1.05, 1.28, 1.1, 1.02],
   coalMines: [1.3, 1, 1.15, 1.3, 1, 1.1, 1.3, 1, 1.1, 1.28, 1, 1.08],
   ironMines: [1.3, 1, 1.15, 1.3, 1, 1.1, 1.3, 1, 1.1, 1.28, 1, 1.08],
   lumberMills: [1.3, 1, 1.15, 1.3, 1, 1.1, 1.3, 1, 1.1, 1.28, 1, 1.08],
@@ -84,6 +92,8 @@ const FAMILY_COAL: Partial<Record<BuildingId, readonly [number, number]>> = {
   steelMills: [0.7, 0.6],
   machineryWorks: [0.7, 0.6],
   arsenals: [0.7, 0.6],
+  chemicalWorks: [0.7, 0.6],
+  locomotiveWorks: [0.7, 0.6],
   textileMills: [0.8, 0.7],
   furnitureWorks: [0.8, 0.7],
   distilleries: [0.8, 0.7],
@@ -95,6 +105,8 @@ const PER_BUILDING_ELECTRICITY: Partial<Record<BuildingId, readonly [number, num
   steelMills: [0.3, 0.4],
   machineryWorks: [0.3, 0.4],
   arsenals: [0.3, 0.4],
+  chemicalWorks: [0.35, 0.45],
+  locomotiveWorks: [0.25, 0.32],
   coalMines: [0.08, 0.12],
   ironMines: [0.08, 0.12],
   lumberMills: [0.08, 0.12],
@@ -185,12 +197,6 @@ const expandTiersRaw = (id: BuildingId): RawTier[] => {
     t3 = { output: {}, input: mul(t2.input, r[4]), labor: base.labor }
     t4 = { output: {}, input: electrify(mul(t3.input, r[7]), coal[0], elec[0]), labor: base.labor }
     t5 = { output: {}, input: electrify(mul(t4.input, r[10]), coal[1], elec[1]), labor: base.labor }
-  } else if (POWER_PLANTS.includes(id) || FARMS.includes(id)) {
-    // S3 forward-compat: no coal substitution and no self-electricity (附录 A.2).
-    t2 = { output: mul(base.output, r[0]), input: mul(base.input, r[1]), labor: base.labor * r[2] }
-    t3 = { output: mul(t2.output, r[3]), input: mul(t2.input, r[4]), labor: t2.labor * r[5] }
-    t4 = { output: mul(t3.output, r[6]), input: mul(t3.input, r[7]), labor: t3.labor * r[8] }
-    t5 = { output: mul(t4.output, r[9]), input: mul(t4.input, r[10]), labor: t4.labor * r[11] }
   } else {
     t2 = { output: mul(base.output, r[0]), input: mul(base.input, r[1]), labor: base.labor * r[2] }
     t3 = { output: mul(t2.output, r[3]), input: mul(t2.input, r[4]), labor: t2.labor * r[5] }
@@ -211,7 +217,7 @@ const expandTiersRaw = (id: BuildingId): RawTier[] => {
 const expandTiers = (id: BuildingId): BuildTierDef[] => expandTiersRaw(id).map(roundDef)
 
 describe('Tier recipe data — 附录-B drift guard (plan 0015 S1 / plan 0016 S0)', () => {
-  test('each of the 13 tiered buildings stores exactly four tiers', () => {
+  test('each of the 17 tiered buildings stores exactly four tiers', () => {
     for (const id of TIERED) {
       const tiers = BUILDING_RECIPES[id].tiers
       expect(tiers, `${id}.tiers is defined`).toBeDefined()
@@ -233,11 +239,13 @@ describe('Tier recipe data — 附录-B drift guard (plan 0015 S1 / plan 0016 S0
   test('per-building IV/V electricity is encoded per building, not per family (附录 A.2)', () => {
     const elec = (id: BuildingId, tier: number): number | undefined =>
       BUILDING_RECIPES[id].tiers?.[tier]?.input.electricity
-    // S0 stores only the 13 tiered buildings' electricity; the heavy-family
-    // members chemicalWorks (0.35) / locomotiveWorks (0.25) arrive in S3.
     expect(elec('steelMills', 2)).toBe(0.3)
     expect(elec('machineryWorks', 2)).toBe(0.3)
     expect(elec('arsenals', 2)).toBe(0.3)
+    // The heavy family is NOT uniform: chemicalWorks 0.35 ≠ steelMills 0.30 ≠
+    // locomotiveWorks 0.25 (S3, 附录 A.2).
+    expect(elec('chemicalWorks', 2)).toBe(0.35)
+    expect(elec('locomotiveWorks', 2)).toBe(0.25)
     expect(elec('infrastructure', 2)).toBe(0.3)
     expect(elec('lumberMills', 2)).toBe(0.08)
     expect(elec('textileMills', 2)).toBe(0.15)
@@ -245,19 +253,21 @@ describe('Tier recipe data — 附录-B drift guard (plan 0015 S1 / plan 0016 S0
     expect(elec('navalYards', 2)).toBe(0.2)
     expect(elec('navalBases', 2)).toBe(0.1)
     expect(elec('steelMills', 3)).toBe(0.4)
+    expect(elec('chemicalWorks', 3)).toBe(0.45)
+    expect(elec('locomotiveWorks', 3)).toBe(0.32)
     expect(elec('coalMines', 3)).toBe(0.12)
     expect(elec('luxuryWorks', 3)).toBe(0.2)
     expect(new Set([0.08, 0.1, 0.15, 0.2, 0.3]).size).toBe(5)
   })
 
-  test('tier I is untouched and the other 10 buildings stay untiered', () => {
+  test('tier I is untouched and the other 6 buildings stay untiered', () => {
     for (const id of BUILDING_IDS) {
       if (TIERED.includes(id)) continue
       expect(BUILDING_RECIPES[id].tiers, `${id} must stay untiered`).toBeUndefined()
     }
   })
 
-  test('forward-compat (S3): powerPlants/farms derive four tiers with no electricity', () => {
+  test('S3: powerPlants/farms derive four tiers with no electricity input (附录 A.2)', () => {
     for (const id of [...POWER_PLANTS, ...FARMS]) {
       const expanded = expandTiers(id)
       expect(expanded.length, `${id} derives II–V`).toBe(4)
