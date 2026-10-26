@@ -4,9 +4,9 @@
 > 机制口径以本文件为准；术语以 `GLOSSARY.md` 为准；GM 面向的机制参考见 `docs/gm-handbook.md`；
 > 决策背景与取舍见 `docs/adr/`；路线与工作包见 `docs/plans/`。
 >
-> 当前世界版本 **v14**（**23 类建筑**、建筑配方与利用率/利润驱动投资、四税基、铁矿石/钢铁拆分、
+> 当前世界版本 **v14**（**23 类建筑**、**建筑 I–V 分级与 IV/V 电气化投入**（plan 0016/ADR 0032）、建筑配方与利用率/利润驱动投资、四税基、铁矿石/钢铁拆分、
 > 统一基础设施（铁路/港口/电报合并为单一「基础设施」、运河删除，plan 0014/ADR 0029）、建筑 `unlock` 前向字段、
-> **4 时代 / 16 节点科技树**（plan 0005 K0–K4，替代 1–10 级线性科技，派生 `techTier` 代理，含 AI 选择与树形 UI，docs/adr/0030-tech-tree.md））。数值口径以 `v3_inspect` 分区输出为准，本文只解释**为什么**。
+> **4 时代 / 22 节点科技树**（plan 0005 K0–K4 + plan 0016 电气化节点，替代 1–10 级线性科技，派生 `techTier` 代理，含 AI 选择与树形 UI，docs/adr/0030-tech-tree.md））。数值口径以 `v3_inspect` 分区输出为准，本文只解释**为什么**。
 
 ## 目录
 
@@ -26,7 +26,7 @@
 
 ## 1. 世界模型
 
-- **规模**：10 个国家、18 种商品、23 种建筑、6 类支出、**4 时代 / 16 节点科技树**（通用时代线 4 + 工业/行政/军事各 4）。
+- **规模**：10 个国家、18 种商品、23 种建筑（生产建筑分 **I–V** 级）、6 类支出、**4 时代 / 22 节点科技树**（通用 5 + 工业 7 + 行政 5 + 军事 5）。
 - **月度结算流水线**：商品供需与价格 → GDP/财政 → 建造队列 → 人口增长与城市化 →
   生活水平/激进/合法性 → 官僚效能与权威 → 科技 → 军力与人力 → 外交关系漂移（受恶名拖累）→
   战争 → 随机事件 →（E1–E7）实时事件扫描 + 例行场景。
@@ -52,12 +52,12 @@
   得到同一个世界；60/120 月基线是确定性的。
 - **存档与版本**：存档是项目目录下的 `.terminal-legend/save.json`（纯 JSON），命名存档为
   `.terminal-legend/<名字>.json`。早期开发**不做存档兼容**：世界结构变化时提升
-  `WorldState.version`，旧存档直接拒绝载入（ADR 0005）。当前 v12。
+  `WorldState.version`，旧存档直接拒绝载入（ADR 0005）。当前 v14。
 - **AI 决策**：非玩家国家每月用 `$.model.complete`（默认 haiku）批量做一次领袖决策，
   提示里带领袖人格、特质、议程、GDP 构成、资源与私人资本；模型失败时自动退回确定性政策，
   世界不会停摆。
 
-- **科技（plan 0005 K0–K4，World v13）**：`Country.tech` 是 4 时代 / 16 节点树的 `TechState`
+- **科技（plan 0005 K0–K4 + plan 0016 电气化节点，World v13→v14）**：`Country.tech` 是 4 时代 / 22 节点树的 `TechState`
   （`era`、`unlocked` 节点 id、`researching`、`points`）；旧 1–10 级线性科技已删除。所有旧公式改读派生代理
   `techTier = 1 + era×1.5 + unlocked.length×0.05`（范围约 2.5–7.8），仍走不变的 `1 + tier×0.07` 生产/建造门控。
   `v3_action research` 按节点 id 选择（校验**前置 + 时代门槛**）；节点造价单一真源在 `TECH_ERA_COSTS`
@@ -331,12 +331,12 @@ hooks/council.ts             推进/御前/托管/中断/停止/秘书 spawn/事
 hooks/render.tsx             ui.render 挂载（Panel / Band / Report）
 hooks/prompt.ts              系统提示拼装（narratorPrompt）与状态文本（statusText）
 hooks/commands.ts            /v3 命令分发（含 /v3 stop）
-types/index.d.ts             PluginState 契约与世界模型类型（world v14：建筑配方、逐建筑利润与四税基、
-                             铁矿石/钢铁、ControlPayload；4 时代 / 16 节点科技树 TechState + techTier）
+types/index.d.ts             PluginState 契约与世界模型类型（world v14：建筑 I–V 分级配方、逐建筑利润与四税基、
+                             铁矿石/钢铁、ControlPayload；4 时代 / 22 节点科技树 TechState + techTier）
 engine/data/index.ts         桶：原样再导出全部公共符号，`./data` 导入路径不变
 engine/data/goods.ts         商品/资源禀赋/区域运输成本/消费需求参数
 engine/data/buildings.ts     建筑定义/配方/建造时长/基础设施系数/工业建筑清单
-engine/data/tech.ts          科技树 TECH_NODES（4 时代 / 16 节点，造价由 techNodeCost 派生）、techTier 代理、选择/前置/时代门槛助手
+engine/data/tech.ts          科技树 TECH_NODES（4 时代 / 22 节点，造价由 techNodeCost 派生）、techTier 代理、选择/前置/时代门槛助手
 engine/data/leaders.ts       领袖构造函数与继承序列（successorFor）
 engine/data/countries.ts     十国种子、支出分类与政府类型
 engine/data/events.ts        事件模板、随机抽取与对手选择

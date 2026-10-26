@@ -79,7 +79,7 @@ Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplo
 
 ## 世界模型（摘要）
 
-- 10 个国家、18 种商品、23 种建筑、6 类支出、**4 时代 / 16 节点科技树**（通用时代线 4 + 工业/行政/军事各 4）；每月一次结算，逐月原地推进。
+- 10 个国家、18 种商品、23 种建筑（生产建筑分 **I–V** 级、IV/V 级消耗电力）、6 类支出、**4 时代 / 22 节点科技树**（通用 5 + 工业 7 + 行政 5 + 军事 5）；每月一次结算，逐月原地推进。
 - GDP 按支出法 C+I+G+NX 核算；税收来自四个真实税基（土地/企业利润/消费/关税），GDP 只作派生指标。
 - 建造靠营造所产出的建造点，队列顺位施工；贸易有持久航线与双向关税；国库是带符号的净资产。
 - 世界结构变化会提升 `WorldState.version`，旧存档直接拒绝（ADR 0005）；当前 **v14**。
@@ -121,7 +121,9 @@ Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplo
 | plan 0013 建造面板 + 队列编排（ADR 0027）、v3_control 停止托管（ADR 0028） | ✅ 已实现（`5f78f77` 引擎 / `f390a14` 面板 / `175d9de` 控制） |
 | 0006 GM ⇄ 引擎接口（全走 MCP，禁止读存档） | ✅ 已实现（v3_inspect 16 分区 + v3_forecast + v3_manual） |
 | 0007 经济打磨（贸易校准、可见化、建造队列、GDP/科技/劳动力） | ✅ E1–E8 已完成（E6/E7 提前完成；E8 劳动需求×利用率 `d346b12`）；PT-040/041/042 显示口径已收敛（`58e3e7b`）；待下一轮试玩校准 |
-| plan 0005 / ADR 0005 / ADR 0030 科技树 K0–K4（4 时代 / 16 节点 + `techTier` 代理，World v13） | ✅ 已实现（K2 效果/溢出/扩散、K3 AI 确定性选择 + 树形 UI、K4 调平 + 回归测试） |
+| plan 0005 / ADR 0005 / ADR 0030 科技树 K0–K4（4 时代 / 16 节点起，`techTier` 代理，World v13） | ✅ 已实现（K2 效果/溢出/扩散、K3 AI 确定性选择 + 树形 UI、K4 调平 + 回归测试；plan 0015/0016 续扩至 22 节点） |
+| plan 0015 / ADR 0031 科技分级 + 建筑三级（20 节点，World v14） | ✅ 已实现（`techTier`、`buildingTiers`、升级项目、三分支重写） |
+| plan 0016 / ADR 0032 建筑 **I–V** 分级 + IV/V 电气化投入 + 营造所分级（World v14） | ✅ 已实现（S0–S8：退役全局电力乘数、`industry-6`/`industry-7` 解锁 IV/V、营造所可升级且更多更便宜、22 节点） |
 | plan 0002 事件树 S1–S4（数据驱动局势/提案/多国交互 + GBR/QING 样板线） | ✅ 机制已实现（World v13；内容扩充待续） |
 | 0008/0011 经济 remake 与建筑扩张后的试玩验证（PT-033/034/035） | 🔬 待试玩 |
 
@@ -130,8 +132,8 @@ Claude 会先调用 `v3_status` 核对数字，再调用 `v3_action` / `v3_diplo
 | 文档 | 内容 |
 | --- | --- |
 | [`docs/architecture.md`](docs/architecture.md) | **模拟如何运转的单一真源**：世界模型、经济循环、建筑配方/利润、建造能力、贸易、财政、四税基、修正、文件树 |
-| [`docs/plans/`](docs/plans/) | 工作包与路线（0001–0014） |
-| [`docs/adr/`](docs/adr/) | 架构决策记录（0001–0030） |
+| [`docs/plans/`](docs/plans/) | 工作包与路线（0001–0016） |
+| [`docs/adr/`](docs/adr/) | 架构决策记录（0001–0032） |
 | [`docs/gm-handbook.md`](docs/gm-handbook.md) | GM 机制手册（工具、经济、贸易、财政、口径 FAQ） |
 | [`docs/playtest-issues.md`](docs/playtest-issues.md) | 试玩问题记录（未结）|
 | [`docs/playtest-issues-archive.md`](docs/playtest-issues-archive.md) | 已修复/无效条目归档 |

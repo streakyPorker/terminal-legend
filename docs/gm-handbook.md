@@ -4,8 +4,8 @@
 与操作都通过 MCP 工具完成。这一份文档就是你的唯一机制参考，遇到「为什么变了」先翻它，
 再按指向调用 `v3_inspect`。
 
-> 世界版本：**v12**（**19 类建筑**、建筑配方与利用率/利润驱动投资、**四税基**、**铁矿石/钢铁**拆分、
-> **统一基础设施**（铁路/港口/电报合并为单一「基础设施」、运河删除，plan 0014/ADR 0029）、建筑 `unlock` 前向字段均已落地，ADR 0021/0022/0023/0026/0029；另有 **16 个 `v3_inspect`
+> 世界版本：**v14**（**23 类建筑**、**生产建筑 I–V 分级与 IV/V 电气化投入**（plan 0016/ADR 0032）、建筑配方与利用率/利润驱动投资、**四税基**、**铁矿石/钢铁**拆分、
+> **统一基础设施**（铁路/港口/电报合并为单一「基础设施」、运河删除，plan 0014/ADR 0029）、建筑 `unlock` 前向字段均已落地，ADR 0021/0022/0023/0026/0029/0032；另有 **16 个 `v3_inspect`
 > 分区 + `v3_forecast` + `v3_manual`**、**逐回合实时事件 E1–E7**（ADR 0025，World v13）。
 > 数值口径以工具返回为准，本手册只解释**为什么**，不复述**是多少**。
 
@@ -52,7 +52,7 @@
 | `v3_manual` | 返回本手册全文（`docs/gm-handbook.md`） | 无 | 需要机制口径时读规则，无需打开文件 |
 | `v3_advance` | 批准推进一月；`months>1` 托管 | `months` 1..24 | 玩家批准时间推进 |
 | `v3_control` | 运行控制：停止托管 / 存档 | `action`∈ `stop`/`save` | 想提前停下后台托管（`stop`）；秘书无权调用，越权会审计 |
-| `v3_action` | 内政行动（见下表） | `action` 及各行动参数 | 建造（可插队）、取消、重排队列、税率、关税、支出、研究、征兵、法案、贸易路线 |
+| `v3_action` | 内政行动（见下表） | `action` 及各行动参数 | 建造/升级（可插队）、取消、重排队列、税率、关税、支出、研究、征兵、法案、贸易路线 |
 | `v3_policy` | 提交政策提议：一组效果条目变成可叠算 buff/debuff | `name`、`effects[]`（`stat`/`stack`/`value`/`months`/`label`）、`authorityCost` | 常规施策，不针对特定局势 |
 | `v3_diplomacy` | 外交行动（改善/交恶/结盟/对手/赠礼/宣战/停战/禁运/解除禁运/贸易张力/**封锁/解除封锁**） | `target`、`move` + 各 move 参数 | 双边外交与战争 |
 | `v3_situation` | 就当前局势（如鸦片危机）提交立场 | `action`(submit/abstain)、`stance`、`narrative` | 局势开启时 |
@@ -98,7 +98,8 @@
 
 | action | 必填参数 | 其他参数 | 说明 |
 | --- | --- | --- | --- |
-| `build` | `building`、`count` | `count` 1..5；`position`∈ head/tail/before/after（默认 tail）、`before`（before/after 的锚点项目 id） | 入队一座国有项目（每槽最多 5 座）；可插队首或某条目之前/之后（ADR 0027） |
+| `build` | `building`、`count` | `count` 1..5；`tier`（1-based，默认 1 = I 级，须已解锁）；`position`∈ head/tail/before/after（默认 tail）、`before`（before/after 的锚点项目 id） | 入队一座国有项目（每槽最多 5 座）；可指定目标等级或插队首/某条目之前/之后（ADR 0027） |
+| `upgrade` | `building`、`fromTier`、`toTier`、`count` | `fromTier`/`toTier` 为 1-based 等级（如钢铁厂 I→II 为 1→2）；`count` 无 5 座上限，但不得超过来源等级未被预约的存量座数；可选 `position`/`before` | 把存量座位从低等级改造成高等级（`toTier` 须已解锁）；**营造所也可升级**；工程量随目标等级膨胀（ADR 0031/0032、plan 0016 §S7） |
 | `cancel` | `projectId` **或** `index` | `index` 为 1-based 队列序号（见 `v3_inspect construction`） | **仅国有**项目可取消；私人项目不可取消；未命中时错误会列出「可用项目」 |
 | `reorder` | `projectId` **或** `index`、`position` | `before`（before/after 的锚点 id） | 调整既有国有条目的队列顺位（head/tail/before/after）；**保留已投入进度**；私人项目不可重排 |
 | `tax` | `base`、`rate` | `base`∈ land/profit/consumption/tariff；`rate` 0..60 | 设定四大税基之一；省略 `base` 返回税菜单（见 §4.7） |
@@ -129,7 +130,7 @@
 
 ### 4.2 商品与物价
 
-15 种商品与基价（`basePrice`，单位「金」）：
+18 种商品与基价（`basePrice`，单位「金」）：
 
 | 商品 | id | 基价 | 商品 | id | 基价 |
 | --- | --- | ---: | --- | --- | ---: |
@@ -140,10 +141,13 @@
 | 布料 | `fabric` | 2.0 | 奢侈品 | `luxury` | 10.0 |
 | 成衣 | `clothes` | 3.0 | 鸦片 | `opium` | 2.5 |
 | 酒类 | `liquor` | 2.6 | 服务 | `services` | 4.0 |
-| **船只** | `ships` | **8.0** | | |
+| **船只** | `ships` | **8.0** | 化工品 | `chemicals` | 3.0 |
+| 电力 | `electricity` | 2.0 | 机车 | `locomotives` | 8.0 |
 
 - `iron` 是**铁矿石**（World v11 起；id 未变），由铁矿产出、只作**钢铁厂**炼钢的投入；`steel`（钢铁）
   由钢铁厂用「铁矿石 + 煤」炼成，供基础设施、建设投资、政府建设与机械/军械/家具使用。
+- `electricity`（电力）**不可贸易**（`NON_TRADABLE`，只作建筑 IV/V 级的投入、由发电厂自产）；
+  `chemicals` 由 `industry-5` 解锁需求，`locomotives` 供基础设施建造（plan 0015/0016）。
 
 - **价格收敛**：目标价 `= basePrice × clamp(√(需求/供给), 0.35, 3)`，每月向目标移动 **30%**。
 - **硬上下限**：`0.25 × basePrice` 与 `4 × basePrice`。
@@ -157,8 +161,11 @@
 
 ### 4.3 建筑配方（单一真源，ADR 0021）
 
-`engine/data/buildings.ts` 的 `BUILDING_RECIPES` 是**产出与中间投入的唯一来源**；`computeProduction`
-只读该表。19 类建筑每座每月：
+`engine/data/buildings.ts` 的 `BUILDING_RECIPES`（I 级基准）与其 `tiers[]`（II–V）是**产出与中间投入的唯一来源**；
+`computeProduction` 经 `recipeAt`/`mixedRecipe` 只读该表（混级按座加权）。23 类建筑中 **18 类有 I–V 分级**
+（`schools`/`universities`/`offices`/`barracks`/`forts` 无分级）；下表列 **I 级基准**配方，每座每月。
+**IV/V 级换入 `electricity`**（族分档，含煤家族同时置换 `coal`；`powerPlants`/`farms` 不耗电）；
+**营造所 II 级起引入钢铁（铁矿石随级递减）、III 级加机械、IV/V 级加电力**（plan 0016 附录 A / ADR 0032）：
 
 | 建筑 | output（每座/月） | input（每座/月） | labor | 门控 |
 | --- | --- | --- | ---: | --- |
@@ -173,6 +180,9 @@
 | 钢铁厂 `steelMills` | **steel 4.0** | **iron(铁矿石) 3.2**、coal 1.0、machinery 0.1 | 1.0 | tech + industrial |
 | 兵工厂 `arsenals` | arms 1.0 | **steel 0.36**、machinery 0.18、coal 0.12、iron 0.18 | 0.9 | tech + industrial |
 | 奢侈品厂 `luxuryWorks` | luxury 0.48 | fabric 1.5、coal 0.26、wood 0.14、machinery 0.24 | 0.8 | tech + industrial |
+| 化工厂 `chemicalWorks` | chemicals 1.5 | coal 0.5、iron 1.25、machinery 0.2 | 1.0 | tech + industrial |
+| 发电厂 `powerPlants` | electricity 2.8 | coal 0.6、machinery 0.2、steel 0.7 | 1.0 | tech + industrial |
+| 机车厂 `locomotiveWorks` | locomotives 0.8 | steel 1.0、machinery 0.2、coal 0.4 | 1.0 | tech + industrial |
 | 学校 `schools` | services 0.1 | 无 | 0.15 | access |
 | 基础设施 `infrastructure` | 无 | **steel 0.2**、wood 0.16 | 0.54 | 无 |
 | 要塞 `forts` | arms 0.08 | steel 0.02、wood 0.03 | 0.3 | tech + industrial |
@@ -249,8 +259,9 @@
     `INFRA_MARKET_ACCESS = 0.019`（市场接入总量守恒）。种子按 `round((rail×2.5 + port×1.1)/2.16)` 折算。
   - 遗留映射与完整决定见 `docs/adr/0029-infrastructure-merge.md`。
 - **F6 建筑解锁字段（World v11，plan 0011 §7.7）**：`BuildingDef` 新增可选 `unlock?: { techLevel?: number }`，
-  `build` 动作在该国科技等级低于阈值时**拒绝**建造。**当前 19 类建筑全部缺省**（无阈值、永远可建），
-  该字段是 **plan 0005（科技树）** 的前向占位；`v3_inspect buildings` 仅在建筑设阈值时才显示「需科技等级 N」。
+  `build` 动作在该国科技等级低于阈值时**拒绝**建造。**当前 23 类建筑全部缺省该字段**（无阈值）；
+  实际解锁走 plan 0015 §S4 的 `unlockBuilding`（`chemicalWorks`/`powerPlants`/`locomotiveWorks` 三类新厂由其科技节点解锁）；
+  `v3_inspect buildings` 仅在建筑设阈值时才显示「需科技等级 N」。
 - **F7 数值校准（World v11，plan 0011 §7.8）**：一次 numbers-only 的分批校准，不改公式/结构。
   - **配方**：把 F3「投入守恒」留下的、产出价值几乎等于投入的家具厂/兵工厂改成可盈利（家具厂砍
     材料单、兵工厂提产出/砍投入），钢铁厂改为**低机械、高煤**的投入组合以耐受机械涨价，奢侈品厂
@@ -319,9 +330,14 @@
 
 ### 4.6 建造能力
 
-- **营造所产出建造点**：每座每月 **4 点**，受科技、交通、市场接入与**原料可得性**约束
-  （木、粮、铁不够则打折）。
-- **工程量**：`工程量 = 单座月度点数 × 30`。单座营造所 = `1.5 × 30 = 45` 点；5 座 = 225 点。
+- **营造所产出建造点**：I 级每座每月 **4 点**，受科技、交通、市场接入与**原料可得性**约束
+  （木、粮、铁不够则打折）。**营造所现已分级（I–V）**：按座加权，高等级产出**更多**点
+  （`CONSTRUCTION_CAPACITY_TIER_MULTIPLIER` `[1,1.2,1.45,1.75,2.1]`）、每点**更便宜**
+  （`CONSTRUCTION_COST_TIER_MULTIPLIER` `[1,0.95,0.9,0.85,0.8]`），且 II 级起以 `steel` 逐步替下 `iron`
+  （III 加 `machinery`、IV/V 加 `electricity`）作运行投入（plan 0016 §S7，ADR 0032）。
+- **工程量**：`工程量 = 单座月度点数 × 30 × WORKLOAD_TIER_MULTIPLIER[目标级-1]`
+  （`[1,1.3,1.7,2.2,2.8]`，I 级 = ×1；**升级工程量 = 0.5 × 同级新建工程量**，故升到高等级更贵）。
+  单座 I 级营造所 = `1.5 × 30 = 45` 点；5 座 = 225 点。
 - **工期 = 剩余工程量 ÷ 每月实际投入**，不再有固定月份。国有队列**按入队顺序**分配；
   每个 entry 每月可拿 `min(队列剩余建造力, 本项目剩余工程量)`，**没有每槽月度上限**。
 - **队列编排（ADR 0027，面板自 ADR 0031 §8 起只读）**：御前/经济面板有共享的建造面板
@@ -469,9 +485,10 @@ GLOSSARY（航线/到岸成本/软容量/禁运）。
 
 - **基础研究率**（ADR 0018）：`base = 2 + 识字率 × 3 + 官僚效能 × 0.06`；
   大学是主要放大器：`+ 大学数 × 0.9 × (0.4 + 识字率) × (1 + 教育支出 × 0.03) × (1 + 科技层级 × 0.02)`。
-- **4 时代 / 16 节点科技树**（plan 0005 K0–K4，World v13，ADR 0030）：`techTier = 1 + 时代×1.5 + 已解锁节点×0.05`
-  是旧 1–10 级线性科技的派生替代，受科技门控的产出/建造仍按 `1 + techTier×0.07`。树 = 通用时代线 4
-  （`general-1836/1850/1865/1880`，逐级推进**时代 I–IV**）+ 工业 / 行政 / 军事各 4。节点造价按时代
+- **4 时代 / 22 节点科技树**（plan 0005 K0–K4 + plan 0015/0016 扩表，World v13→v14，ADR 0030/0031/0032）：`techTier = 1 + 时代×1.5 + 已解锁节点×0.05`
+  是旧 1–10 级线性科技的派生替代，受科技门控的产出/建造仍按 `1 + techTier×0.07`。树 = 通用时代线 5
+  （`general-1836/1840/1850/1865/1880`，逐级推进**时代 I–IV**）+ 工业 7（含 `industry-6`「电力工业」/
+  `industry-7`「第二次工业革命」两个电气化节点，把建筑等级上限抬到 **IV/V**）+ 行政 5 + 军事 5。节点造价按时代
   1/2/3/4 = 160/360/720/1280（单一真源 `TECH_ERA_COSTS`，K4 调平 ≈ 每 2–4 年一节点）。
   `v3_action research tech=<节点 id>` 选择研究（校验**前置 + 时代门槛**；`v3_action research` 不带 id 时
   返回当前可研究清单）。开局大清约 4 点/月。研究页签是树形 UI，点可研究节点等价于一次 `v3_action research`。
