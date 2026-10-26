@@ -82,6 +82,7 @@
 | PT-080 | 船只数值全套重调（船坞产量/营地消耗/航线占用） | 0004 / 手册 §4.3·§5 | fixed（506e6e9） |
 | PT-073 | 消费税只有统一税率，无法按商品分级 | 0008 / ADR 0023 | fixed（4dd5a65） |
 | PT-081 | 建造队列超过 12 项时，inspect 不说明省略数量 | 0006 / inspect | fixed（68188b2） |
+| PT-084 | 政策 flat 值单位未文档化：识字「+2」直接顶到 100% | 0006 / 手册 §3 | fixed（869f45f） |
 
 ---
 
@@ -1719,3 +1720,25 @@
 - 关联：`engine/inspect/construction.ts`、`v3_inspect construction`、手册 §3。
 - 优先级：**P3**
 - 状态：**fixed（68188b2）**
+
+
+### PT-084 政策 flat 值单位未文档化：识字「+2」直接顶到 100%
+
+- 日期：2026-10-26
+- 游戏内日期：1836.05
+- 来源：试玩，`v3_policy`「广设义学」的 `literacy` 效果写了 `flat +2`
+- 现象：识字率从 12.4% 一跃到 **100%**（当月封顶）；政策回报只写「识字 +2」，
+  看起来像 +2 个百分点。
+- 原因：`literacy` 存的是 **0–1 分数**，flat 值按原生单位生效，`+2` = **+200pp**。
+  `engine/actions/policy.ts` 的 `POLICY_FLAT_SCALE` 注释已写明「+0.5 = +50 点」，
+  但 `v3_policy` 工具描述与手册都没写——属于**文档缺口 + 语义陷阱**。
+- 修复（869f45f）：
+  1. `validateEffects` 对 `literacy/marketAccess/laborShare/privateInvestment/consumption`
+     的 **flat |value| > 1** 直接拒绝，提示「+2 个百分点请写 0.02」；
+  2. `v3_policy` 工具描述与手册 §3 补 flat 单位口径；
+  3. 当前存档用两条天命修正订正：永久 `-2` 对冲政策的流量、一月 `-0.856`
+     把存量从 100% 拉回 ~14.4%（原意 +2pp）；
+  4. 测试：`2` 被拒、`0.02` 与 `percent 30` 通过。
+- 关联：`engine/actions/policy.ts`、`hooks/tools.ts`、手册 §3、PT-054（修正撤销）。
+- 优先级：**P2**
+- 状态：**fixed（869f45f）**
