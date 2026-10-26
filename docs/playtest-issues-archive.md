@@ -79,6 +79,7 @@
 | PT-076 | 建造造价无法被修正：只有建造速度，没有建造花费 | 0006 / 手册 §4.6 | fixed（7cb54a9） |
 | PT-078 | `v3_action build` 无法聚合下单（x*y 要连发 y 次） | 0013 / ADR 0027 | fixed（aaf6978） |
 | PT-079 | 建造队列「预计 N 回合」忽略 constructionSpeed | 0013 / 手册 §4.6 | fixed（aaf6978） |
+| PT-080 | 船只数值全套重调（船坞产量/营地消耗/航线占用） | 0004 / 手册 §4.3·§5 | fixed（506e6e9） |
 
 ---
 
@@ -1637,3 +1638,24 @@
 - 关联：`engine/construction.ts`（`constructionSchedule` / `settleConstruction`）、手册 §4.6。
 - 优先级：**P2**
 - 状态：**fixed（aaf6978）**
+
+
+### PT-080 船只相关数值全套重调
+
+- 日期：2026-10-26
+- 游戏内日期：1836.02
+- 来源：玩家「根据现有货物种类，重调一下船只相关的数值」
+- 现象：`ships` 是个死货——各国船坞 0 座、产出 0、需求 0，价格 5.35 长期贴着基价 8 的下沿；
+  船坞 I 级产值 2.4 金/座，远低于机械厂 4.16、机车厂 6.4，而海军营地 1 艘/座/月要吃 3.3 座船坞的产量。
+- 判断：数值口径与产业结构脱节，船坞既不够赚也不够喂营地；航线又完全不吃船。
+- 改动（506e6e9）：
+  1. **船坞产出 0.3 → 0.5 艘/座/月**（II–V 级 0.625 / 0.938 / 1.219 / 1.645），
+     产值 4.0 金/座，与机械厂同量级；投入料单不变；
+  2. **海军营地消耗 1 → 0.5 艘/座/月**，`SHIPS_PER_NAVAL_BASE` 1 → 0.5，
+     仍是「1 船 = 1 舰」，但海军扩张速度减半；
+  3. **航线占用**：每 2 级航线占 1 艘船（`SHIPS_PER_ROUTE_LEVEL = 0.5`），
+     船队 = 海军 + 商船，不足时按比例削运量（PT-067）。
+- 关联：`engine/data/buildings.ts`、`engine/config/military.ts`、`engine/config/trade.ts`、
+  `engine/country.ts`、`engine/trade.ts`、`engine/actions/route.ts`、`engine/inspect/routes.ts`、手册 §4.3·§5。
+- 优先级：**P2**
+- 状态：**fixed（506e6e9）**
