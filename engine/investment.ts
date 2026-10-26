@@ -12,15 +12,19 @@ import {
   GOODS,
   INDUSTRIAL_BUILDING_IDS,
   buildableBuildingIds,
+  maxUnlockedTier,
+  recipeAt,
   resourceMultiplier,
 } from './data'
 import { nationalDebt } from './fiscal'
 import { totalsFor } from './modifiers'
 import {
   MAX_BUILDINGS_PER_SLOT,
+  alreadyReserved,
   constructionMonthlyCost,
   constructionTotalCost,
 } from './construction'
+import { NON_UPGRADABLE_BUILDINGS } from './config/construction'
 import type { EconomySnapshot } from './economy'
 import { clamp } from './internal'
 import {
@@ -133,6 +137,66 @@ function capitalThreshold(country: Country): number {
 }
 
 /**
+ * Per-seat gross value added (`Σ产出×价 − Σ投入×价`) of a building's recipe at
+ * tier index `tierIndex` (0 = tier I), valued at the country's current prices.
+ * This is the plan 0016 §S6 "预估毛利" signal: wages are excluded on purpose, so
+ * the retrofit decision reads only the recipe/price improvement.
+ */
+export function tierValueAdded(country: Country, building: BuildingId, tierIndex: number): number {
+  const recipe = recipeAt(building, tierIndex)
+  const prices = country.econ.prices
+  let added = 0
+  for (const [good, coef] of Object.entries(recipe.output) as [GoodId, number][]) {
+    added += coef * prices[good]
+  }
+  for (const [good, coef] of Object.entries(recipe.input) as [GoodId, number][]) {
+    added -= coef * prices[good]
+  }
+  return added
+}
+
+/** Index (0-based; tier I = 0) of the highest tier a building actually occupies. */
+export function topOccupiedTier(country: Country, building: BuildingId): number {
+  const counts = country.econ.buildingTiers?.[building]
+  if (counts === undefined) return 0
+  for (let tier = counts.length - 1; tier >= 0; tier -= 1) {
+    if ((counts[tier] ?? 0) > 0) return tier
+  }
+  return 0
+}
+
+/**
+ * Plan 0016 §S6: the deterministic retrofit a country would order for `building`
+ * — moving up to `maxCount` of its top-tier seats to the next tier — or
+ * undefined when none clears the gate. The gate, in order: the target tier is
+ * unlocked (`maxUnlockedTier`), source seats remain after other pending upgrades
+ * have reserved theirs, and the target tier's per-seat gross value added is
+ * positive AND strictly above the source tier's (the projected margin improves).
+ * No RNG anywhere: the same state always yields the same candidate.
+ */
+export function upgradeCandidate(
+  country: Country,
+  building: BuildingId,
+  maxCount: number,
+): { fromTier: number; toTier: number; count: number } | undefined {
+  if (NON_UPGRADABLE_BUILDINGS.includes(building)) return undefined
+  const fromTier = topOccupiedTier(country, building)
+  const toTier = fromTier + 1
+  // `maxUnlockedTier` is 1-based (tier II = 2), so a 0-based `toTier` index
+  // needs the ceiling to reach `toTier + 1`.
+  if (maxUnlockedTier(country, building) < toTier + 1) return undefined
+  const seats =
+    (country.econ.buildingTiers[building]?.[fromTier] ?? 0) -
+    alreadyReserved(country, building, fromTier)
+  if (seats <= 0) return undefined
+  const target = tierValueAdded(country, building, toTier)
+  if (target <= 0 || target <= tierValueAdded(country, building, fromTier)) return undefined
+  const count = Math.floor(Math.min(seats, maxCount))
+  if (!(count >= 1)) return undefined
+  return { fromTier, toTier, count }
+}
+
+/**
  * Allocates this month's private savings to at most one new private project.
  * Private projects are visible in the queue but cannot be cancelled
  * (plan 0003 §4). Returns the savings that stayed idle.
@@ -165,6 +229,17 @@ export function investPrivateCapital(
     lastSpend: 0,
     progress: 0,
     startedAt: { ...world.date },
+  })
+  const draftUpgrade = (
+    building: BuildingId,
+    fromTier: number,
+    toTier: number,
+    count: number,
+  ): ConstructionProject => ({
+    ...draftProject(building, count),
+    kind: 'upgrade',
+    fromTier,
+    toTier,
   })
   // Capital cost of one building: turns an absolute monthly profit into a
   // return on capital, the deterministic tie-break between equally-attractive
@@ -236,28 +311,62 @@ export function investPrivateCapital(
     sinceStart >= PRIVATE_START_INTERVAL &&
     canStart.affordable >= 1
   ) {
-    const count = clamp(canStart.affordable, 1, MAX_BUILDINGS_PER_SLOT)
-    const monthlyCost = constructionMonthlyCost(draftProject(best.building, count))
-    if (monthlyCost <= country.econ.privateCapital) {
-      country.econ.constructionQueue.push({
-        id: `proj-${world.tick}-${country.id}-priv-${country.econ.constructionQueue.length}`,
-        building: best.building,
-        count,
-        owner: 'private',
-        monthsLeft: 1,
-        monthlyCost,
-        lastSpend: 0,
-        progress: 0,
-        startedAt: { ...world.date },
-      })
-      log.push({
-        date: { ...world.date },
-        kind: 'economy',
-        countryId: country.id,
-        text: `[${country.flag}] ${country.name}的私人资本投建 ${count} 座${BUILDINGS[best.building].name}`,
-      })
-      country.econ.lastPrivateStartTick = world.tick
-      started = true
+    // Plan 0016 §S6: when the chosen type's next tier is unlocked and the
+    // retrofit raises per-seat gross margin, the private investor retrofits
+    // existing seats (`kind: 'upgrade'`) instead of adding new tier-I capacity.
+    // The retrofit shares the new-build balance and the one-project-per-interval
+    // cap, and `upgradeCandidate` reserves source seats, so repeat orders cannot
+    // oversubscribe (deterministic — no RNG).
+    //
+    // Scoped to NON-PLAYER countries: the plan's goal is that the empires the
+    // player does not run electrify on their own (ADR 0032 §后果风险). The
+    // player's own seats are upgraded through the ordinary `v3_action upgrade`
+    // order, so the player country keeps the pre-S6 private-investment baseline.
+    const retrofit = country.isPlayer
+      ? undefined
+      : upgradeCandidate(country, best.building, canStart.affordable)
+    if (retrofit !== undefined) {
+      const draft = draftUpgrade(best.building, retrofit.fromTier, retrofit.toTier, retrofit.count)
+      const monthlyCost = constructionMonthlyCost(draft)
+      if (monthlyCost <= country.econ.privateCapital) {
+        country.econ.constructionQueue.push({
+          ...draft,
+          id: `proj-${world.tick}-${country.id}-upg-${country.econ.constructionQueue.length}`,
+          monthlyCost,
+        })
+        log.push({
+          date: { ...world.date },
+          kind: 'economy',
+          countryId: country.id,
+          text: `[${country.flag}] ${country.name}的私人资本将 ${retrofit.count} 座${BUILDINGS[best.building].name}从 ${retrofit.fromTier + 1} 级升级到 ${retrofit.toTier + 1} 级`,
+        })
+        country.econ.lastPrivateStartTick = world.tick
+        started = true
+      }
+    } else {
+      const count = clamp(canStart.affordable, 1, MAX_BUILDINGS_PER_SLOT)
+      const monthlyCost = constructionMonthlyCost(draftProject(best.building, count))
+      if (monthlyCost <= country.econ.privateCapital) {
+        country.econ.constructionQueue.push({
+          id: `proj-${world.tick}-${country.id}-priv-${country.econ.constructionQueue.length}`,
+          building: best.building,
+          count,
+          owner: 'private',
+          monthsLeft: 1,
+          monthlyCost,
+          lastSpend: 0,
+          progress: 0,
+          startedAt: { ...world.date },
+        })
+        log.push({
+          date: { ...world.date },
+          kind: 'economy',
+          countryId: country.id,
+          text: `[${country.flag}] ${country.name}的私人资本投建 ${count} 座${BUILDINGS[best.building].name}`,
+        })
+        country.econ.lastPrivateStartTick = world.tick
+        started = true
+      }
     }
   }
 

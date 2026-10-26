@@ -5,9 +5,49 @@ import {
   nationalDebt,
   taxBaseRevenues,
 } from '../fiscal'
-import { isBuildingUnlocked } from '../data'
+import { BUILDINGS, isBuildingUnlocked, maxUnlockedTier } from '../data'
+import { upgradeCandidate } from '../investment'
 import type { Decision } from '../internal'
 import type { Rng } from '../rng'
+
+/** The roster the AI fallback may retrofit, in deterministic id order. */
+const UPGRADE_ROSTER: BuildingId[] = [
+  'farms',
+  'coalMines',
+  'ironMines',
+  'lumberMills',
+  'textileMills',
+  'furnitureWorks',
+  'distilleries',
+  'machineryWorks',
+  'steelMills',
+  'arsenals',
+  'luxuryWorks',
+  'infrastructure',
+  'navalYards',
+  'chemicalWorks',
+  'powerPlants',
+  'locomotiveWorks',
+]
+
+/**
+ * Plan 0016 §S6: the deterministic retrofit the AI fallback would order — the
+ * first roster building whose mid/late tier is unlocked and whose next-tier
+ * gross margin improves. Gated on `maxUnlockedTier >= 3` so the early-game build
+ * fallback (and the tests that pin it) stay exactly as they were; the private
+ * investment path covers the tier-II step. No RNG in the choice.
+ */
+function aiUpgradeCandidate(
+  country: Country,
+): { building: BuildingId; fromTier: number; toTier: number; count: number } | undefined {
+  for (const building of UPGRADE_ROSTER) {
+    if (!isBuildingUnlocked(country, building)) continue
+    if (maxUnlockedTier(country, building) < 3) continue
+    const candidate = upgradeCandidate(country, building, 1)
+    if (candidate !== undefined) return { building, ...candidate }
+  }
+  return undefined
+}
 
 export function randomDecision(world: WorldState, country: Country, rng: Rng): Decision | undefined {
   const atWar = world.wars.some(
@@ -87,6 +127,23 @@ export function randomDecision(world: WorldState, country: Country, rng: Rng): D
     country.econ.constructionQueue.length < 6 &&
     rng.chance(0.45)
   ) {
+    // Plan 0016 §S6: within the construction branch, a retrofit of existing
+    // seats wins over a new build when the next tier is unlocked and improves
+    // the projected margin (deterministic pick, no extra RNG draw).
+    const retrofit = aiUpgradeCandidate(country)
+    if (retrofit !== undefined) {
+      return {
+        countryId: country.id,
+        action: 'upgrade',
+        params: {
+          building: retrofit.building,
+          fromTier: retrofit.fromTier + 1,
+          toTier: retrofit.toTier + 1,
+          count: retrofit.count,
+        },
+        narrative: `${country.name}将${BUILDINGS[retrofit.building].name}升级到更高等级`,
+      }
+    }
     const options: BuildingId[] = [
       'textileMills',
       'furnitureWorks',

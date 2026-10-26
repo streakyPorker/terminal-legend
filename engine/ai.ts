@@ -28,7 +28,8 @@ const SYSTEM = `你是 19 世纪大战略游戏的世界决策引擎。你为每
 - 只输出一个 JSON 数组，不要输出解释、Markdown 或代码围栏。
 - 每个元素形如 {"country":"GBR","action":"build","params":{"building":"textileMills","count":1},"narrative":"一句符合该领袖性格的行动描述"}
 - 每个国家最多 1 条；只为他国（非玩家国）决策。
-- action 只能是：build, cancel, reorder, tax, tariff, spending, research, conscript, law, diplomacy, route, invest, situation。
+- action 只能是：build, upgrade, cancel, reorder, tax, tariff, spending, research, conscript, law, diplomacy, route, invest, situation。
+- upgrade 升级既有座位：params.building、params.fromTier、params.toTier（均为 1..5 级，toTier = fromTier+1）与 params.count（1..20）。当某类建筑的下一档已解锁、且升级后预估毛利更高时，优先升级既有座位（比新建更省工程量），而不是只新建 I 级。
 - build 的 building 只能是：farms, coalMines, ironMines, lumberMills, textileMills, furnitureWorks, distilleries, machineryWorks, steelMills, arsenals, luxuryWorks, schools, infrastructure, forts, navalYards, universities, barracks, offices, navalBases；化工厂（chemicalWorks）、发电厂（powerPlants）、机车厂（locomotiveWorks）须先解锁对应科技节点，未解锁时建造会被拒绝；params.count 为 1..20 的数字。官署提供行政能力与官僚上限；学校育才促识字；基础设施（铁路/港口/电报合一）供给统一基础设施与市场接入；要塞/船坞是军事建造。
 - cancel 用 params.index（简报「队列」里的 #N）取消本国的国有建造项目；私人项目（带「私」）不可取消。
 - reorder 用 params.index 与 params.position（head=插到队首 / tail=队尾 / before / after），把本国国有项目挪位；重排保留已投入进度。
@@ -208,6 +209,7 @@ function coerceParams(raw: unknown): Record<string, string | number | boolean | 
 
 const ACTIONS = new Set([
   'build',
+  'upgrade',
   'cancel',
   'reorder',
   'tax',
@@ -266,6 +268,22 @@ function validParams(
         finite(params.count, 1, 20) &&
         // Plan 0015 §S4 / ADR 0031 §9.2: the AI may not build a locked new work.
         isBuildingUnlocked(country, building)
+      )
+    }
+    case 'upgrade': {
+      // Plan 0016 §S6: the AI may retrofit existing seats to an unlocked tier
+      // (`upgrade`), not only build new tier-I capacity. Validation mirrors
+      // `build`: a known, unlocked building and finite tier/count numbers — the
+      // tier ceiling and seat availability are enforced by `actionUpgrade`.
+      const building = String(params.building ?? '') as BuildingId
+      const country = world.countries[countryId]
+      return (
+        country !== undefined &&
+        (BUILDING_IDS as string[]).includes(building) &&
+        isBuildingUnlocked(country, building) &&
+        finite(params.fromTier, 1, 5) &&
+        finite(params.toTier, 1, 5) &&
+        finite(params.count, 1, 20)
       )
     }
     case 'cancel':
