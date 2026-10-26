@@ -11,6 +11,7 @@ import {
   projectKind,
   projectWorkload,
 } from '../../engine/sim'
+import { applyModifiers } from '../../engine/modifiers'
 import { bar, fmtMoney, fmtNumber, padEnd, tierName } from '../format'
 import { Heading, playerOf, type ControlAction, type UiKit } from './shared'
 
@@ -126,7 +127,7 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
           }
         />
         <Text dimColor>
-          建造能力 {fmtNumber(load.capacity)} 点/月 · 队列剩余工程量 {fmtNumber(load.requested)} · 已分配 {fmtNumber(load.allocated)} · 剩余 {fmtNumber(load.remaining)} · 每点造价 {CONSTRUCTION_COST_PER_POINT} 金
+          建造能力 {fmtNumber(load.capacity)} 点/月 · 队列剩余工程量 {fmtNumber(load.requested)} · 已分配 {fmtNumber(load.allocated)} · 剩余 {fmtNumber(load.remaining)} · 每点造价 {fmtNumber(applyModifiers(player, 'constructionCost', CONSTRUCTION_COST_PER_POINT))} 金
           {econ.lastConstructionRent > 0 ? ` · 私人租用 +${fmtMoney(econ.lastConstructionRent)}` : ''}
         </Text>
         <Text dimColor>
@@ -145,7 +146,7 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
                 <Text wrap="truncate">{padEnd(projectLabel(project), QUEUE_LABEL_WIDTH)}</Text>
                 <Text color="cyan">{padEnd(bar(project.progress, 1, 8), 9)}</Text>
                 <Text dimColor>
-                  剩余 {fmtNumber(workload * (1 - project.progress))}/{fmtNumber(workload)} 点 · 进度 {Math.round(project.progress * 100)}% · 本月投入 {fmtNumber(load.byProject[project.id] ?? 0)} 点 · 预计 {schedule[project.id]?.turns ?? '—'} 回合 · 造价 {constructionTotalCost(project).toFixed(1)} 金
+                  剩余 {fmtNumber(workload * (1 - project.progress))}/{fmtNumber(workload)} 点 · 进度 {Math.round(project.progress * 100)}% · 本月投入 {fmtNumber(load.byProject[project.id] ?? 0)} 点 · 预计 {schedule[project.id]?.turns ?? '—'} 回合 · 造价 {constructionTotalCost(project, player).toFixed(1)} 金
                 </Text>
                 <Box flexDirection="row" columnGap={1}>
                   <Button key={`cancel:${project.id}`} label="取消" onPress={() => props.onControl('cancel', { projectId: project.id })} />
@@ -202,7 +203,9 @@ export function ConstructionPanel(props: ConstructionPanelProps): any {
             {group.ids.map(id => {
               const cap = CAPACITY_COST[id] ?? 1
               const singleWorkload = cap * WORKLOAD_MULTIPLIER
-              const singleCost = singleWorkload * CONSTRUCTION_COST_PER_POINT
+              const singleCost =
+                singleWorkload *
+                applyModifiers(player, 'constructionCost', CONSTRUCTION_COST_PER_POINT)
               const profit = econ.buildingProfits[id]?.profitPerBuilding
               const tech = BUILDINGS[id].unlock?.techLevel
               return (

@@ -148,12 +148,17 @@ export function constructionGoldPerPoint(
     country === undefined
       ? 1
       : tierWeightedMultiplier(country, 'workshops', CONSTRUCTION_COST_TIER_MULTIPLIER)
-  return (
+  const base =
     CONSTRUCTION_COST_PER_POINT *
       (BUILDING_COST_MULTIPLIER[project.building] ?? 1) *
       tierMultiplier +
     (BUILDING_COST_ADDEND[project.building] ?? 0) / Math.max(1, workload)
-  )
+  // `constructionCost` scales the price of a point itself, so a -50% modifier
+  // halves a project's total gold while leaving its workload (and therefore its
+  // time at a given capacity) untouched.
+  return country === undefined
+    ? base
+    : base * applyModifiers(country, 'constructionCost', 1)
 }
 
 /** Total gold cost of the project: workload × per-point price. */

@@ -69,6 +69,7 @@ export const MODIFIER_STAT_NAMES: Record<ModifierStat, string> = {
   bureaucracy: '官僚效能',
   bureaucracyCeiling: '官僚上限',
   constructionSpeed: '建造速度',
+  constructionCost: '建造花费',
   marketAccess: '市场接入',
   transportInfrastructure: '基础设施',
   administrativeCapacity: '行政能力',
@@ -92,6 +93,10 @@ export const MODIFIER_STAT_RANGES: Partial<
   Record<ModifierStat, readonly [number, number]>
 > = {
   marketAccess: [0, 1],
+  // A price multiplier around 1. The floor keeps a stack of percentage
+  // debuffs from turning construction into a source of gold; the ceiling keeps
+  // one bad entry bounded.
+  constructionCost: [0, 10],
 }
 
 /** Clamps a stacked reading to its declared domain; undeclared stats pass through. */

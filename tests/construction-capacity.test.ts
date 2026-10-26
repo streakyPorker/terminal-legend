@@ -2,6 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import { makeRngForWorld } from '../engine/data'
 import { parseWorld } from '../engine/save'
 import { expenseParts } from '../engine/fiscal'
+import { addModifier } from '../engine/modifiers'
 import {
   advance,
   capacityCost,
@@ -10,6 +11,7 @@ import {
   constructionGoldPerPoint,
   constructionLoad,
   constructionSchedule,
+  constructionTotalCost,
   maxSlotCapacity,
   newWorld,
   normalizeConstructionQueue,
@@ -518,6 +520,34 @@ describe('workshop tiering: capacity, cost and workload (plan 0016 §S7)', () =>
     close(constructionGoldPerPoint(proj, qing), 0.2 * 0.8)
     // No country → tier-I base (the old call shape stays bit-identical).
     close(constructionGoldPerPoint(proj), 0.2)
+  })
+
+  test('a constructionCost modifier scales the gold price of a point', () => {
+    const world = newWorld(9404, 'QING')
+    const qing = countryOf(world, 'QING')
+    qing.econ.buildings.workshops = 8
+    qing.econ.buildingTiers.workshops = [8, 0, 0, 0, 0]
+    const proj = draftProject('steelMills', 1)
+    const baseWorkload = projectWorkload(proj)
+    addModifier(qing, {
+      id: 'test:construction-cost',
+      label: '建造花费',
+      stat: 'constructionCost',
+      stack: 'percent',
+      value: -50,
+    })
+    close(constructionGoldPerPoint(proj, qing), 0.1)
+    close(constructionTotalCost(proj, qing), baseWorkload * 0.1)
+    // The price is floored at zero: no stack of discounts can turn construction
+    // into a source of gold.
+    addModifier(qing, {
+      id: 'test:construction-cost:floor',
+      label: '建造花费',
+      stat: 'constructionCost',
+      stack: 'percent',
+      value: -200,
+    })
+    close(constructionGoldPerPoint(proj, qing), 0)
   })
 
   test('a tier-V new build needs 2.8× the points of a tier-I build', () => {

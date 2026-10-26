@@ -339,6 +339,13 @@ export type ModifierStat =
   | 'bureaucracy'
   | 'bureaucracyCeiling'
   | 'constructionSpeed'
+  /**
+   * Gold price of one construction point, read as a multiplier around 1.
+   * `constructionSpeed` changes how much work a point buys over time; this seam
+   * changes the price of the point itself, so a -50% modifier halves the total
+   * gold cost of a project.
+   */
+  | 'constructionCost'
   | 'marketAccess'
   | 'transportInfrastructure'
   | 'administrativeCapacity'
