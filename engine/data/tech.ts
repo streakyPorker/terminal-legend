@@ -3,10 +3,11 @@ import { BUILDING_IDS, BUILDINGS } from './buildings'
 import { TECH_MAX_ERA, TECH_TIER_BASE, TECH_TIER_ERA_COEF, TECH_TIER_UNLOCKED_COEF, techNodeCost } from '../config/tech'
 
 /**
- * The 4-era / 20-node tech tree (plan 0015 §S3, table frozen in appendix A):
- * a 5-node general era line plus industry / admin / military branches of 5
- * nodes each. Each node's cost comes from `TECH_ERA_COSTS` (config/tech.ts) so
- * the whole pace is one dial.
+ * The 4-era / 22-node tech tree (plan 0015 §S3 appendix A + plan 0016 §S2
+ * appendix C): a 5-node general era line, a 7-node industry branch (the era-1..4
+ * line plus the two electrification nodes that raise the tier ceiling to IV/V),
+ * and admin / military branches of 5 nodes each. Each node's cost comes from
+ * `TECH_ERA_COSTS` (config/tech.ts) so the whole pace is one dial.
  *
  * Every node carries at least one *unlock-class* effect (`unlockTier` /
  * `unlockBuilding` / `unlockLaw` / `demandShift`); `modifier` / `immediate` are
@@ -152,6 +153,62 @@ export const TECH_NODES: TechNodeDef[] = [
       { kind: 'unlockTier', building: 'lumberMills', tier: 3 },
       { kind: 'unlockBuilding', building: 'powerPlants' },
       { kind: 'unlockBuilding', building: 'locomotiveWorks' },
+    ],
+  },
+  {
+    id: 'industry-6',
+    era: 4,
+    branch: 'industry',
+    name: '电力工业',
+    cost: techNodeCost(4),
+    prerequisites: ['industry-4'],
+    effects: [
+      { kind: 'unlockTier', building: 'coalMines', tier: 4 },
+      { kind: 'unlockTier', building: 'ironMines', tier: 4 },
+      { kind: 'unlockTier', building: 'lumberMills', tier: 4 },
+      { kind: 'unlockTier', building: 'textileMills', tier: 4 },
+      { kind: 'unlockTier', building: 'furnitureWorks', tier: 4 },
+      { kind: 'unlockTier', building: 'distilleries', tier: 4 },
+      { kind: 'unlockTier', building: 'machineryWorks', tier: 4 },
+      { kind: 'unlockTier', building: 'steelMills', tier: 4 },
+      { kind: 'unlockTier', building: 'arsenals', tier: 4 },
+      { kind: 'unlockTier', building: 'luxuryWorks', tier: 4 },
+      { kind: 'unlockTier', building: 'infrastructure', tier: 4 },
+      { kind: 'unlockTier', building: 'navalYards', tier: 4 },
+      { kind: 'unlockTier', building: 'navalBases', tier: 4 },
+      { kind: 'unlockTier', building: 'farms', tier: 4 },
+      { kind: 'unlockTier', building: 'workshops', tier: 4 },
+      { kind: 'unlockTier', building: 'chemicalWorks', tier: 4 },
+      { kind: 'unlockTier', building: 'powerPlants', tier: 4 },
+      { kind: 'unlockTier', building: 'locomotiveWorks', tier: 4 },
+    ],
+  },
+  {
+    id: 'industry-7',
+    era: 4,
+    branch: 'industry',
+    name: '第二次工业革命',
+    cost: techNodeCost(4),
+    prerequisites: ['industry-6'],
+    effects: [
+      { kind: 'unlockTier', building: 'coalMines', tier: 5 },
+      { kind: 'unlockTier', building: 'ironMines', tier: 5 },
+      { kind: 'unlockTier', building: 'lumberMills', tier: 5 },
+      { kind: 'unlockTier', building: 'textileMills', tier: 5 },
+      { kind: 'unlockTier', building: 'furnitureWorks', tier: 5 },
+      { kind: 'unlockTier', building: 'distilleries', tier: 5 },
+      { kind: 'unlockTier', building: 'machineryWorks', tier: 5 },
+      { kind: 'unlockTier', building: 'steelMills', tier: 5 },
+      { kind: 'unlockTier', building: 'arsenals', tier: 5 },
+      { kind: 'unlockTier', building: 'luxuryWorks', tier: 5 },
+      { kind: 'unlockTier', building: 'infrastructure', tier: 5 },
+      { kind: 'unlockTier', building: 'navalYards', tier: 5 },
+      { kind: 'unlockTier', building: 'navalBases', tier: 5 },
+      { kind: 'unlockTier', building: 'farms', tier: 5 },
+      { kind: 'unlockTier', building: 'workshops', tier: 5 },
+      { kind: 'unlockTier', building: 'chemicalWorks', tier: 5 },
+      { kind: 'unlockTier', building: 'powerPlants', tier: 5 },
+      { kind: 'unlockTier', building: 'locomotiveWorks', tier: 5 },
     ],
   },
   // ---- 行政（5）----
