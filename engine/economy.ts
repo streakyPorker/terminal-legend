@@ -438,13 +438,18 @@ function computeDemand(country: Country): DemandBreakdown {
     }
   }
 
-  // PT-097: a standing base-demand level per good (the GM's `v3_cheat demand`),
-  // added once at the end so it is a quantity, not a multiplier on each block.
+  // PT-097: standing per-good demand levers (the GM's `v3_cheat demand`).
+  // The absolute part is *per popFactor* — it scales with population exactly
+  // like the subsistence floor — and the percentage part scales that good's
+  // whole demand. Both are applied once, after every block has landed.
   const demandBase = country.econ.demandBase
-  if (demandBase !== undefined) {
+  const demandPct = country.econ.demandPct
+  if (demandBase !== undefined || demandPct !== undefined) {
     for (const id of GOOD_IDS) {
-      const extra = demandBase[id] ?? 0
-      if (extra !== 0) out[id] += extra
+      const pct = demandPct?.[id] ?? 0
+      if (pct !== 0) out[id] *= 1 + pct / 100
+      const perPop = demandBase?.[id] ?? 0
+      if (perPop !== 0) out[id] += popFactor * perPop
     }
   }
 

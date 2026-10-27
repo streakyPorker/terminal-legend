@@ -650,11 +650,15 @@ export type Economy = {
   idleProfits: number
   idlePurchases: number
   /**
-   * PT-097: a standing *base-demand* nudge per good, in units/month, added to
-   * the computed demand once per month. The GM's `v3_cheat demand` writes it;
-   * it is a level, not a rate, so setting it again replaces the old value.
+   * PT-097: standing demand levers per good, written by `v3_cheat demand`.
+   * - `demandBase[good]` is an absolute *per-popFactor* quantity: the monthly
+   *   demand gains `popFactor × value`, so it scales with population like the
+   *   rest of the basket.
+   * - `demandPct[good]` is a percentage multiplier on that good's whole demand.
+   * Both are levels, not accumulators: setting again replaces the old value.
    */
   demandBase?: Partial<Record<GoodId, number>>
+  demandPct?: Partial<Record<GoodId, number>>
   /** Labour-market readings for the month. */
   laborDemand: number
   laborForce: number

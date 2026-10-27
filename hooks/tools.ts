@@ -144,7 +144,7 @@ export const TOOL_SPECS: {
   {
     name: 'v3_cheat',
     description:
-      '终末传奇（天命）：修改玩家国家的金钱、科技点、建筑、关系、战争分数、日期，或触发事件、更换领袖、施加/撤销修正、立即完成国有建造队列。铁人模式下拒绝。action 取值：treasury（amount；可选 country 指定任意国家）、techPoints（amount）、navy（amount 艘，可为负）、building（building/count）、finishProjects（完成全部国有在建项目）、relations（country/amount）、warScore（country/amount）、date（year/month）、event（kind 可选）、leader（name/title/persona）、modifier（stat/stack/value/months/label 施加修正；可选 id 稳定标识）、removeModifier（按 id/label/stat 撤销天命修正）、clearModifiers（清空该国全部天命修正，可按 stat 过滤）、demand（good/amount 设定某商品的「基础需求」：amount 为该商品每月增加的**绝对数量**（可为负，0 清除），省略 country 则作用于全世界所有国家；这是水平值而非百分比，再次调用会覆盖）。treasury/techPoints/building/finishProjects/event/leader/modifier/removeModifier/clearModifiers/demand 均支持可选 country，缺省为玩家国（demand 省略 country 时作用于全世界）；relations/warScore 的 country 是对手方。',
+      '终末传奇（天命）：修改玩家国家的金钱、科技点、建筑、关系、战争分数、日期，或触发事件、更换领袖、施加/撤销修正、立即完成国有建造队列。铁人模式下拒绝。action 取值：treasury（amount；可选 country 指定任意国家）、techPoints（amount）、navy（amount 艘，可为负）、building（building/count）、finishProjects（完成全部国有在建项目）、relations（country/amount）、warScore（country/amount）、date（year/month）、event（kind 可选）、leader（name/title/persona）、modifier（stat/stack/value/months/label 施加修正；可选 id 稳定标识）、removeModifier（按 id/label/stat 撤销天命修正）、clearModifiers（清空该国全部天命修正，可按 stat 过滤）、demand（good + amount 和/或 value 设定某商品的需求乘数：amount 为该商品的**人均基准**（每 popFactor 的绝对量，随人口缩放），value 为**百分比**乘数；两者可单用也可同时给，省略 country 则作用于全世界所有国家；均为水平值，再次调用覆盖，传 0 清除）。treasury/techPoints/building/finishProjects/event/leader/modifier/removeModifier/clearModifiers/demand 均支持可选 country，缺省为玩家国（demand 省略 country 时作用于全世界）；relations/warScore 的 country 是对手方。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -177,7 +177,7 @@ export const TOOL_SPECS: {
         good: {
           type: 'string',
           enum: [...GOOD_IDS],
-          description: 'demand 时必填：要调整基础需求的商品。',
+          description: 'demand 时必填：要调整需求的商品。',
         },
         year: { type: 'integer', minimum: 1800, maximum: 2200 },
         month: { type: 'integer', minimum: 1, maximum: 12 },

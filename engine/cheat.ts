@@ -198,15 +198,22 @@ export function applyCheat(
       break
     }
     case 'demand': {
-      // PT-097: set a standing *base demand* level for one good — units per
-      // month added to the computed demand. With `country` it applies to that
-      // power only; without it, to every power in the world. This is a level,
-      // not a delta: calling again replaces the old value (0 clears it).
+      // PT-097: set standing demand levers for one good. Two independent knobs:
+      //   amount  — absolute, *per popFactor* (so it scales with population);
+      //   value   — a percentage multiplier on that good's whole demand.
+      // Omitting `country` applies them to every power in the world. Each knob
+      // is a level, not a delta: calling again replaces it, 0 clears it.
       const good = String(params.good ?? '') as GoodId
       if (!(GOOD_IDS as readonly string[]).includes(good)) {
         return { ok: false, text: `未知商品 ${String(params.good)}。可用：${GOOD_IDS.join(', ')}` }
       }
-      const amount = finite(params.amount ?? params.value)
+      const setPerPop = params.amount !== undefined
+      const setPct = params.value !== undefined
+      if (!setPerPop && !setPct) {
+        return { ok: false, text: 'demand 需要 amount（人均基准）或 value（百分比）其中之一。' }
+      }
+      const perPop = setPerPop ? finite(params.amount) : 0
+      const pct = setPct ? finite(params.value) : 0
       const scoped = typeof params.country === 'string' && params.country !== ''
       const targets = scoped
         ? [subjectFor(params.country)]
@@ -214,17 +221,28 @@ export function applyCheat(
       if (targets.some(target => target === undefined)) {
         return { ok: false, text: `未知国家 ${String(params.country)}` }
       }
-      const before = (targets[0]?.econ.demandBase?.[good] ?? 0)
       for (const target of targets) {
         if (target === undefined) continue
-        const base = { ...(target.econ.demandBase ?? {}) }
-        if (amount === 0) delete base[good]
-        else base[good] = amount
-        target.econ.demandBase = base
+        if (setPerPop) {
+          const base = { ...(target.econ.demandBase ?? {}) }
+          if (perPop === 0) delete base[good]
+          else base[good] = perPop
+          target.econ.demandBase = base
+        }
+        if (setPct) {
+          const pcts = { ...(target.econ.demandPct ?? {}) }
+          if (pct === 0) delete pcts[good]
+          else pcts[good] = pct
+          target.econ.demandPct = pcts
+        }
       }
       const who = scoped ? targets[0]?.name ?? '' : '全球'
-      const state = amount === 0 ? '清除' : `设为 ${amount >= 0 ? '+' : ''}${amount} 单位/月`
-      text = `${who}的「${GOODS[good].name}」基础需求${state}（原 ${before}）`
+      const parts: string[] = []
+      if (setPerPop) {
+        parts.push(perPop === 0 ? '人均基准清除' : `人均基准 ${perPop >= 0 ? '+' : ''}${perPop}（每 popFactor，随人口缩放）`)
+      }
+      if (setPct) parts.push(pct === 0 ? '百分比清除' : `总量 ${pct >= 0 ? '+' : ''}${pct}%`)
+      text = `${who}的「${GOODS[good].name}」需求：${parts.join('，')}`
       break
     }
     case 'removeModifier': {
