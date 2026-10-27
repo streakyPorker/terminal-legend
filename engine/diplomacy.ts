@@ -8,6 +8,7 @@ import type {
   WorldState,
 } from '../types'
 import { addModifier, applyModifiers } from './modifiers'
+import { WAR_GOAL_NAMES } from './data/goods'
 import { installBlock, validateBlockConfig } from './blocks'
 import {
   compileWarBlock,
@@ -595,13 +596,35 @@ export function endWar(
   }
 
   world.wars = world.wars.filter(one => one.id !== war.id)
+  // PT-120: the chronicle entry must say WHO won, WHETHER the war goal landed,
+  // and what the terms were — otherwise a finished war leaves no trace at all.
+  const goalApplied = winner !== 'white' && winnerIds.includes(war.goalOwner)
+  const parts: string[] = [
+    winner === 'white'
+      ? `《${war.name}》以白和告终（未附加条款）`
+      : `《${war.name}》结束：${winner === 'attackers' ? '进攻方' : '防守方'}获胜`,
+  ]
+  if (winner !== 'white') {
+    parts.push(
+      `战争目标「${WAR_GOAL_NAMES[war.goal]}」${goalApplied ? '已生效' : '未达成'}`,
+    )
+  }
+  if (terms?.total !== undefined && terms.total > 0) {
+    parts.push(
+      `赔款 ${terms.total.toFixed(0)} 金${terms.maxMonths === undefined ? '' : `（分至多 ${terms.maxMonths} 期）`}`,
+    )
+  }
+  const names = (ids: string[]): string =>
+    ids
+      .map(id => world.countries[id]?.name ?? id)
+      .join('、')
+  parts.push(
+    `胜方 ${names(winnerIds) || '无'}｜负方 ${names(loserIds) || '无'}｜终战分数 ${Math.round(war.warScore)}`,
+  )
   log.push({
     date: { ...world.date },
     kind: 'war',
-    text:
-      winner === 'white'
-        ? `《${war.name}》以白和告终`
-        : `《${war.name}》结束：${winner === 'attackers' ? '进攻方' : '防守方'}获胜`,
+    text: parts.join('｜'),
   })
 }
 

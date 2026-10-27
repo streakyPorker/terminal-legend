@@ -616,3 +616,60 @@
 - 关联：`engine/actions/build.ts`、`hooks/tools.ts`、`docs/gm-handbook.md`、
   `tests/s2-upgrade.test.ts`（PT-117 回归）。
 - 状态：**fixed（本次）**
+
+
+### PT-118 升级单次最多 999 座且不提示，大批量要连下三次
+
+- 日期：2026-10-27
+- 游戏内日期：1842.07（QING）
+- 现象：大清有 2672 座农场，执行
+  `v3_action upgrade { building: farms, fromTier: 1, toTier: 2, count: 999 }`
+  只生成 999 座的升级单；要覆盖全部存量必须再下两次（999 + 999 + 670）。
+  工具描述里 `count` 的上限写的是 **999**，玩家无从得知这是**单项目上限**而非
+  「按存量执行」的上限，回执也不提示「还有 1673 座未进单」。
+- 判断：PT-107 已把「超过存量按最大量执行」写进语义，却没有说明还有一层项目上限，
+  于是 `count: 999` 看起来像「能升多少升多少」，实际只覆盖三分之一。
+- 建议：要么把单项目上限提到可覆盖整表（如 9999），要么在回执里明确写
+  「本单 999 座，剩余 N 座未升级，可再下一次」。
+- 关联：`engine/actions/build.ts`（`MAX_PROJECT_COUNT` 或等价的 clamp）、`hooks/tools.ts` 的 `count` 说明。
+- 状态：**open**
+
+
+### PT-119 建造队列里出现小数座数「农场×6.107036235913711」
+
+- 日期：2026-10-27
+- 游戏内日期：1843.01（QING）
+- 现象：`v3_inspect construction` 与 `v3_status` 的国有队列里出现
+  `农场×6.107036235913711（工程量 59.5/59.5 点）`。座数本应是整数，
+  小数来自升级完成时「源等级存量不足、顺延」的余量拆分（PT-107 之后的
+  `completeUpgrade` 余数路径），拆分时把 `count` 按比例摊成了浮点。
+- 影响：显示上荒谬；工程量的含义也变得不清楚（半座农场？）。
+  若再被当作 private/state 建造计数使用，会在人口/产出里引入不可见的小数席位。
+- 建议：拆分处对 `count` 取整（余数并回最后一部分或单独列一座），
+  并在 `normalizeConstructionQueue` 里把存量 `count` 规范为整数。
+- 关联：`engine/construction.ts`（`completeUpgrade` 余数、`normalizeConstructionQueue`）、
+  `tests/s2-upgrade.test.ts`（PT-119 回归）。
+- 处置：`completeUpgrade` 改为整座运算（`round` 请求数、`floor` 可用存量），
+  `normalizeConstructionQueue` 把队列里的小数座数一次性归整。
+- 状态：**fixed（本次）**
+
+
+### PT-120 战争结束没有任何编年史记录，和约条款也无从查证
+
+- 日期：2026-10-27
+- 游戏内日期：1843.01（QING，清日战争结束）
+- 现象：托管推进时提示「因『战争结束』停下」，但：
+  1. `v3_inspect log { kind: war }` 返回 **0 条**——整场清日战争（1842.09 宣战、
+     分数到 38、制海权完全控制）在编年史里一条 war 记录都没有；
+  2. `v3_inspect diplomacy` 只显示日本解除敌对状态（关系 −99、恶名 10），
+     **看不到和约内容**：战争目标「开放市场」是否生效、有没有赔款、期限多久，全无交代；
+  3. `fiscal` 的赔款日程里没有日本一项，说明没有收到赔款——但玩家从未参与议和。
+- 判断：AI 求和后引擎直接终战，却没有产出「谁赢了、条约写了什么」的记录，
+  玩家无法据此判断战争目标是否达成。这与「结算要可解释」的约定冲突。
+- 建议：终战时写一条 `kind: war` 的编年史（胜负、战争分数、条约条款、赔款分期），
+  并在 diplomacy 面板新增「最近条约」小节。
+- 关联：`engine/diplomacy.ts`（`endWar`）、`engine/actions/diplomacy.ts`（`peace`）、
+  `tests/war-goals.test.ts`（PT-120 回归）。
+- 处置：`peace` 动作改为把 `endWar` 写入的条约行落进 `world.log`（原先传的是空数组，
+  日志被丢弃）；`endWar` 的条目补上胜负、战争目标是否达成、赔款总额与分期、终战分数。
+- 状态：**fixed（本次）**

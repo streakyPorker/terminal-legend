@@ -1,4 +1,4 @@
-import type { Country, GoodId, WorldState } from '../../types'
+import type { Country, GoodId, LogEntry, WorldState } from '../../types'
 import { GOODS } from '../data'
 import {
   EMBARGO_MONTHS_MAX,
@@ -176,6 +176,10 @@ export function actionDiplomacy(
             ? params.indemnityMonths
             : undefined,
       }
+      // PT-120: endWar writes the treaty line into the array it is given; an
+      // action has no monthly log buffer of its own, so pass the world's and
+      // trim it the same way every other chronicle writer does.
+      const treatyLog: LogEntry[] = []
       endWar(
         world,
         war,
@@ -188,10 +192,13 @@ export function actionDiplomacy(
               ? 'defenders'
               : 'attackers'
             : 'white',
-        [],
+        treatyLog,
         terms,
       )
-      return { ok: true, text: `${tag} 与${target.name}停战` }
+      world.log.push(...treatyLog)
+      if (world.log.length > 400) world.log.splice(0, world.log.length - 400)
+      const treaty = treatyLog[0]?.text ?? `${tag} 与${target.name}停战`
+      return { ok: true, text: `${tag} 与${target.name}停战：${treaty}` }
     }
     case 'embargo': {
       if (target.id === country.id) return { ok: false, text: `${tag} 不能对自己禁运` }

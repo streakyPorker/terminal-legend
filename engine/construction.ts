@@ -485,17 +485,25 @@ export function completeUpgrade(
   ensureConstructionFields(country)
   const from = project.fromTier ?? 0
   const to = project.toTier ?? from + 1
-  const available = Math.max(0, country.econ.buildingTiers[project.building]?.[from] ?? 0)
-  const moved = Math.min(project.count, available)
+  // PT-119: seats are whole objects. `buildingTiers` is allowed to carry
+  // fractions (wear/idling scales every tier by a factor), but a construction
+  // ORDER may not — rounding here keeps a partial seat from being "moved"
+  // half-way and then re-queued as `农场×6.107…`.
+  const requested = Math.max(1, Math.round(project.count))
+  const available = Math.max(
+    0,
+    Math.floor(country.econ.buildingTiers[project.building]?.[from] ?? 0),
+  )
+  const moved = Math.min(requested, available)
   if (moved > 0) {
     applyBuildingDelta(country, project.building, from, -moved)
     applyBuildingDelta(country, project.building, to, moved)
   }
-  if (moved >= project.count) return undefined
+  if (moved >= requested) return undefined
   const remainder: ConstructionProject = {
     ...project,
     id: `${project.id}-rem`,
-    count: project.count - moved,
+    count: requested - moved,
     monthsLeft: 1,
     lastSpend: 0,
     lastCapacity: 0,
@@ -523,6 +531,14 @@ export function normalizeConstructionQueue(country: Country): void {
       Math.abs(project.monthlyCost - expectedMonthly) > 1e-9
     ) {
       project.monthsLeft = 1
+      project.monthlyCost = expectedMonthly
+      changed = true
+    }
+    // PT-119: a queued order always names a whole number of seats. Older saves
+    // (and the upgrade-remainder path) can carry a fractional count; round it
+    // once here so every later calculation sees an integer.
+    if (project.count !== Math.round(project.count)) {
+      project.count = Math.max(1, Math.round(project.count))
       project.monthlyCost = expectedMonthly
       changed = true
     }

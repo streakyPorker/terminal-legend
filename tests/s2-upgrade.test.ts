@@ -572,3 +572,30 @@ describe('PT-117 a build order with no tier lands on the highest unlocked tier',
     restore()
   })
 })
+
+describe('PT-119 fractional seats never leak into a construction order', () => {
+  test('a fractional source tier yields a whole-number remainder', () => {
+    const world = newWorld(8602, 'QING')
+    const qing = world.countries.QING
+    if (qing === undefined) throw new Error('missing QING')
+    // Wear scales a tier by a factor, so seats go fractional.
+    qing.econ.buildingTiers.steelMills = [3.4]
+    qing.econ.buildings.steelMills = 3.4
+    const remainder = completeUpgrade(qing, {
+      id: 'frac-up',
+      building: 'steelMills',
+      count: 6.107036235913711,
+      kind: 'upgrade',
+      fromTier: 0,
+      toTier: 1,
+      owner: 'state',
+      monthsLeft: 1,
+      monthlyCost: 2,
+      lastSpend: 0,
+      progress: 0,
+      startedAt: { ...world.date },
+    })
+    expect(remainder === undefined || Number.isInteger(remainder.count)).toBe(true)
+    if (remainder !== undefined) expect(remainder.count).toBe(3)
+  })
+})

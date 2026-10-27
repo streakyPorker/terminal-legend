@@ -310,3 +310,20 @@ describe('T4 AI validation (plan §5/§6)', () => {
     ).toBe(true)
   })
 })
+
+describe('PT-120 the peace move leaves a treaty line in the chronicle', () => {
+  test('a won war logs the winner, the goal outcome and the terms', () => {
+    const world = newWorld(8801, 'QING')
+    declare(world, 'JAP', 'openMarket')
+    makePeace(world, 'JAP', 50)
+
+    expect(world.wars.length).toBe(0)
+    const entries = world.log.filter(entry => entry.kind === 'war')
+    expect(entries.length).toBeGreaterThan(0)
+    const text = entries[entries.length - 1]?.text ?? ''
+    expect(text).toContain('结束')
+    expect(text).toContain('开放市场')
+    expect(text).toContain('已生效')
+    expect(text).toContain('大清')
+  })
+})
