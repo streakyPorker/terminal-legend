@@ -339,7 +339,7 @@ const CHECK: Record<BuildingId, { I: number; II: number; III: number; IV: number
   steelMills: { I: 7.148, II: 10.602, III: 15.57, IV: 21.14, V: 28.83 },
   machineryWorks: { I: 6.272, II: 9.056, III: 13.006, IV: 16.834, V: 22.377 },
   arsenals: { I: 8.462, II: 11.905, III: 16.697, IV: 21.441, V: 28.092 },
-  textileMills: { I: 3.02, II: 4.288, III: 6.024, IV: 7.957, V: 10.79 },
+  textileMills: { I: 2.97, II: 4.222, III: 5.94, IV: 7.849, V: 10.651 },
   furnitureWorks: { I: 2.189, II: 3.091, III: 4.317, IV: 5.506, V: 7.407 },
   luxuryWorks: { I: 23.676, II: 31.359, III: 41.487, IV: 54.391, V: 70.596 },
 
