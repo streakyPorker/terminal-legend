@@ -67,3 +67,17 @@ describe('v3_cheat demand (PT-097)', () => {
     expect(applyCheat(world, { action: 'demand', good: 'grain' }).ok).toBe(false)
   })
 })
+
+describe('v3_cheat legitimacy (PT-100)', () => {
+  test('moves the stock directly and clamps at 0..100', () => {
+    const world = newWorld(9710, 'QING')
+    const qing = countryOf(world, 'QING')
+    const before = qing.government.legitimacy
+    expect(applyCheat(world, { action: 'legitimacy', amount: 20, country: 'QING' }).ok).toBe(true)
+    expect(Math.abs(qing.government.legitimacy - (before + 20))).toBeLessThan(1e-9)
+    expect(applyCheat(world, { action: 'legitimacy', amount: 500, country: 'QING' }).ok).toBe(true)
+    expect(qing.government.legitimacy).toBe(100)
+    expect(applyCheat(world, { action: 'legitimacy', amount: -500, country: 'QING' }).ok).toBe(true)
+    expect(qing.government.legitimacy).toBe(0)
+  })
+})

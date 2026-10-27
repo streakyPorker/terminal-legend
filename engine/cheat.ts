@@ -56,6 +56,19 @@ export function applyCheat(
       text = `${who}科技点${amount >= 0 ? '增加' : '减少'} ${Math.abs(amount).toFixed(1)}，现为 ${subject.tech.points.toFixed(1)}`
       break
     }
+    case 'legitimacy': {
+      // PT-100: legitimacy is a *stock* that drifts toward a target at 8%/month,
+      // so a `modifier` on it only moves the target. This action moves the stock
+      // itself, for when the GM wants the number to change now.
+      const amount = finite(params.amount)
+      const target = subjectFor(params.country)
+      if (target === undefined) return { ok: false, text: `未知国家 ${String(params.country)}` }
+      const before = target.government.legitimacy
+      target.government.legitimacy = Math.min(100, Math.max(0, before + amount))
+      const who = target.id === player.id ? '' : `${target.name}的`
+      text = `${who}合法性${amount >= 0 ? '提高' : '降低'} ${Math.abs(amount).toFixed(1)}，${before.toFixed(0)} → ${target.government.legitimacy.toFixed(0)}`
+      break
+    }
     case 'navy': {
       const amount = finite(params.amount)
       const subject = subjectFor(params.country)
