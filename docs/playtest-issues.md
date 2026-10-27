@@ -539,3 +539,44 @@
 - 关联：`engine/construction.ts`（`constructionLoad` / `constructionSchedule` / `settleConstruction`）、
   `tests/cheat-demand.test.ts`（PT-113 回归）、手册 §4.6。
 - 状态：**fixed（本次）**
+
+
+### PT-114 `route close` 只能关出口航线，进口航线关不掉
+
+- 日期：2026-10-27
+- 游戏内日期：1841.03（QING）
+- 现象：国内钢铁已过剩（产出 735 ÷ 需求 214），而队列里有一条 **钢铁 AUS→QING L3** 的
+  **进口**航线。执行 `v3_action route { good: steel, op: close, partner: AUS }`
+  返回「未找到与奥地利的钢铁 QING→AUS 航线」——工具把方向固定成 `玩家→对方`，
+  于是任何以玩家为**进口方**的航线都无法从工具侧关闭。
+- 影响：玩家无法关停倒灌本国市场的进口航线（洋布、洋钢），只能看着它压低本国工业价格；
+  这与「倾销/保护本国产业」的核心玩法直接冲突。
+- 建议：`close` / `lower` 增加可选 `direction`（或自动匹配任一方向），
+  回执里注明关闭的是 `X→QING` 还是 `QING→X`。
+- 关联：`engine/actions/route.ts`、`hooks/tools.ts` 的 `route` 参数说明、手册 §4.5。
+- 状态：**open**
+
+
+### PT-115 官署没有等级进阶路线，无法像工厂一样升级
+
+- 日期：2026-10-27
+- 游戏内日期：1841.07（QING，洪武元年）
+- 现象：玩家要求「升级官署，服务产出 +50%」，执行
+  `v3_action upgrade { building: offices, fromTier: 1, toTier: 2 }` 被拒：
+  「官署的 2 级尚未解锁（当前上限 1 级）」。查科技树，**没有任何节点**给官署
+  `unlockTier`（钢厂/机械厂/纺织厂/矿场/农场/营造所/基础设施都有），
+  `engine/data/buildings.ts` 里官署也只有 I 级配方。
+- 判断：官署是服务产出的主力（0.8/座，是学校的 8 倍），也是行政能力与官僚的来源，
+  却是全表里少数**永远不能升级**的生产建筑。这让「把行政体系建上去」这条路线
+  在工程量与造价上无法体现，只能靠堆座数，与工厂的成长曲线不对称。
+- 需求：在行政支线补等级节点，建议
+  - `admin-3 财政改革` → `unlockTier offices 2`（与「税收效率 +8%」同一语义层）
+  - `admin-5 统计与普查` → `unlockTier offices 3`
+  - 并给 `BUILDING_RECIPES.offices` 补 II/III 级配方（服务 0.8 → 1.12 → 1.5 量级，
+    工作量与造价随 `WORKLOAD_TIER_MULTIPLIER` 同步膨胀）。
+  同类缺口值得一并检查：`schools`、`universities`、`barracks` 目前同样只有 I 级。
+- 处置（临时）：以 `v3_cheat modifier { stat: servicesOutput, value: 50 }`
+  施加「官署改制」永久修正，等表格补齐后撤销。
+- 关联：`engine/data/tech.ts`（admin-3 / admin-5）、`engine/data/buildings.ts`、
+  `engine/data/tiers.ts`、手册 §3。
+- 状态：**open（待实现）**
