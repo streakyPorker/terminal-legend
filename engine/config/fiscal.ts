@@ -39,6 +39,16 @@ export const EDUCATION_EXPENSE_PER_POP = 0.03
  */
 export const WELFARE_EXPENSE_PER_POP_SOL = 0.0008
 export const MARKET_LOSS_COEF = 0.02
+/**
+ * PT-102: market loss is a *leakage* — goods and silver lost in transit, graft,
+ * and the friction of a state that cannot police its own markets. It therefore
+ * scales with bureaucracy: at BUREAUCRACY_REFERENCE the coefficient is 1, a
+ * weaker administration leaks more and a stronger one leaks less.
+ */
+export const MARKET_LOSS_BUREAUCRACY_REFERENCE = 50
+export const MARKET_LOSS_BUREAUCRACY_SPAN = 100
+export const MARKET_LOSS_BUREAUCRACY_MIN = 0.5
+export const MARKET_LOSS_BUREAUCRACY_MAX = 1.6
 export const UPKEEP_PER_BUILDING = 0.01
 /** Cap on a spending appropriation (per category). */
 export const SPENDING_MAX = 50

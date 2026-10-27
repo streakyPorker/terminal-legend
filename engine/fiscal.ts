@@ -50,6 +50,10 @@ import {
   FUND_RATE_MIN,
   FUND_WAR_SPREAD,
   MARKET_LOSS_COEF,
+  MARKET_LOSS_BUREAUCRACY_MAX,
+  MARKET_LOSS_BUREAUCRACY_MIN,
+  MARKET_LOSS_BUREAUCRACY_REFERENCE,
+  MARKET_LOSS_BUREAUCRACY_SPAN,
   NAVY_EXPENSE_PER_UNIT,
   NAVY_SPENDING_SHARE,
   UPKEEP_PER_BUILDING,
@@ -455,7 +459,15 @@ export function expenseParts(
     marketLoss:
       gdp *
       (1 - applyModifiers(country, 'marketAccess', country.econ.marketAccess)) *
-      MARKET_LOSS_COEF,
+      MARKET_LOSS_COEF *
+      // PT-102: bad bureaucracy leaks more of the goods and silver in transit.
+      clamp(
+        1 +
+          (MARKET_LOSS_BUREAUCRACY_REFERENCE - (country.bureaucracy?.score ?? 0)) /
+            MARKET_LOSS_BUREAUCRACY_SPAN,
+        MARKET_LOSS_BUREAUCRACY_MIN,
+        MARKET_LOSS_BUREAUCRACY_MAX,
+      ),
     upkeep: (b.universities + b.barracks) * UPKEEP_PER_BUILDING,
     reparations: country.econ.reparationsPaid ?? 0,
     constructionSubsidy:
