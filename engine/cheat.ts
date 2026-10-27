@@ -354,7 +354,7 @@ export function applyCheat(
     default:
       return {
         ok: false,
-        text: '未知天命：treasury / techPoints / building / relations / warScore / date / event / leader / modifier / removeModifier / clearModifiers',
+        text: '未知天命：treasury / techPoints / navy / building / finishProjects / relations / warScore / date / event / leader / modifier / removeModifier / clearModifiers / demand / legitimacy / prices',
       }
   }
 
