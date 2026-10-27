@@ -5,6 +5,7 @@ import type {
   GdpComponents,
   GoodId,
 } from '../types'
+import { ENGEL_INCOME_ELASTICITY, ENGEL_RATIO_MAX, ENGEL_RATIO_MIN } from './config/demand'
 import {
   ARTISAN_OUTPUT,
   ARTISAN_SERVICE_OUTPUT,
@@ -313,10 +314,32 @@ function computeDemand(country: Country): DemandBreakdown {
   for (const id of basket.goods) subsistenceCost += SUBSISTENCE[id] * prices[id]
   const supernumerary =
     Math.max(0, incomePerCapita - subsistenceCost) * CONSUMPTION_PROPENSITY
+  // PT-098: Engel curve. The discretionary weights are tilted by how far income
+  // sits above the subsistence line — staples lose weight, superior goods gain
+  // it — then renormalised so the household's total discretionary outlay is
+  // unchanged (only the mix moves).
+  const incomeRatio = clamp(
+    incomePerCapita / Math.max(subsistenceCost, 1e-6),
+    ENGEL_RATIO_MIN,
+    ENGEL_RATIO_MAX,
+  )
+  const weight: Partial<Record<GoodId, number>> = {}
+  let baseWeight = 0
+  let tiltedWeight = 0
+  for (const id of basket.goods) {
+    const base = basket.elasticity[id]
+    // Income elasticity of the weight: staples grow slower than income, superior
+    // goods faster. Always > 0, so quantities never shrink as income rises.
+    const tilted = base * Math.pow(incomeRatio, ENGEL_INCOME_ELASTICITY[id] ?? 1)
+    weight[id] = tilted
+    baseWeight += base
+    tiltedWeight += tilted
+  }
+  const engelNorm = tiltedWeight > 0 ? baseWeight / tiltedWeight : 1
   for (const id of basket.goods) {
     const subsistence = popFactor * SUBSISTENCE[id]
     const discretionary =
-      (popFactor * basket.elasticity[id] * supernumerary) /
+      (popFactor * (weight[id] ?? 0) * engelNorm * supernumerary) /
       Math.max(PRICE_DISCRETIONARY_FLOOR, prices[id])
     // `consumption` scales discretionary spending, never the survival floor.
     consumer[id] = demand(
@@ -443,13 +466,18 @@ function computeDemand(country: Country): DemandBreakdown {
   // like the subsistence floor — and the percentage part scales that good's
   // whole demand. Both are applied once, after every block has landed.
   const demandBase = country.econ.demandBase
+  const demandFlat = country.econ.demandFlat
   const demandPct = country.econ.demandPct
-  if (demandBase !== undefined || demandPct !== undefined) {
+  if (demandBase !== undefined || demandFlat !== undefined || demandPct !== undefined) {
     for (const id of GOOD_IDS) {
-      const pct = demandPct?.[id] ?? 0
-      if (pct !== 0) out[id] *= 1 + pct / 100
+      // `(model + popFactor × x + a) × (1 + pct)` — the per-head coefficient,
+      // the population-independent constant, then the percentage on the sum.
       const perPop = demandBase?.[id] ?? 0
       if (perPop !== 0) out[id] += popFactor * perPop
+      const flat = demandFlat?.[id] ?? 0
+      if (flat !== 0) out[id] += flat
+      const pct = demandPct?.[id] ?? 0
+      if (pct !== 0) out[id] *= 1 + pct / 100
     }
   }
 

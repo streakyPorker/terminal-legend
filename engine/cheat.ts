@@ -198,26 +198,32 @@ export function applyCheat(
       break
     }
     case 'demand': {
-      // PT-097: set standing demand levers for one good. Two independent knobs:
-      //   amount  — absolute, *per popFactor* (so it scales with population);
-      //   value   — a percentage multiplier on that good's whole demand.
-      // Omitting `country` applies them to every power in the world. Each knob
-      // is a level, not a delta: calling again replaces it, 0 clears it.
+      // PT-097: set the GM's demand levers for one good. A country's demand for
+      // a good reads `(model + popFactor × x + a) × (1 + pct)`, so there are
+      // three independent knobs:
+      //   amount — x, the per-popFactor coefficient (scales with population);
+      //   flat   — a, a constant quantity per month;
+      //   value  — pct, a percentage multiplier on the whole sum.
+      // Omit `country` to apply to every power in the world. Each knob is a
+      // level: calling again replaces it, 0 clears it.
       const good = String(params.good ?? '') as GoodId
       if (!(GOOD_IDS as readonly string[]).includes(good)) {
         return { ok: false, text: `未知商品 ${String(params.good)}。可用：${GOOD_IDS.join(', ')}` }
       }
       const setPerPop = params.amount !== undefined
+      const setFlat = params.flat !== undefined
       const setPct = params.value !== undefined
-      if (!setPerPop && !setPct) {
-        return { ok: false, text: 'demand 需要 amount（人均基准）或 value（百分比）其中之一。' }
+      if (!setPerPop && !setFlat && !setPct) {
+        return {
+          ok: false,
+          text: 'demand 需要 amount（人均系数 x）/ flat（常数项 a）/ value（百分比）至少其一。',
+        }
       }
       const perPop = setPerPop ? finite(params.amount) : 0
+      const flat = setFlat ? finite(params.flat) : 0
       const pct = setPct ? finite(params.value) : 0
       const scoped = typeof params.country === 'string' && params.country !== ''
-      const targets = scoped
-        ? [subjectFor(params.country)]
-        : Object.values(world.countries)
+      const targets = scoped ? [subjectFor(params.country)] : Object.values(world.countries)
       if (targets.some(target => target === undefined)) {
         return { ok: false, text: `未知国家 ${String(params.country)}` }
       }
@@ -229,6 +235,12 @@ export function applyCheat(
           else base[good] = perPop
           target.econ.demandBase = base
         }
+        if (setFlat) {
+          const flats = { ...(target.econ.demandFlat ?? {}) }
+          if (flat === 0) delete flats[good]
+          else flats[good] = flat
+          target.econ.demandFlat = flats
+        }
         if (setPct) {
           const pcts = { ...(target.econ.demandPct ?? {}) }
           if (pct === 0) delete pcts[good]
@@ -239,9 +251,10 @@ export function applyCheat(
       const who = scoped ? targets[0]?.name ?? '' : '全球'
       const parts: string[] = []
       if (setPerPop) {
-        parts.push(perPop === 0 ? '人均基准清除' : `人均基准 ${perPop >= 0 ? '+' : ''}${perPop}（每 popFactor，随人口缩放）`)
+        parts.push(perPop === 0 ? 'x 清除' : `x=${perPop}（每 popFactor，随人口缩放）`)
       }
-      if (setPct) parts.push(pct === 0 ? '百分比清除' : `总量 ${pct >= 0 ? '+' : ''}${pct}%`)
+      if (setFlat) parts.push(flat === 0 ? 'a 清除' : `a=${flat}（每月常数）`)
+      if (setPct) parts.push(pct === 0 ? '百分比清除' : `×(${1 + pct / 100})`)
       text = `${who}的「${GOODS[good].name}」需求：${parts.join('，')}`
       break
     }

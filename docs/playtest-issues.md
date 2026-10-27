@@ -56,6 +56,9 @@
 | PT-093 | 企业所得税税基只认建筑经营利润，与全国利润池差四倍 | 0007 / ADR 0023 | fixed（a1f6587） |
 | PT-094 | 采掘建筑产量相对下游偏低：一座钢厂要三座铁矿喂 | 0011 F2/F7 | fixed（a261873） |
 | PT-096 | 建筑毛利与产业链比例整体失衡：越高级越不赚钱 | 手册 §4.3b / 0007 | fixed（1222c85） |
+| PT-097 | 天命缺少调整商品需求的入口 | 手册 §3 | fixed（2574669） |
+| PT-098 | 需求模型缺少恩格尔曲线与国家基准 | 手册 §4.3c | fixed（本次） |
+| PT-099 | 电力/机车需求不随科技成长 | 手册 §4.3c | fixed（本次） |
 
 <details><summary>已结（59 条，详情见 archive）</summary>
 
@@ -336,3 +339,31 @@
   `tests/economy-recipe-calibration.test.ts`、`tests/tier-calibration.test.ts`、
   `tests/s5-electricity-balance.test.ts`、`tests/s4-new-industries.test.ts`、手册 §4.3b。
 - 状态：**fixed（1222c85）**
+
+
+### PT-098 需求模型缺少恩格尔曲线，也没有国家基准
+
+- 日期：2026-10-27
+- 世界：1839.03
+- 现象：粮食长期过剩 2.3 倍、价格趴在基准六成；服务业短缺、奢侈品卖不上价；
+  各国需求结构完全一样，只有人口规模不同。
+- 判断：Stone-Geary 给每种消费品固定的收入弹性，收入翻倍只是「等比多吃」，
+  不会从口粮转向服务与奢侈；也没有任何国别差异。
+- 处置：
+  - 居民消费权重改为 `收入弹性 × 收入比^恩格尔指数`，再做归一化——份额随收入重排，
+    但每种商品的绝对量仍随收入增长（指数全部 > 0）。
+  - 每国加一组常数需求 `a`（`nationalDemand`，单位/月，不随人口缩放）。
+  - GM 旋钮扩展为 `a + popFactor·x`，再乘百分比。
+- 关联：`engine/config/demand.ts`、`engine/economy.ts`（`computeDemand`）、
+  `engine/data/countries.ts`、`engine/data/world.ts`、手册 §4.3c。
+- 状态：**fixed（本次）**
+
+### PT-099 电力、机车等新商品没有随科技成长的需求
+
+- 日期：2026-10-27
+- 现象：电厂、机车厂解锁后，这两种商品只有工业中间需求，居民从不消费；
+  需求曲线是阶跃式的，没有「随科技扩散逐渐增长」的过程。
+- 处置：`industry-4 电气化` 给 electricity / locomotives 各 `demandShift +100%`，
+  `industry-6 电力工业` 再加 100% / 60%，使其进入居民篮子并随节点扩张。
+- 关联：`engine/data/tech.ts`、`engine/data/goods.ts`（`consumerBasket`）、手册 §4.3c。
+- 状态：**fixed（本次）**

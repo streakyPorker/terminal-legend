@@ -190,6 +190,8 @@ export function createWorld(seed: number, playerId = 'QING'): WorldState {
         tariff: seedRow.tariff,
         spending: { ...seedRow.spending },
         buildings: { ...seedRow.buildings },
+        // PT-098: the national baseline demand `a` (population-independent).
+        demandFlat: { ...(seedRow.nationalDemand ?? {}) },
         buildingTiers: initialBuildingTiers(seedRow.buildings),
         goods: zeroGoods(),
         prices: basePrices(),

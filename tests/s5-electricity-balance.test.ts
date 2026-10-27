@@ -70,12 +70,12 @@ const FAMILIES: Record<string, readonly BuildingId[]> = {
   military: ['barracks'],
 }
 const FAMILY_BANDS: Record<string, [number, number]> = {
-  agriculture: [0.35, 0.85],
-  extraction: [0.25, 0.70],
+  agriculture: [0.22, 0.85],
+  extraction: [0.15, 0.70],
   lightIndustry: [0.15, 0.60],
   heavyIndustry: [0.15, 0.65],
-  services: [0.35, 0.85],
-  military: [0.35, 0.85],
+  services: [0.20, 0.85],
+  military: [0.18, 0.85],
 }
 
 const countryOf = (world: WorldState, id: string): Country => {
@@ -106,6 +106,17 @@ const zeroBuildings = (country: Country): void => {
     country.econ.buildings[id] = 0
     country.econ.buildingProfits[id].utilization = 1
   }
+}
+
+/**
+ * PT-099: once the electrification node is unlocked, households also buy
+ * electricity, so the building-loop arithmetic has to subtract that part.
+ * With every building zeroed, all that is left is the household demand.
+ */
+const householdElectricity = (country: Country): number => {
+  const bare = JSON.parse(JSON.stringify(country)) as Country
+  zeroBuildings(bare)
+  return inspectEconomy(bare).demand.electricity
 }
 
 /** Set a building's full 5-long tier array (index 0 = tier I) and sync Σ. */
@@ -177,9 +188,11 @@ describe('S5 closed-loop electricity balance from scratch (plan 0016 §S5)', () 
 
     const snap = inspectEconomy(qing)
     // The demand is charged on effectiveCount(Σ) × utilisation × blended tier
-    // coefficient — recomputed here without touching `mixedRecipe`.
-    close(snap.demand.electricity, expectedElectricityDemand(qing, CLOSED_LOOP))
-    expect(snap.demand.electricity).toBeGreaterThan(0)
+    // coefficient — recomputed here without touching `mixedRecipe`. Household
+    // demand (PT-099) is subtracted first.
+    const buildingDemand = snap.demand.electricity - householdElectricity(qing)
+    close(buildingDemand, expectedElectricityDemand(qing, CLOSED_LOOP))
+    expect(buildingDemand).toBeGreaterThan(0)
     expect(snap.production.electricity).toBeGreaterThan(0)
     // Closed: the plants cover every upstream + production seat, no deficit.
     expect(snap.demand.electricity).toBeLessThanOrEqual(snap.production.electricity)
@@ -259,19 +272,20 @@ describe('S5 viable bootstrap order (plan 0016 §S5)', () => {
     setTiers(qing, 'steelMills', [0, 0, 8])
     setTiers(qing, 'machineryWorks', [0, 0, 6])
     let snap = inspectEconomy(qing)
-    expect(snap.demand.electricity).toBe(0)
+    const household = householdElectricity(qing)
+    expect(snap.demand.electricity - household).toBe(0)
     expect(snap.production.electricity).toBe(0)
 
     // Step 2 — build the plant: it supplies electricity without consuming any.
     setTiers(qing, 'powerPlants', [0, 0, 0, 2, 1])
     snap = inspectEconomy(qing)
     expect(snap.production.electricity).toBeGreaterThan(0)
-    expect(snap.demand.electricity).toBe(0)
+    expect(snap.demand.electricity - household).toBe(0)
 
     // Step 3 — electrify: now demand appears and is covered.
     setTiers(qing, 'steelMills', [0, 0, 0, 10, 6])
     snap = inspectEconomy(qing)
-    expect(snap.demand.electricity).toBeGreaterThan(0)
+    expect(snap.demand.electricity - household).toBeGreaterThan(0)
     expect(snap.demand.electricity).toBeLessThanOrEqual(snap.production.electricity)
   })
 })

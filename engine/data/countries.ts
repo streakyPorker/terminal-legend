@@ -1,5 +1,6 @@
 import type {
   BuildingId,
+  GoodId,
   Leader,
   PoliticalEconomy,
   Region,
@@ -116,6 +117,8 @@ type CountrySeed = {
   resources: Resources
   region: Region
   opium: { outputFactor: number; demandFactor: number }
+  /** PT-098: constant per-month demand `a` per good (does not scale with population). */
+  nationalDemand?: Partial<Record<GoodId, number>>
   politicalEconomy: PoliticalEconomy
   /** Legacy linear level (1–10); `createWorld` maps it to the era tech tree. */
   techLevel: number
@@ -172,6 +175,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     resources: resources(85, 60, 65, 40),
     region: 'eastAsia',
     opium: { outputFactor: 0.15, demandFactor: 0.2 },
+    // PT-098: constant (population-independent) baseline demand, 单位/月
+    nationalDemand: { services: 4, clothes: 5, grain: 10, opium: 2 },
     politicalEconomy: politicalEconomy(0.62, 0.23, 0.4, -5),
     techLevel: 1,
     army: 80,
@@ -226,6 +231,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     resources: resources(45, 25, 100, 95),
     region: 'europe',
     opium: { outputFactor: 8.0, demandFactor: 0.02 },
+    // PT-098: constant (population-independent) baseline demand, 单位/月
+    nationalDemand: { services: 10, clothes: 4, coal: 4, steel: 1.5 },
     politicalEconomy: politicalEconomy(0.52, 0.42, 0.55, 10),
     techLevel: 6,
     army: 25,
@@ -280,6 +287,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     resources: resources(70, 55, 55, 60),
     region: 'europe',
     opium: { outputFactor: 0.1, demandFactor: 0.03 },
+    // PT-098: constant (population-independent) baseline demand, 单位/月
+    nationalDemand: { services: 7, liquor: 4, luxury: 1 },
     politicalEconomy: politicalEconomy(0.55, 0.35, 0.5, 5),
     techLevel: 5,
     army: 35,
@@ -334,6 +343,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     resources: resources(60, 45, 80, 70),
     region: 'europe',
     opium: { outputFactor: 0.1, demandFactor: 0.03 },
+    // PT-098: constant (population-independent) baseline demand, 单位/月
+    nationalDemand: { services: 4, steel: 2, arms: 1 },
     politicalEconomy: politicalEconomy(0.54, 0.38, 0.55, 8),
     techLevel: 4,
     army: 25,
@@ -388,6 +399,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     resources: resources(80, 90, 40, 55),
     region: 'europe',
     opium: { outputFactor: 0.1, demandFactor: 0.03 },
+    // PT-098: constant (population-independent) baseline demand, 单位/月
+    nationalDemand: { liquor: 5, wood: 4, grain: 7 },
     politicalEconomy: politicalEconomy(0.63, 0.18, 0.35, -8),
     techLevel: 2,
     army: 90,
@@ -442,6 +455,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     resources: resources(65, 65, 50, 45),
     region: 'europe',
     opium: { outputFactor: 0.1, demandFactor: 0.03 },
+    // PT-098: constant (population-independent) baseline demand, 单位/月
+    nationalDemand: { services: 4, liquor: 3 },
     politicalEconomy: politicalEconomy(0.6, 0.22, 0.4, -3),
     techLevel: 3,
     army: 40,
@@ -496,6 +511,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     resources: resources(90, 85, 75, 70),
     region: 'americas',
     opium: { outputFactor: 0.1, demandFactor: 0.03 },
+    // PT-098: constant (population-independent) baseline demand, 单位/月
+    nationalDemand: { grain: 9, wood: 4, furniture: 1.5 },
     politicalEconomy: politicalEconomy(0.54, 0.4, 0.55, 12),
     techLevel: 3,
     army: 12,
@@ -550,6 +567,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     resources: resources(45, 55, 20, 15),
     region: 'eastAsia',
     opium: { outputFactor: 0.1, demandFactor: 0.03 },
+    // PT-098: constant (population-independent) baseline demand, 单位/月
+    nationalDemand: { grain: 6, wood: 3 },
     politicalEconomy: politicalEconomy(0.6, 0.24, 0.45, 0),
     techLevel: 1,
     army: 15,
@@ -604,6 +623,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     resources: resources(55, 45, 35, 30),
     region: 'middleEast',
     opium: { outputFactor: 0.5, demandFactor: 0.05 },
+    // PT-098: constant (population-independent) baseline demand, 单位/月
+    nationalDemand: { grain: 5, services: 3, opium: 1 },
     politicalEconomy: politicalEconomy(0.62, 0.18, 0.35, -6),
     techLevel: 1,
     army: 30,
@@ -658,6 +679,8 @@ export const COUNTRY_SEEDS: CountrySeed[] = [
     resources: resources(55, 40, 35, 45),
     region: 'europe',
     opium: { outputFactor: 0.1, demandFactor: 0.03 },
+    // PT-098: constant (population-independent) baseline demand, 单位/月
+    nationalDemand: { luxury: 0.5, liquor: 2 },
     politicalEconomy: politicalEconomy(0.61, 0.2, 0.4, -4),
     techLevel: 3,
     army: 18,

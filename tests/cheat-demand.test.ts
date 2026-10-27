@@ -10,54 +10,60 @@ const countryOf = (world: ReturnType<typeof newWorld>, id: string) => {
   return country
 }
 
+const popFactorOf = (country: ReturnType<typeof countryOf>): number =>
+  Math.max(POP_FACTOR_MIN, country.pops.total / POP_FACTOR_DIVISOR)
+
 /**
- * PT-097: the GM needs a lever on one good's demand — for a single power (a
- * boycott, a fashion) or for the whole world. Demand is `popFactor × per-capita
- * base`, so the absolute knob is per popFactor and scales with population; the
- * percentage knob scales that good's whole demand.
+ * PT-097: demand reads `(model + popFactor × x + a) × (1 + pct)`. The GM can set
+ * any of the three per good, for one power or for the whole world.
  */
 describe('v3_cheat demand (PT-097)', () => {
-  test('the absolute knob is per popFactor, so it scales with population', () => {
+  test('x scales with population; a is a constant', () => {
     const world = newWorld(9701, 'QING')
     const qing = countryOf(world, 'QING')
     const before = inspectEconomy(qing).demand.luxury
-    expect(applyCheat(world, { action: 'demand', good: 'luxury', amount: 0.5, country: 'QING' }).ok).toBe(true)
+    const popFactor = popFactorOf(qing)
+
+    expect(
+      applyCheat(world, { action: 'demand', good: 'luxury', amount: 0.5, flat: 10, country: 'QING' }).ok,
+    ).toBe(true)
     const after = inspectEconomy(qing).demand.luxury
-    const popFactor = Math.max(POP_FACTOR_MIN, qing.pops.total / POP_FACTOR_DIVISOR)
-    expect(after - before).toBeGreaterThan(0)
-    // The lift tracks population, not a flat number of units.
-    expect(Math.abs(after - before - popFactor * 0.5)).toBeLessThan(1e-3)
+    expect(Math.abs(after - before - (popFactor * 0.5 + 10))).toBeLessThan(1e-3)
   })
 
-  test('the percentage knob scales that good only, world-wide when unscoped', () => {
+  test('the percentage knob multiplies the whole sum and can be combined', () => {
     const world = newWorld(9702, 'QING')
     const qing = countryOf(world, 'QING')
-    const gbr = countryOf(world, 'GBR')
-    const qingBefore = inspectEconomy(qing).demand.luxury
-    const grainBefore = inspectEconomy(qing).demand.grain
-    expect(applyCheat(world, { action: 'demand', good: 'luxury', value: 50 }).ok).toBe(true)
-    expect(inspectEconomy(qing).demand.luxury).toBeGreaterThan(qingBefore)
-    // Another good in the same country is untouched.
-    expect(Math.abs(inspectEconomy(qing).demand.grain - grainBefore)).toBeLessThan(1e-9)
-    // Unscoped applies to every power.
-    expect(inspectEconomy(gbr).demand.luxury).toBeGreaterThan(0)
-  })
-
-  test('both knobs may be set together, 0 clears each, unknown input is refused', () => {
-    const world = newWorld(9703, 'QING')
-    const qing = countryOf(world, 'QING')
-    const before = inspectEconomy(qing).demand.grain
+    const before = inspectEconomy(qing).demand.luxury
     expect(
-      applyCheat(world, { action: 'demand', good: 'grain', amount: 0.2, value: 25, country: 'QING' })
+      applyCheat(world, { action: 'demand', good: 'luxury', flat: 20, value: 50, country: 'QING' })
         .ok,
     ).toBe(true)
-    expect(inspectEconomy(qing).demand.grain).toBeGreaterThan(before)
-    expect(
-      applyCheat(world, { action: 'demand', good: 'grain', amount: 0, value: 0, country: 'QING' }).ok,
-    ).toBe(true)
-    expect(Math.abs(inspectEconomy(qing).demand.grain - before)).toBeLessThan(1e-6)
+    const after = inspectEconomy(qing).demand.luxury
+    expect(Math.abs(after - (before + 20) * 1.5)).toBeLessThan(1e-3)
+  })
 
-    expect(applyCheat(world, { action: 'demand', good: 'nonsense', amount: 1 }).ok).toBe(false)
+  test('unscoped applies world-wide and 0 clears each knob', () => {
+    const world = newWorld(9703, 'QING')
+    const qing = countryOf(world, 'QING')
+    const gbr = countryOf(world, 'GBR')
+    const qingBefore = inspectEconomy(qing).demand.grain
+    const gbrBefore = inspectEconomy(gbr).demand.grain
+
+    // PT-098: countries carry a national baseline `a`; setting the knob replaces
+    // it, so the delta is (25 − previous a).
+    const qingOld = qing.econ.demandFlat?.grain ?? 0
+    const gbrOld = gbr.econ.demandFlat?.grain ?? 0
+    expect(applyCheat(world, { action: 'demand', good: 'grain', flat: 25 }).ok).toBe(true)
+    expect(Math.abs(inspectEconomy(qing).demand.grain - qingBefore - (25 - qingOld))).toBeLessThan(1e-6)
+    expect(Math.abs(inspectEconomy(gbr).demand.grain - gbrBefore - (25 - gbrOld))).toBeLessThan(1e-6)
+
+    // Clearing restores the model value (no national baseline for QING grain in
+    // this fixture) — so compare against the pre-cheat demand minus the old a.
+    expect(applyCheat(world, { action: 'demand', good: 'grain', flat: 0 }).ok).toBe(true)
+    expect(Math.abs(inspectEconomy(qing).demand.grain - (qingBefore - qingOld))).toBeLessThan(1e-6)
+
+    expect(applyCheat(world, { action: 'demand', good: 'nonsense', flat: 1 }).ok).toBe(false)
     expect(applyCheat(world, { action: 'demand', good: 'grain' }).ok).toBe(false)
   })
 })

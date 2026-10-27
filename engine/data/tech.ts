@@ -162,6 +162,11 @@ export const TECH_NODES: TechNodeDef[] = [
       { kind: 'unlockTier', building: 'locomotiveWorks', tier: 3 },
       { kind: 'unlockBuilding', building: 'powerPlants' },
       { kind: 'unlockBuilding', building: 'locomotiveWorks' },
+      // PT-099: once electricity and rail traction exist, households start
+      // buying them — demand for these goods grows with the tech tree instead
+      // of appearing at full size on day one.
+      { kind: 'demandShift', good: 'electricity', percent: 100 },
+      { kind: 'demandShift', good: 'locomotives', percent: 100 },
     ],
   },
   {
@@ -172,6 +177,9 @@ export const TECH_NODES: TechNodeDef[] = [
     cost: techNodeCost(4),
     prerequisites: ['industry-4'],
     effects: [
+      // PT-099: mass electrification doubles household electricity demand again.
+      { kind: 'demandShift', good: 'electricity', percent: 100 },
+      { kind: 'demandShift', good: 'locomotives', percent: 60 },
       { kind: 'unlockTier', building: 'coalMines', tier: 4 },
       { kind: 'unlockTier', building: 'ironMines', tier: 4 },
       { kind: 'unlockTier', building: 'lumberMills', tier: 4 },

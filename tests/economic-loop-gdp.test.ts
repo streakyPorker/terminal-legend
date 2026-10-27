@@ -42,12 +42,21 @@ describe('E1 expenditure GDP, Stone-Geary and factor shares', () => {
     const base = computeEconomy(fra).demand
     const poor = { grain: base.grain, luxury: base.luxury }
 
+    const baselineLuxury = fra.econ.demandFlat?.luxury ?? 0
+    const baselineGrain = fra.econ.demandFlat?.grain ?? 0
     fra.econ.wages *= 2
     fra.econ.profits *= 2
     const rich = computeEconomy(fra).demand
-    expect(rich.grain).toBeLessThan(poor.grain * 2)
-    expect(rich.grain).toBeGreaterThan(poor.grain)
-    expect(rich.luxury).toBeGreaterThan(poor.luxury * 2)
+    // PT-098: the national baseline `a` does not grow with income, so the
+    // doubling checks look at the variable part only.
+    expect(rich.grain - baselineGrain).toBeLessThan((poor.grain - baselineGrain) * 2)
+    expect(rich.grain - baselineGrain).toBeGreaterThan(poor.grain - baselineGrain)
+    // PT-098: the Engel normalization keeps the household budget balanced, so a
+    // superior good gains *share* rather than literally doubling: compared with
+    // grain, luxury's ratio must rise when income doubles.
+    const poorMix = (poor.luxury - baselineLuxury) / Math.max(1e-9, poor.grain - baselineGrain)
+    const richMix = (rich.luxury - baselineLuxury) / Math.max(1e-9, rich.grain - baselineGrain)
+    expect(richMix).toBeGreaterThan(poorMix)
   })
 
   test('labour utilisation and unemployment move the labour share', async () => {

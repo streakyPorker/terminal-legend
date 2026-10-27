@@ -651,13 +651,16 @@ export type Economy = {
   idlePurchases: number
   /**
    * PT-097: standing demand levers per good, written by `v3_cheat demand`.
-   * - `demandBase[good]` is an absolute *per-popFactor* quantity: the monthly
-   *   demand gains `popFactor × value`, so it scales with population like the
-   *   rest of the basket.
-   * - `demandPct[good]` is a percentage multiplier on that good's whole demand.
-   * Both are levels, not accumulators: setting again replaces the old value.
+   * - `demandBase[good]` is the per-population coefficient `x`: the monthly
+   *   demand gains `popFactor × x`.
+   * - `demandFlat[good]` is the constant `a`: a fixed quantity per month that
+   *   does not move with population.
+   * - `demandPct[good]` is a percentage multiplier applied to the whole sum.
+   * So a country's demand for a good reads `(model + popFactor × x + a) × (1 + pct)`.
+   * All three are levels, not accumulators: setting again replaces the old value.
    */
   demandBase?: Partial<Record<GoodId, number>>
+  demandFlat?: Partial<Record<GoodId, number>>
   demandPct?: Partial<Record<GoodId, number>>
   /** Labour-market readings for the month. */
   laborDemand: number
