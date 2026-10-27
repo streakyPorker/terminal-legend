@@ -67,6 +67,7 @@
 | PT-105 | 天命无法调整物价水平 | 手册 §3 | fixed（33f5544） |
 | PT-106 | 成衣市场结构性单边 | 0008 / 贸易 | 部分修复（门限豁免） |
 | PT-107 | 升级请求超过存量时直接拒绝 | 0013 / 手册 §3 | fixed（本次） |
+| PT-108 | 建造效率是隐式常数 1 | 0013 / 手册 §4.6 | fixed（本次） |
 
 <details><summary>已结（59 条，详情见 archive）</summary>
 
@@ -440,4 +441,17 @@
 - 处置：请求数改为**上限语义**——超过可升级座数时按最大量执行，并在回执里注明
   「请求 N 座，按现存 M 座执行」；只有一座都升不了时才拒绝。
 - 关联：`engine/actions/build.ts`（upgrade）、`tests/s2-upgrade.test.ts`、手册 §3。
+- 状态：**fixed（本次）**
+
+
+### PT-108 建造效率是隐式常数 1，无法按国家区分
+
+- 日期：2026-10-27
+- 现象：每点建造力固定完成 1 点工程量，所有国家一视同仁；`constructionSpeed` 只放大**产能**，
+  没有任何旋钮能表达「同样的营造所、同样的人工，清国的工匠就是干得多/少」。
+- 处置：新增 `country.econ.constructionEfficiency`（默认 1），在结算时乘在**每点完成的工作量**上：
+  点数与造价不变，工程量按倍率放大。`v3_cheat constructionEfficiency value=1.25 [country]` 设定，
+  值为 1 即复位。
+- 与 `constructionSpeed` 的区别：速度改**月度点数**（多花金子），效率改**每点产出**（不涨价）。
+- 关联：`engine/construction.ts`、`types/index.d.ts`、`hooks/tools.ts`、手册 §4.6。
 - 状态：**fixed（本次）**

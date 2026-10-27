@@ -56,6 +56,29 @@ export function applyCheat(
       text = `${who}科技点${amount >= 0 ? '增加' : '减少'} ${Math.abs(amount).toFixed(1)}，现为 ${subject.tech.points.toFixed(1)}`
       break
     }
+    case 'constructionEfficiency': {
+      // PT-108: per-country multiplier on how much work a construction point
+      // buys (1 = base). Stacks with the constructionSpeed modifier, which
+      // raises the *capacity*; this raises the *yield* of each point.
+      const value = finite(params.value ?? params.amount, 1)
+      if (value <= 0) return { ok: false, text: 'constructionEfficiency 必须大于 0。' }
+      const scoped = typeof params.country === 'string' && params.country !== ''
+      const targets = scoped ? [subjectFor(params.country)] : Object.values(world.countries)
+      if (targets.some(target => target === undefined)) {
+        return { ok: false, text: `未知国家 ${String(params.country)}` }
+      }
+      for (const target of targets) {
+        if (target === undefined) continue
+        if (Math.abs(value - 1) < 1e-9) delete target.econ.constructionEfficiency
+        else target.econ.constructionEfficiency = value
+      }
+      const who = scoped ? targets[0]?.name ?? '' : '全球'
+      text =
+        Math.abs(value - 1) < 1e-9
+          ? `${who}的建造效率已恢复为 1`
+          : `${who}的建造效率设为 ×${value}（同一点数完成 ${value} 倍工程量）`
+      break
+    }
     case 'prices': {
       // PT-105: shift a country's whole price level. The price model converges
       // toward `basePrice × (1 + value/100) × f(supply/demand)`, so the effect

@@ -104,3 +104,36 @@ describe('v3_cheat prices (PT-105)', () => {
     expect(countryOf(cheated, 'GBR').econ.priceLevel).toBeUndefined()
   })
 })
+
+describe('v3_cheat constructionEfficiency (PT-108)', () => {
+  test('the same points buy more work when efficiency is raised', () => {
+    const control = newWorld(9730, 'QING')
+    const boosted = newWorld(9730, 'QING')
+    const project = (world: ReturnType<typeof newWorld>) => ({
+      id: 'eff-1',
+      building: 'textileMills' as const,
+      count: 50,
+      owner: 'state' as const,
+      monthsLeft: 4,
+      monthlyCost: 2,
+      lastSpend: 0,
+      progress: 0,
+      startedAt: { ...world.date },
+    })
+    const a = countryOf(control, 'QING')
+    const b = countryOf(boosted, 'QING')
+    for (const [world, country] of [[control, a], [boosted, b]] as const) {
+      country.econ.treasury = 1e6
+      country.econ.constructionQueue = [project(world)]
+    }
+    expect(applyCheat(boosted, { action: 'constructionEfficiency', value: 2, country: 'QING' }).ok)
+      .toBe(true)
+
+    advance(control, 1, [], makeRngForWorld(control))
+    advance(boosted, 1, [], makeRngForWorld(boosted))
+    const plain = a.econ.constructionQueue[0]?.progress ?? 1
+    const fast = b.econ.constructionQueue[0]?.progress ?? 1
+    expect(fast).toBeGreaterThan(plain)
+    expect(fast).toBeGreaterThan(plain * 1.5)
+  })
+})

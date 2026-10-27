@@ -648,7 +648,10 @@ export function settleConstruction(
       } else {
         // Work is bounded by both the points invested and what the treasury or
         // private pool could actually pay for.
-        const effective = workShare * Math.min(1, goldShare) * speed
+        // PT-108: a country's construction efficiency turns the same points into
+        // more work — same workshops, same gold, more progress.
+        const efficiency = country.econ.constructionEfficiency ?? 1
+        const effective = workShare * Math.min(1, goldShare) * speed * efficiency
         project.progress = Math.min(1, project.progress + effective)
       }
     }

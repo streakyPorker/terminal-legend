@@ -668,6 +668,13 @@ export type Economy = {
    * raises (or lowers) the whole domestic price level over a few months.
    */
   priceLevel?: number
+  /**
+   * PT-108: how much work one allocated construction point buys. 1 = the base
+   * ratio; 1.25 means the same workshops, the same gold per point, but a
+   * quarter more progress each month. Per-country, set by `v3_cheat
+   * constructionEfficiency`.
+   */
+  constructionEfficiency?: number
   /** Labour-market readings for the month. */
   laborDemand: number
   laborForce: number
