@@ -615,6 +615,8 @@ export const handleV3Cheat = async ($: EngineInterface, e: any) => {
       'building',
       'count',
       'country',
+      'good',
+      'flat',
       'amount',
       'year',
       'month',
