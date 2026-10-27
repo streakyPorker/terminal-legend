@@ -520,3 +520,22 @@
 - 关联：`engine/config/construction.ts`、`engine/construction.ts`、`engine/investment.ts`、
   `hooks/tools.ts`、ADR 0033、手册 §3 / §4.6。
 - 状态：**fixed（本次）**
+
+
+### PT-113 建造效率只作用于结算，排队仍按原始工程量预留点数
+
+- 日期：2026-10-27
+- 游戏内日期：1840.10（QING，`constructionEfficiency = 2.08`）
+- 现象：一个 **450 点**的工程（基础设施×5）在队列里显示「本月投入 450 点」——
+  玩家的效率已是 ×2.08，按此应只需约 **216 点**。玩家质问：“为什么 450 点还要投入 450 点？”
+- 原因：PT-108 只在 `runProject` 结算时乘效率（`effective = workShare × … × efficiency`），
+  但**分配器**（`constructionLoad` / `constructionSchedule` / 结算的两条 pass）仍用
+  `take = min(建造力, 剩余工程量)` 预留点数。于是高效率国家为每个工程**多预留 (效率−1) 倍**的点数，
+  份额被前序工程占住、后面的工程分不到；多留的点数在结算时也用不上，等于白白闲置。
+- 判据：点数应只用于**购买工程量**，所以排队所需的点是 `剩余工程量 ÷ 效率`。
+- 处置：四个分配点统一改为 `remainingWork / efficiency`；结算的快速完成判据改为
+  `capacityTake × efficiency ≥ remainingWork`；`constructionSchedule` 的进度份额同样乘回效率。
+  效率越高，同一工程占用的点数越少、造价越低、后面的工程越早开工。
+- 关联：`engine/construction.ts`（`constructionLoad` / `constructionSchedule` / `settleConstruction`）、
+  `tests/cheat-demand.test.ts`（PT-113 回归）、手册 §4.6。
+- 状态：**fixed（本次）**

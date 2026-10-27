@@ -3,6 +3,7 @@ import { applyCheat } from '../engine/cheat'
 import { makeRngForWorld } from '../engine/data'
 import { advance } from '../engine/sim'
 import { inspectEconomy } from '../engine/economy'
+import { constructionLoad } from '../engine/sim'
 import { POP_FACTOR_DIVISOR, POP_FACTOR_MIN } from '../engine/config/economy'
 import { newWorld } from '../engine/sim'
 
@@ -19,6 +20,37 @@ const popFactorOf = (country: ReturnType<typeof countryOf>): number =>
  * PT-097: demand reads `(model + popFactor × x + a) × (1 + pct)`. The GM can set
  * any of the three per good, for one power or for the whole world.
  */
+describe('v3_cheat constructionEfficiency allocation (PT-113)', () => {
+  test('the queue reserves work ÷ efficiency points, not the raw workload', () => {
+    const world = newWorld(9740, 'QING')
+    const qing = countryOf(world, 'QING')
+    const queueOne = () => {
+      qing.econ.constructionQueue = [
+        {
+          id: 'eff-load',
+          building: 'infrastructure' as const,
+          count: 5,
+          owner: 'state' as const,
+          monthsLeft: 1,
+          monthlyCost: 2,
+          lastSpend: 0,
+          progress: 0,
+          startedAt: { ...world.date },
+        },
+      ]
+    }
+    queueOne()
+    const plain = constructionLoad(qing).requested
+    expect(applyCheat(world, { action: 'constructionEfficiency', value: 2, country: 'QING' }).ok)
+      .toBe(true)
+    queueOne()
+    const fast = constructionLoad(qing).requested
+    expect(plain).toBeGreaterThan(0)
+    // Twice the yield per point means the same order reserves half the points.
+    expect(Math.abs(fast - plain / 2)).toBeLessThan(1e-6)
+  })
+})
+
 describe('v3_cheat demand (PT-097)', () => {
   test('x scales with population; a is a constant', () => {
     const world = newWorld(9701, 'QING')

@@ -264,6 +264,7 @@ export function constructionSchedule(country: Country): ConstructionSchedule {
   // under construction are not assumed to finish, so the estimate never
   // promises points that do not exist yet.
   const capacity = constructionCapacity(country)
+  const efficiency = Math.max(1e-9, country.econ.constructionEfficiency ?? 1)
   // PT-079: the ETA must use the same pace the settlement does. `capacity`
   // already carries `constructionSpeed`, so debt pressure is the only extra
   // multiplier on monthly progress.
@@ -277,7 +278,7 @@ export function constructionSchedule(country: Country): ConstructionSchedule {
     const need = capacityCost(project)
     const workload = projectWorkload(project)
     const remainingWorkload = workload * Math.max(0, 1 - project.progress)
-    const take = Math.min(left, remainingWorkload)
+    const take = Math.min(left, remainingWorkload / efficiency)
     left -= take
     result[project.id] = {
       turns: CONSTRUCTION_SCHEDULE_MONTHS,
@@ -296,9 +297,9 @@ export function constructionSchedule(country: Country): ConstructionSchedule {
       // A slot may draw any idle capacity, not just its own monthly need: the
       // queue is the only brake, so a one-building entry can finish at once
       // when the workshops have nothing else to do.
-      const take = Math.min(monthCapacity, remainingPoints)
+      const take = Math.min(monthCapacity, remainingPoints / efficiency)
       monthCapacity -= take
-      const share = workload > 0 ? take / workload : 1
+      const share = workload > 0 ? (take * efficiency) / workload : 1
       let projectProgress = (progress.get(project.id) ?? 0) + share * pace
       let remainingMonths = monthsLeft.get(project.id) ?? 1
       while (projectProgress >= 1 - 1e-9 && remainingMonths > 0) {
@@ -347,6 +348,8 @@ export function constructionLoad(country: Country): ConstructionLoad {
   ensureConstructionFields(country)
   normalizeConstructionQueue(country)
   const capacity = constructionCapacity(country)
+  // PT-113: points are not work — a project needs `work ÷ efficiency` of them.
+  const efficiency = Math.max(1e-9, country.econ.constructionEfficiency ?? 1)
   let remaining = capacity
   let requested = 0
   let allocated = 0
@@ -355,10 +358,12 @@ export function constructionLoad(country: Country): ConstructionLoad {
     if ((project.owner ?? 'state') === 'private') continue
     const remainingPoints =
       projectWorkload(project) * Math.max(0, 1 - project.progress)
-    // The queue's demand is the work left, not a monthly slot ceiling: each
-    // entry can take everything the workshops can give until its work is done.
-    requested += remainingPoints
-    const take = Math.min(remaining, remainingPoints)
+    // The queue's demand is the POINTS the work left costs, not a monthly slot
+    // ceiling: each entry can take everything the workshops can give until its
+    // work is done.
+    const pointNeed = remainingPoints / efficiency
+    requested += pointNeed
+    const take = Math.min(remaining, pointNeed)
     remaining -= take
     allocated += take
     byProject[project.id] = take
@@ -376,7 +381,7 @@ export function constructionLoad(country: Country): ConstructionLoad {
     const slotNeed = Math.min(
       need,
       maxSlotCapacity(project.building),
-      workload * Math.max(0, 1 - project.progress),
+      (workload * Math.max(0, 1 - project.progress)) / efficiency,
     )
     const own = slotNeed * PRIVATE_OWN_CAPACITY_SHARE
     const affordableRent =
@@ -589,6 +594,11 @@ export function settleConstruction(
   // modifier on that pace. `constructionSpeed` is already folded into
   // `constructionCapacity`, so applying it here too would double it.
 
+  // PT-108/PT-113: work per point. Every allocation below divides the work
+  // still owed by this, so the queue only reserves the points it can actually
+  // turn into progress (before, a 2x country reserved 2x the points it used).
+  const efficiency = Math.max(1e-9, country.econ.constructionEfficiency ?? 1)
+
   const runProject = (
     project: ConstructionProject,
     capacityTake: number,
@@ -639,7 +649,7 @@ export function settleConstruction(
       const speed = isPrivate ? 1 : 1 - debtPressure(country).constructionPenalty
       const remainingWork =
         projectWorkload(project) * Math.max(0, 1 - project.progress)
-      if (capacityTake >= remainingWork - 1e-9 && goldShare >= 1 - 1e-9) {
+      if (capacityTake * efficiency >= remainingWork - 1e-9 && goldShare >= 1 - 1e-9) {
         // The slot received all the work it still needed. A speed penalty
         // multiplies progress, which would otherwise leave an asymptotic
         // "100% but still queued" tail for several months (PT-027).
@@ -648,8 +658,7 @@ export function settleConstruction(
         // Work is bounded by both the points invested and what the treasury or
         // private pool could actually pay for.
         // PT-108: a country's construction efficiency turns the same points into
-        // more work — same workshops, same gold, more progress.
-        const efficiency = country.econ.constructionEfficiency ?? 1
+        // more work — same workshops, more progress per point.
         const effective = workShare * Math.min(1, goldShare) * speed * efficiency
         project.progress = Math.min(1, project.progress + effective)
       }
@@ -702,7 +711,7 @@ export function settleConstruction(
       const need = capacityCost(project)
       const workload = projectWorkload(project)
       const remainingPoints = workload * Math.max(0, 1 - project.progress)
-      const capacityTake = Math.min(capacityLeft, remainingPoints)
+      const capacityTake = Math.min(capacityLeft, remainingPoints / efficiency)
       capacityLeft -= capacityTake
       runProject(
         project,
@@ -722,7 +731,7 @@ export function settleConstruction(
       const slotNeed = Math.min(
         need,
         maxSlotCapacity(project.building),
-        workload * Math.max(0, 1 - project.progress),
+        (workload * Math.max(0, 1 - project.progress)) / efficiency,
       )
       const own = slotNeed * PRIVATE_OWN_CAPACITY_SHARE
       const affordableRent =
