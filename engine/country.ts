@@ -29,6 +29,7 @@ import { effectiveSavingsRate, computeEconomy, computePrestige, SHRINK_MAX } fro
 import { settleConstruction } from './construction'
 import { DEPRECIATION_PER_MONTH, investPrivateCapital } from './investment'
 import { appliedPart, clamp, sumParts } from './internal'
+import { AI_CONSTRUCTION_MAX, AI_CONSTRUCTION_RATIO_COEF } from './config/fiscal'
 import type { TradeSettlement } from './trade'
 import type { Rng } from './rng'
 import {
@@ -234,6 +235,17 @@ export function simulateCountry(
 
   const balance = snap.income - snap.expense
   country.econ.treasury += balance
+  // PT-104: an AI power turns its reserve into construction. Its appropriation
+  // tracks treasury/GDP, so a rich AI builds instead of hoarding, and a broke
+  // one pulls back. The player's dial is left alone.
+  if (!country.isPlayer) {
+    const reserveRatio = country.econ.treasury / Math.max(1, country.econ.gdp)
+    country.econ.spending.construction = clamp(
+      reserveRatio * AI_CONSTRUCTION_RATIO_COEF,
+      0,
+      AI_CONSTRUCTION_MAX,
+    )
+  }
   // The treasury is signed net assets: a negative balance is national debt
   // and pays interest next month. There is no separate debt stock and no
   // principal-repayment step to reconcile.

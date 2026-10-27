@@ -69,3 +69,12 @@ export const RESTRUCTURE_PRESTIGE = 8
  */
 export const ROYAL_EXPENSE_RATE = 0.08
 export const ROYAL_EXPENSE_FLOOR = 50
+
+/**
+ * PT-104: an AI treasury is unbuilt capacity, not a war chest. A non-player
+ * power scales its state construction with `treasury / GDP`: 5% of GDP buys
+ * six spending levels, 20% buys twenty-four, 40%+ maxes the dial out. The
+ * player keeps full control of their own appropriation.
+ */
+export const AI_CONSTRUCTION_RATIO_COEF = 120
+export const AI_CONSTRUCTION_MAX = 50
