@@ -1,5 +1,5 @@
-import type { ConstructionProject, ModifierStack, ModifierStat, WorldState } from '../types'
-import { BUILDINGS, buildOf, makeRngForWorld, spawnEvent } from './data'
+import type { ConstructionProject, GoodId, ModifierStack, ModifierStat, WorldState } from '../types'
+import { BUILDINGS, GOOD_IDS, GOODS, buildOf, makeRngForWorld, spawnEvent } from './data'
 import { MODIFIER_STATS, MODIFIER_STAT_NAMES, addModifier, removeModifiers } from './modifiers'
 import { clamp, completeBuilding, completeUpgrade, projectKind } from './sim'
 
@@ -195,6 +195,36 @@ export function applyCheat(
       })
       const who = subject.id === player.id ? '' : `${subject.name}：`
       text = `${who}施加修正 ${MODIFIER_STAT_NAMES[stat]} ${value}${stack === 'flat' ? '' : '%'}（${months > 0 ? `${months} 月` : '长期'}）`
+      break
+    }
+    case 'demand': {
+      // PT-097: set a standing *base demand* level for one good — units per
+      // month added to the computed demand. With `country` it applies to that
+      // power only; without it, to every power in the world. This is a level,
+      // not a delta: calling again replaces the old value (0 clears it).
+      const good = String(params.good ?? '') as GoodId
+      if (!(GOOD_IDS as readonly string[]).includes(good)) {
+        return { ok: false, text: `未知商品 ${String(params.good)}。可用：${GOOD_IDS.join(', ')}` }
+      }
+      const amount = finite(params.amount ?? params.value)
+      const scoped = typeof params.country === 'string' && params.country !== ''
+      const targets = scoped
+        ? [subjectFor(params.country)]
+        : Object.values(world.countries)
+      if (targets.some(target => target === undefined)) {
+        return { ok: false, text: `未知国家 ${String(params.country)}` }
+      }
+      const before = (targets[0]?.econ.demandBase?.[good] ?? 0)
+      for (const target of targets) {
+        if (target === undefined) continue
+        const base = { ...(target.econ.demandBase ?? {}) }
+        if (amount === 0) delete base[good]
+        else base[good] = amount
+        target.econ.demandBase = base
+      }
+      const who = scoped ? targets[0]?.name ?? '' : '全球'
+      const state = amount === 0 ? '清除' : `设为 ${amount >= 0 ? '+' : ''}${amount} 单位/月`
+      text = `${who}的「${GOODS[good].name}」基础需求${state}（原 ${before}）`
       break
     }
     case 'removeModifier': {

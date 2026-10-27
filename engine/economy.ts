@@ -438,6 +438,16 @@ function computeDemand(country: Country): DemandBreakdown {
     }
   }
 
+  // PT-097: a standing base-demand level per good (the GM's `v3_cheat demand`),
+  // added once at the end so it is a quantity, not a multiplier on each block.
+  const demandBase = country.econ.demandBase
+  if (demandBase !== undefined) {
+    for (const id of GOOD_IDS) {
+      const extra = demandBase[id] ?? 0
+      if (extra !== 0) out[id] += extra
+    }
+  }
+
   // Every goods demand still reads through the generic per-good demand buffs
   // for the intermediate blocks above; consumer demand is already wrapped.
   // The consumption tax base values only the final consumer basket, never the
