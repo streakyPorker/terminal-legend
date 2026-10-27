@@ -45,8 +45,20 @@ export const PRIVATE_OWN_CAPACITY_SHARE = 0.5
  * more rent than its whole tax take and shrugged off a 300-gold shock in a year.
  */
 export const CONSTRUCTION_RENT_PER_POINT = 0.1
-/** A slot may hold at most this many buildings. */
-export const MAX_BUILDINGS_PER_SLOT = 5
+/**
+ * A player's build order may hold at most this many buildings. PT-112 raised it
+ * from 5 to 30: the five-seat cap forced players to fire the same order six
+ * times to reach a useful batch, while the real cost of a big order (workload,
+ * gold, months of queue) is already priced by the points.
+ */
+export const MAX_BUILDINGS_PER_SLOT = 30
+/**
+ * Private / AI builders keep the original five-seat slot: their start rule is a
+ * balance input (a private capitalist with a little gold must not commit a
+ * thirty-building project and freeze the whole private stream), so widening the
+ * player's order must not move their economy.
+ */
+export const PRIVATE_MAX_BUILDINGS_PER_SLOT = 5
 /**
  * Cap on `slots` in one `x*y` build order (PT-078). Each slot becomes its own
  * queue entry so the earlier ones finish and start working while the rest are

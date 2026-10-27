@@ -136,7 +136,8 @@ export function actionBuild(
       text: `${tag} ${BUILDINGS[building].name}的 ${tier} 级尚未解锁（当前上限 ${ceiling} 级）`,
     }
   }
-  // Orders per month are unlimited: every slot holds at most five buildings.
+  // Orders per month are unlimited: every slot holds at most
+  // MAX_BUILDINGS_PER_SLOT buildings (PT-112 raised it to 30).
   // Gold is paid per workload point; duration falls out of the points.
   // PT-078: `slots` aggregates an `x*y` order into one call while still
   // creating `y` independent queue entries — so the earlier slots finish and

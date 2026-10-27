@@ -212,21 +212,21 @@ describe('construction subsidy (ADR 0015)', () => {
 })
 
 describe('construction slot limits (ADR 0012/0013)', () => {
-  test('a build order clamps to five buildings and prices the workload', async () => {
+  test('a build order clamps to thirty buildings and prices the workload (PT-112)', async () => {
     const world = newWorld(9304, 'QING')
     const qing = countryOf(world, 'QING')
     qing.econ.buildings.workshops = 10
     qing.econ.constructionQueue = []
     const result = applyDecision(
       world,
-      { countryId: 'QING', action: 'build', params: { building: 'textileMills', count: 20 } },
+      { countryId: 'QING', action: 'build', params: { building: 'textileMills', count: 40 } },
       makeRngForWorld(world),
     )
     expect(result.ok).toBe(true)
     const project = qing.econ.constructionQueue[0]
-    expect(project?.count).toBe(5)
+    expect(project?.count).toBe(30)
     expect(project?.monthsLeft).toBe(1)
-    expect(project?.monthlyCost).toBe(2)
+    expect(project?.monthlyCost).toBe(12)
     expect(maxSlotCapacity('textileMills')).toBe(10)
   })
 
@@ -394,8 +394,8 @@ describe('construction slot limits (ADR 0012/0013)', () => {
     // Leave only one gold of debt room so the slot cannot finish this month.
     qing.econ.treasury = -qing.econ.gdp * 3 + 1
     const load = constructionLoad(qing)
-    // A five-factory slot's monthly need is 10 points; with the workshops idle
-    // it can take every point they produce this month.
+    // The state pass hands the slot every idle point; only the PRIVATE pass is
+    // clamped at `maxSlotCapacity` (PT-112 kept that clamp at five seats).
     expect(load.byProject.oversized ?? 0).toBeGreaterThan(
       maxSlotCapacity('textileMills'),
     )

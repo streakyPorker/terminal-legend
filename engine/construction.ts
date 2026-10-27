@@ -42,6 +42,7 @@ import {
   CONSTRUCTION_COST_TIER_MULTIPLIER,
   INFRA_MARKET_ACCESS,
   MAX_BUILDINGS_PER_SLOT,
+  PRIVATE_MAX_BUILDINGS_PER_SLOT,
   OFFICE_ADMIN_CAPACITY,
   PRIVATE_OWN_CAPACITY_SHARE,
   SCHOOL_LITERACY_GAIN,
@@ -68,6 +69,7 @@ export {
   PRIVATE_OWN_CAPACITY_SHARE,
   CONSTRUCTION_RENT_PER_POINT,
   MAX_BUILDINGS_PER_SLOT,
+  PRIVATE_MAX_BUILDINGS_PER_SLOT,
   WORKLOAD_MULTIPLIER,
   CONSTRUCTION_COST_PER_POINT,
   CONSTRUCTION_CAPACITY_TIER_MULTIPLIER,
@@ -127,7 +129,7 @@ export const projectWorkload = (project: ConstructionProject): number => {
 }
 
 export const maxSlotCapacity = (building: BuildingId): number =>
-  MAX_BUILDINGS_PER_SLOT * (CAPACITY_COST[building] ?? 1)
+  PRIVATE_MAX_BUILDINGS_PER_SLOT * (CAPACITY_COST[building] ?? 1)
 
 /** Base gold per construction point and the per-building cost tuning live in
  *  `config/construction.ts`; both are re-exported above. */

@@ -19,7 +19,7 @@ import {
 import { nationalDebt } from './fiscal'
 import { totalsFor } from './modifiers'
 import {
-  MAX_BUILDINGS_PER_SLOT,
+  PRIVATE_MAX_BUILDINGS_PER_SLOT,
   alreadyReserved,
   constructionMonthlyCost,
   constructionTotalCost,
@@ -344,7 +344,7 @@ export function investPrivateCapital(
         started = true
       }
     } else {
-      const count = clamp(canStart.affordable, 1, MAX_BUILDINGS_PER_SLOT)
+      const count = clamp(canStart.affordable, 1, PRIVATE_MAX_BUILDINGS_PER_SLOT)
       const monthlyCost = constructionMonthlyCost(draftProject(best.building, count))
       if (monthlyCost <= country.econ.privateCapital) {
         country.econ.constructionQueue.push({
