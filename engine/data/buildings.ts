@@ -289,29 +289,29 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     // garment mostly to the handicraft sector, so clothes can trade on both
     // sides (PT-002 reversal). Fabric output is raised to keep the mill's
     // value added — and with it the industrial margin band — intact.
-    output: { fabric: 1.45, clothes: 0.5 },
+    output: { fabric: 1.0, clothes: 0.83 },
     input: { grain: 0.6, coal: 0.18, wood: 0.1, machinery: 0.167 },
     labor: 0.9,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
     tiers: [
       {
-        output: { fabric: 1.885, clothes: 0.65 },
+        output: { fabric: 1.3, clothes: 1.079 },
         input: { grain: 0.672, coal: 0.202, wood: 0.112, machinery: 0.187 },
         labor: 0.99,
       },
       {
-        output: { fabric: 2.451, clothes: 0.845 },
+        output: { fabric: 1.69, clothes: 1.403 },
         input: { grain: 0.739, coal: 0.222, wood: 0.123, machinery: 0.206 },
         labor: 1.04,
       },
       {
-        output: { fabric: 3.186, clothes: 1.099 },
+        output: { fabric: 2.197, clothes: 1.824 },
         input: { grain: 0.813, coal: 0.195, wood: 0.136, machinery: 0.226, electricity: 0.15 },
         labor: 1.091,
       },
       {
-        output: { fabric: 4.078, clothes: 1.406 },
+        output: { fabric: 2.812, clothes: 2.334 },
         input: { grain: 0.878, coal: 0.148, wood: 0.146, machinery: 0.244, electricity: 0.2 },
         labor: 1.124,
       },
