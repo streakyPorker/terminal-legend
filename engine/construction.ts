@@ -622,17 +622,14 @@ export function settleConstruction(
       }
       const funded =
         project.monthlyCost > 0 ? spend / project.monthlyCost : inputShare
-      // ADR 0031 §5 / plan 0015 §S2: an upgrade draws NO materials — its only
-      // costs are capacity and gold. So the intermediate-good investment demand
-      // is new builds only; the upgrade's gold still lands in `stateSpent`
-      // above (the construction-spend channel counted as GDP investment I).
-      if (projectKind(project) !== 'upgrade') {
-        for (const [id, coefficient] of Object.entries(
-          INVESTMENT_DEMAND[project.building],
-        ) as [GoodId, number][]) {
-          nextConstructionDemand[id] =
-            (nextConstructionDemand[id] ?? 0) + coefficient * project.count * funded
-        }
+      // PT-109: an upgrade retools real plant — new looms, boilers, shafts — so
+      // it draws the same construction basket as a new build. (ADR 0031 §5 used
+      // to exempt upgrades, which made large upgrade drives vanish from GDP.)
+      for (const [id, coefficient] of Object.entries(
+        INVESTMENT_DEMAND[project.building],
+      ) as [GoodId, number][]) {
+        nextConstructionDemand[id] =
+          (nextConstructionDemand[id] ?? 0) + coefficient * project.count * funded
       }
     }
     const goldShare = goldNeed > 0 ? spend / goldNeed : 1

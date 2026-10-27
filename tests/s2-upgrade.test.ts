@@ -419,8 +419,8 @@ describe('S2 cheat.finishProjects keeps a new build\'s target tier (plan 0015 §
   })
 })
 
-describe('S2 upgrade costs: capacity + gold only, no materials (ADR 0031 §5)', () => {
-  test('an upgrade month draws no goods but pays its gold through the construction-spend channel', () => {
+describe('S2 upgrade costs: capacity + gold + materials (PT-109 supersedes ADR 0031 §5)', () => {
+  test('an upgrade month draws its construction basket and pays its gold', () => {
     const world = newWorld(7011, 'QING')
     const qing = countryOf(world, 'QING')
     qing.econ.privateCapital = 0
@@ -440,10 +440,10 @@ describe('S2 upgrade costs: capacity + gold only, no materials (ADR 0031 §5)', 
       // investment or events pollute the investment-demand reading).
       const spend = settleConstruction(world, qing, makeRngForWorld(world), [])
 
-      // ADR 0031 §5: an upgrade draws NO materials, so it adds nothing to the
-      // intermediate-good investment demand.
+      // PT-109: an upgrade retools real plant and therefore draws the same
+      // construction basket as a new build.
       const demand = qing.econ.lastConstructionDemand
-      expect(Object.values(demand).every(value => (value ?? 0) === 0)).toBe(true)
+      expect(Object.values(demand).some(value => (value ?? 0) > 0)).toBe(true)
       // Its gold (workload × 0.2) still flows through the construction-spend
       // channel — the same one a new build uses, counted as GDP investment I.
       expect(expectedGold).toBeGreaterThan(0)
