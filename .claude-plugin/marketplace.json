@@ -5,7 +5,7 @@
   },
   "metadata": {
     "description": "Victoria-3-inspired grand strategy simulation for Claude Code.",
-    "version": "0.1.226"
+    "version": "0.1.227"
   },
   "plugins": [
     {

@@ -53,7 +53,7 @@ import {
   NAVY_EXPENSE_PER_UNIT,
   NAVY_SPENDING_SHARE,
   UPKEEP_PER_BUILDING,
-  WELFARE_EXPENSE_PER_POP,
+  WELFARE_EXPENSE_PER_POP_SOL,
 } from './config/fiscal'
 
 /** Land-value-per-unit and the construction subsidy dials live in
@@ -450,7 +450,7 @@ export function expenseParts(
     administration:
       popFactor * ADMIN_EXPENSE_PER_POP + sp.bureaucracy * popFactor * ADMIN_BUREAUCRACY_PER_POP,
     education: sp.education * popFactor * EDUCATION_EXPENSE_PER_POP,
-    welfare: sp.welfare * popFactor * WELFARE_EXPENSE_PER_POP,
+    welfare: sp.welfare * popFactor * Math.max(1, country.pops.sol) * WELFARE_EXPENSE_PER_POP_SOL,
     debtInterest: nationalDebt(country) * debtRate(country, context),
     marketLoss:
       gdp *

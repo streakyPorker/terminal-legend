@@ -32,7 +32,12 @@ export const NAVY_SPENDING_SHARE = 0.5
 export const ADMIN_EXPENSE_PER_POP = 0.12
 export const ADMIN_BUREAUCRACY_PER_POP = 0.02
 export const EDUCATION_EXPENSE_PER_POP = 0.03
-export const WELFARE_EXPENSE_PER_POP = 0.03
+/**
+ * PT-101: welfare costs `level × popFactor × sol × this`. A richer population
+ * costs more to keep at the same welfare level, so the same policy knob buys
+ * less in a rich country than in a poor one.
+ */
+export const WELFARE_EXPENSE_PER_POP_SOL = 0.0008
 export const MARKET_LOSS_COEF = 0.02
 export const UPKEEP_PER_BUILDING = 0.01
 /** Cap on a spending appropriation (per category). */
