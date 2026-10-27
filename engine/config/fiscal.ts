@@ -60,3 +60,12 @@ export const RESTRUCTURE_MONTHS = 12
 export const RESTRUCTURE_RADICALS = 8
 export const RESTRUCTURE_LEGITIMACY = 8
 export const RESTRUCTURE_PRESTIGE = 8
+
+/**
+ * PT-103: AI courts burn a share of the treasury. An AI power that hoards gold
+ * is hard to model — it should be spending on palaces, pensions and patronage —
+ * so a non-player country pays `(treasury − floor) × rate` a month. The player
+ * is exempt: their treasury is theirs to plan with.
+ */
+export const ROYAL_EXPENSE_RATE = 0.08
+export const ROYAL_EXPENSE_FLOOR = 50

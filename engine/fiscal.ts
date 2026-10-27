@@ -10,6 +10,7 @@ import {
 } from './config/blocks/fiscal'
 import { scaleProduct } from './scale'
 import { LEGITIMACY_MAX } from './config/balance'
+import { ROYAL_EXPENSE_FLOOR, ROYAL_EXPENSE_RATE } from './config/fiscal'
 import {
   COLLECTION_BASE,
   COLLECTION_BUREAUCRACY_DIVISOR,
@@ -187,6 +188,8 @@ export type ExpenseParts = {
   reparations: number
   /** Subsidy to construction bureaus (spending.construction). */
   constructionSubsidy: number
+  /** PT-103: an AI court's discretionary spending, scaled off its treasury. */
+  court: number
 }
 
 export type FiscalLedger = {
@@ -472,6 +475,11 @@ export function expenseParts(
     reparations: country.econ.reparationsPaid ?? 0,
     constructionSubsidy:
       Math.max(0, sp.construction) * CONSTRUCTION_SUBSIDY_COST_PER_LEVEL,
+    // PT-103: only AI powers burn a share of their treasury on court life —
+    // the player's savings stay theirs.
+    court: country.isPlayer
+      ? 0
+      : Math.max(0, country.econ.treasury - ROYAL_EXPENSE_FLOOR) * ROYAL_EXPENSE_RATE,
   }
 }
 
@@ -557,6 +565,7 @@ export function fiscalLedger(
       upkeep: rawExpense.upkeep * expenseFactor,
       reparations: rawExpense.reparations,
       constructionSubsidy: rawExpense.constructionSubsidy * expenseFactor,
+      court: rawExpense.court * expenseFactor,
       construction,
       total: econ.expense,
     },
