@@ -203,16 +203,20 @@ export function actionUpgrade(
       text: `${tag} ${BUILDINGS[building].name}的 ${toTier} 级尚未解锁（当前上限 ${ceiling} 级）`,
     }
   }
-  const count = Math.max(1, Math.floor(num(params.count, 1)))
+  const requested = Math.max(1, Math.floor(num(params.count, 1)))
   const fromIndex = fromTier - 1
   const seats = country.econ.buildingTiers[building]?.[fromIndex] ?? 0
   const reserved = alreadyReserved(country, building, fromIndex)
-  if (count > seats - reserved) {
+  const available = Math.max(0, Math.floor(seats - reserved))
+  // PT-107: asking for more seats than exist is a *ceiling*, not an error —
+  // clamp to what is there and say so, instead of refusing the order.
+  if (available < 1) {
     return {
       ok: false,
-      text: `${tag} ${BUILDINGS[building].name} ${fromTier} 级座数不足：现存 ${seats}，已预约 ${reserved}，可升级 ${Math.max(0, seats - reserved)}，请求 ${count}`,
+      text: `${tag} ${BUILDINGS[building].name} 没有可升级的 ${fromTier} 级座数（现存 ${seats.toFixed(1)}，已预约 ${reserved}）`,
     }
   }
+  const count = Math.min(requested, available)
   const draft: ConstructionProject = {
     id: `proj-${world.tick}-${country.id}-${country.econ.constructionQueue.length}`,
     building,
@@ -233,7 +237,7 @@ export function actionUpgrade(
   country.econ.constructionQueue.splice(placement.at, 0, draft)
   return {
     ok: true,
-    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}从 ${fromTier} 级升级到 ${toTier} 级列入升级队列${placement.note}（工程量 ${projectWorkload(draft).toFixed(1)} 点；总造价 ${constructionTotalCost(draft, country).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft, country).toFixed(2)} 金）${powerWarning(country, toTier)}`,
+    text: `${tag} 将 ${count} 座${BUILDINGS[building].name}从 ${fromTier} 级升级到 ${toTier} 级列入升级队列${placement.note}（工程量 ${projectWorkload(draft).toFixed(1)} 点；总造价 ${constructionTotalCost(draft, country).toFixed(1)} 金，每点 ${constructionGoldPerPoint(draft, country).toFixed(2)} 金）${count < requested ? `（请求 ${requested} 座，按现存 ${count} 座执行）` : ''}${powerWarning(country, toTier)}`,
   }
 }
 

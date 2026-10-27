@@ -245,20 +245,23 @@ describe('S2 upgrade tier gate and seat reservation (plan 0015 §S2)', () => {
     expect(upgradeProjects(qing).length).toBe(0)
   })
 
-  test('an upgrade exceeding the unreserved seats at fromTier is rejected', () => {
+  test('an upgrade exceeding the unreserved seats clamps to the available seats (PT-107)', () => {
     const world = newWorld(7003, 'QING')
     const qing = countryOf(world, 'QING')
     qing.econ.buildingTiers.steelMills = [3]
     qing.econ.buildings.steelMills = 3
     const restore = grantUnlockTier(qing, 'steelMills', 2)
     try {
-      const tooMany = orderUpgrade(world, 'QING', 'steelMills', 1, 2, 4)
-      expect(tooMany.ok).toBe(false)
-      expect(tooMany.text).toContain('座数')
-      expect(upgradeProjects(qing).length).toBe(0)
+      // PT-107: asking for 4 when only 3 exist is a ceiling, not an error.
+      const clamped = orderUpgrade(world, 'QING', 'steelMills', 1, 2, 4)
+      expect(clamped.ok).toBe(true)
+      expect(clamped.text).toContain('按现存 3 座执行')
+      expect(sum(upgradeProjects(qing).map(p => p.count))).toBe(3)
 
-      const exact = orderUpgrade(world, 'QING', 'steelMills', 1, 2, 3)
-      expect(exact.ok).toBe(true)
+      // Nothing left: that one is still refused.
+      const none = orderUpgrade(world, 'QING', 'steelMills', 1, 2, 1)
+      expect(none.ok).toBe(false)
+      expect(none.text).toContain('没有可升级')
     } finally {
       restore()
     }
@@ -272,13 +275,14 @@ describe('S2 upgrade tier gate and seat reservation (plan 0015 §S2)', () => {
     const restore = grantUnlockTier(qing, 'steelMills', 2)
     try {
       expect(orderUpgrade(world, 'QING', 'steelMills', 1, 2, 3).ok).toBe(true)
-      // 3 already reserved → only 2 remain.
+      // 3 already reserved → only 2 remain; the second order clamps to 2.
       const over = orderUpgrade(world, 'QING', 'steelMills', 1, 2, 3)
-      expect(over.ok).toBe(false)
-      expect(over.text).toContain('已预约')
-      // Exactly the remainder fits, then nothing is left.
-      expect(orderUpgrade(world, 'QING', 'steelMills', 1, 2, 2).ok).toBe(true)
-      expect(orderUpgrade(world, 'QING', 'steelMills', 1, 2, 1).ok).toBe(false)
+      expect(over.ok).toBe(true)
+      expect(over.text).toContain('按现存 2 座执行')
+      // Nothing is left after that.
+      const none = orderUpgrade(world, 'QING', 'steelMills', 1, 2, 1)
+      expect(none.ok).toBe(false)
+      expect(none.text).toContain('没有可升级')
       expect(sum(upgradeProjects(qing).map(p => p.count))).toBe(5)
     } finally {
       restore()
