@@ -538,3 +538,37 @@ describe('S2 end-to-end: unlock → upgrade → steel chain II (plan 0015 §S2)'
     }
   })
 })
+
+describe('PT-117 a build order with no tier lands on the highest unlocked tier', () => {
+  test('steel at III builds at III, and an explicit tier still wins', async () => {
+    const world = newWorld(8601, 'QING')
+    const qing = world.countries.QING
+    if (qing === undefined) throw new Error('missing QING')
+    qing.econ.treasury = 1e6
+    const restore = grantUnlockTier(qing, 'steelMills', 2)
+
+    qing.econ.constructionQueue = []
+    const auto = applyDecision(
+      world,
+      { countryId: 'QING', action: 'build', params: { building: 'steelMills', count: 2 } },
+      makeRngForWorld(world),
+    )
+    expect(auto.ok).toBe(true)
+    // The project records a 0-based target index, so II = 1.
+    expect(qing.econ.constructionQueue[0]?.toTier).toBe(1)
+
+    qing.econ.constructionQueue = []
+    const forced = applyDecision(
+      world,
+      {
+        countryId: 'QING',
+        action: 'build',
+        params: { building: 'steelMills', count: 2, tier: 1 },
+      },
+      makeRngForWorld(world),
+    )
+    expect(forced.ok).toBe(true)
+    expect(qing.econ.constructionQueue[0]?.toTier).toBeUndefined()
+    restore()
+  })
+})

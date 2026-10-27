@@ -272,7 +272,7 @@ export const TOOL_SPECS: {
           type: 'integer',
           minimum: 1,
           maximum: 5,
-          description: 'build 时可选，目标等级（1-based，默认 1 = I 级）；未解锁的等级会被拒绝。',
+          description: 'build 时可选，目标等级（1-based）；省略时默认落在已解锁的最高等级（PT-117），写 1 可强制按 I 级新建；未解锁的等级会被拒绝。',
         },
         fromTier: {
           type: 'integer',

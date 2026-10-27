@@ -124,12 +124,16 @@ export function actionBuild(
     return { ok: false, text: `${tag} ${BUILDINGS[building].name}尚未解锁（需科技解锁）` }
   }
   const count = clamp(Math.floor(num(params.count, 1)), 1, MAX_BUILDINGS_PER_SLOT)
-  // Plan 0015 §S2: `tier` (1-based; default 1 = tier I) lets a new build land
-  // directly on an unlocked higher tier. A tier > 1 needs `maxUnlockedTier` to
-  // reach it, and the project records its target index so completion files the
-  // seats in the right `buildingTiers` bucket.
-  const tier = Math.max(1, Math.floor(num(params.tier, 1)))
+  // Plan 0015 §S2: `tier` (1-based) lets a new build land directly on an
+  // unlocked higher tier. PT-117: when the order omits `tier`, the new seats
+  // land on the HIGHEST unlocked tier — a state that can already build tier III
+  // steel should never quietly add tier-I steel and pay twice (once to build,
+  // once to upgrade). Pass `tier: 1` to force a cheap first-tier stock.
   const ceiling = maxUnlockedTier(country, building)
+  const tier =
+    params.tier === undefined
+      ? Math.max(1, ceiling)
+      : Math.max(1, Math.floor(num(params.tier, 1)))
   if (tier > ceiling) {
     return {
       ok: false,
