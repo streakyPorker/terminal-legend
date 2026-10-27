@@ -662,6 +662,12 @@ export type Economy = {
   demandBase?: Partial<Record<GoodId, number>>
   demandFlat?: Partial<Record<GoodId, number>>
   demandPct?: Partial<Record<GoodId, number>>
+  /**
+   * PT-105: a standing price-level shift in percent. The price model converges
+   * toward `basePrice × (1 + priceLevel/100) × f(supply/demand)`, so setting it
+   * raises (or lowers) the whole domestic price level over a few months.
+   */
+  priceLevel?: number
   /** Labour-market readings for the month. */
   laborDemand: number
   laborForce: number

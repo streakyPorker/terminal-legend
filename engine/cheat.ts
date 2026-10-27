@@ -56,6 +56,28 @@ export function applyCheat(
       text = `${who}科技点${amount >= 0 ? '增加' : '减少'} ${Math.abs(amount).toFixed(1)}，现为 ${subject.tech.points.toFixed(1)}`
       break
     }
+    case 'prices': {
+      // PT-105: shift a country's whole price level. The price model converges
+      // toward `basePrice × (1 + value/100) × f(supply/demand)`, so the effect
+      // ramps in over a few months and persists until cleared.
+      const value = finite(params.value ?? params.amount)
+      const scoped = typeof params.country === 'string' && params.country !== ''
+      const targets = scoped ? [subjectFor(params.country)] : Object.values(world.countries)
+      if (targets.some(target => target === undefined)) {
+        return { ok: false, text: `未知国家 ${String(params.country)}` }
+      }
+      for (const target of targets) {
+        if (target === undefined) continue
+        if (value === 0) delete target.econ.priceLevel
+        else target.econ.priceLevel = value
+      }
+      const who = scoped ? targets[0]?.name ?? '' : '全球'
+      text =
+        value === 0
+          ? `${who}的价格水平修正已清除`
+          : `${who}的整体价格水平设为 ${value >= 0 ? '+' : ''}${value}%（逐月收敛）`
+      break
+    }
     case 'legitimacy': {
       // PT-100: legitimacy is a *stock* that drifts toward a target at 8%/month,
       // so a `modifier` on it only moves the target. This action moves the stock

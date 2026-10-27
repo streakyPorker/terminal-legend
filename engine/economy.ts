@@ -534,8 +534,13 @@ export function computeEconomy(
   for (const id of GOOD_IDS) {
     const available = Math.max(SUPPLY_DEMAND_GUARD, supply[id])
     const ratio = demand[id] / available
+    // PT-105: a standing price-level shift moves the whole level the model
+    // converges to, so a cheat can reprice a country for months, not one tick.
+    const priceLevel = 1 + (country.econ.priceLevel ?? 0) / 100
     const target =
-      GOODS[id].basePrice * clamp(Math.sqrt(ratio), PRICE_RATIO_MIN, PRICE_RATIO_MAX)
+      GOODS[id].basePrice *
+      Math.max(0.1, priceLevel) *
+      clamp(Math.sqrt(ratio), PRICE_RATIO_MIN, PRICE_RATIO_MAX)
     const floor = GOODS[id].basePrice * PRICE_FLOOR_FACTOR
     const ceiling = GOODS[id].basePrice * PRICE_CEILING_FACTOR
     country.econ.prices[id] = clamp(

@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { applyCheat } from '../engine/cheat'
+import { makeRngForWorld } from '../engine/data'
+import { advance } from '../engine/sim'
 import { inspectEconomy } from '../engine/economy'
 import { POP_FACTOR_DIVISOR, POP_FACTOR_MIN } from '../engine/config/economy'
 import { newWorld } from '../engine/sim'
@@ -79,5 +81,26 @@ describe('v3_cheat legitimacy (PT-100)', () => {
     expect(qing.government.legitimacy).toBe(100)
     expect(applyCheat(world, { action: 'legitimacy', amount: -500, country: 'QING' }).ok).toBe(true)
     expect(qing.government.legitimacy).toBe(0)
+  })
+})
+
+describe('v3_cheat prices (PT-105)', () => {
+  test('raises the targeted country price level against an identical control', () => {
+    const control = newWorld(9720, 'QING')
+    const cheated = newWorld(9720, 'QING')
+    expect(applyCheat(cheated, { action: 'prices', value: 50, country: 'GBR' }).ok).toBe(true)
+    expect(countryOf(cheated, 'GBR').econ.priceLevel).toBe(50)
+    // Scoped: the player is untouched.
+    expect(countryOf(cheated, 'QING').econ.priceLevel).toBeUndefined()
+
+    advance(control, 6, [], makeRngForWorld(control))
+    advance(cheated, 6, [], makeRngForWorld(cheated))
+    const gbrControl = countryOf(control, 'GBR').econ.prices.luxury
+    const gbrCheated = countryOf(cheated, 'GBR').econ.prices.luxury
+    // The level shift is standing, so the cheated Britain prices higher.
+    expect(gbrCheated).toBeGreaterThan(gbrControl)
+
+    expect(applyCheat(cheated, { action: 'prices', value: 0, country: 'GBR' }).ok).toBe(true)
+    expect(countryOf(cheated, 'GBR').econ.priceLevel).toBeUndefined()
   })
 })
