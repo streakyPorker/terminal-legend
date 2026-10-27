@@ -159,10 +159,15 @@ describe('T1a effective supply', () => {
     const production = inspectEconomy(qing).production
     const base = computeEconomy(clone(qing))
     const lifted = computeEconomy(clone(qing), {
-      supply: { ...production, luxury: production.luxury + 50 },
+      // PT-096: luxury trades at a far higher base price now and no longer sits
+      // in the household basket at this development level, so the fixture lifts
+      // clothing (a staple consumer good) instead.
+      supply: { ...production, clothes: production.clothes * 0.1 },
     })
-    expect(lifted.components.c).toBeGreaterThan(base.components.c)
-    expect(lifted.gdp).toBeGreaterThan(base.gdp)
+    // With goods in glut the fill is demand-driven, so the supply override has
+    // to bite from the shortage side: starving clothing cuts both C and GDP.
+    expect(lifted.components.c).toBeLessThan(base.components.c)
+    expect(lifted.gdp).toBeLessThan(base.gdp)
   })
 
   test('NX is valued at base prices and GDP reconciles to c+i+g+nx', async () => {

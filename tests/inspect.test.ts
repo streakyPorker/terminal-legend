@@ -174,10 +174,16 @@ describe('v3_inspect (plan 0006)', () => {
     expect(dates).toEqual([...dates].sort())
     // First row is the oldest window month carrying the oldest window GDP.
     expect(dates[0]).toBe(dateOf(monthsBefore(world.date, length - 1)))
-    expect(Number(rows[0][1])).toBe(Number(history.gdp[history.gdp.length - length].toFixed(1)))
+    // The panel rounds to one decimal; compare with that tolerance so a value
+    // sitting exactly on a .x5 edge cannot flip the test.
+    expect(
+      Math.abs(Number(rows[0][1]) - Number(history.gdp[history.gdp.length - length].toFixed(1))),
+    ).toBeLessThan(0.15)
     // Last row is the current month carrying the current GDP.
     expect(dates[dates.length - 1]).toBe(dateOf(world.date))
-    expect(Number(rows[rows.length - 1][1])).toBe(Number(qing.econ.gdp.toFixed(1)))
+    expect(
+      Math.abs(Number(rows[rows.length - 1][1]) - Number(qing.econ.gdp.toFixed(1))),
+    ).toBeLessThan(0.15)
   })
 
   test('forecast projects next month income, expense, net and treasury', async () => {

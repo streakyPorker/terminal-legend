@@ -20,11 +20,11 @@ export const GOODS: Record<GoodId, { name: string; basePrice: number }> = {
   iron: { name: '铁矿石', basePrice: 1 },
   // Priced at the OLD `iron` base price so every downstream consumer that switched
   // from `iron` to `steel` sees its real input cost unchanged. Tunable — F7 tunes.
-  steel: { name: '钢铁', basePrice: 2 },
-  fabric: { name: '布料', basePrice: 2 },
+  steel: { name: '钢铁', basePrice: 2.6 },
+  fabric: { name: '布料', basePrice: 2.4 },
   clothes: { name: '成衣', basePrice: 3 },
-  liquor: { name: '酒类', basePrice: 2.6 },
-  furniture: { name: '家具', basePrice: 3.2 },
+  liquor: { name: '酒类', basePrice: 3 },
+  furniture: { name: '家具', basePrice: 3.8 },
   machinery: { name: '机械', basePrice: 6 },
   arms: { name: '军械', basePrice: 7 },
   luxury: { name: '奢侈品', basePrice: 20 },

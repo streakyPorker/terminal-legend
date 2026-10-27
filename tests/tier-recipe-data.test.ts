@@ -77,9 +77,9 @@ const FAMILY_RULES: Record<BuildingId, FamilyRule> = {
   arsenals: [1.35, 1.15, 1.1, 1.35, 1.12, 1.05, 1.3, 1.12, 1.05, 1.28, 1.1, 1.02],
   chemicalWorks: [1.35, 1.15, 1.1, 1.35, 1.12, 1.05, 1.3, 1.12, 1.05, 1.28, 1.1, 1.02],
   locomotiveWorks: [1.35, 1.15, 1.1, 1.35, 1.12, 1.05, 1.3, 1.12, 1.05, 1.28, 1.1, 1.02],
-  coalMines: [1.3, 1, 1.15, 1.3, 1, 1.1, 1.3, 1, 1.1, 1.28, 1, 1.08],
-  ironMines: [1.3, 1, 1.15, 1.3, 1, 1.1, 1.3, 1, 1.1, 1.28, 1, 1.08],
-  lumberMills: [1.3, 1, 1.15, 1.3, 1, 1.1, 1.3, 1, 1.1, 1.28, 1, 1.08],
+  coalMines: [1.3, 1.3, 1.15, 1.3, 1.3, 1.1, 1.3, 1.3, 1.1, 1.28, 1.28, 1.08],
+  ironMines: [1.3, 1.3, 1.15, 1.3, 1.3, 1.1, 1.3, 1.3, 1.1, 1.28, 1.28, 1.08],
+  lumberMills: [1.3, 1.3, 1.15, 1.3, 1.3, 1.1, 1.3, 1.3, 1.1, 1.28, 1.28, 1.08],
   textileMills: [1.3, 1.12, 1.1, 1.3, 1.1, 1.05, 1.3, 1.1, 1.05, 1.28, 1.08, 1.03],
   furnitureWorks: [1.3, 1.12, 1.1, 1.3, 1.1, 1.05, 1.3, 1.1, 1.05, 1.28, 1.08, 1.03],
   distilleries: [1.3, 1.12, 1.1, 1.3, 1.1, 1.05, 1.3, 1.1, 1.05, 1.28, 1.08, 1.03],
@@ -336,12 +336,13 @@ const valueAdded = (recipe: { output: RecipeIO; input: RecipeIO }): number => {
 const CHECK: Record<BuildingId, { I: number; II: number; III: number; IV: number; V: number }> = {
   // PT-096: the whole chain was re-laddered (prices + outputs), so these oracles
   // are re-frozen at base prices.
-  steelMills: { I: 3.24, II: 5.326, III: 8.448, IV: 11.881, V: 16.98 },
-  machineryWorks: { I: 4.754, II: 6.94, III: 10.064, IV: 12.93, V: 17.296 },
-  arsenals: { I: 5.787, II: 8.247, III: 11.704, IV: 14.906, V: 19.664 },
-  textileMills: { I: 2.138, II: 3.14, III: 4.533, IV: 6.011, V: 8.306 },
-  furnitureWorks: { I: 0.859, II: 1.33, III: 1.99, IV: 2.438, V: 3.433 },
-  luxuryWorks: { I: 16.456, II: 21.916, III: 29.142, IV: 38.265, V: 49.861 },
+  steelMills: { I: 7.148, II: 10.602, III: 15.57, IV: 21.14, V: 28.83 },
+  machineryWorks: { I: 6.272, II: 9.056, III: 13.006, IV: 16.834, V: 22.377 },
+  arsenals: { I: 8.462, II: 11.905, III: 16.697, IV: 21.441, V: 28.092 },
+  textileMills: { I: 3.02, II: 4.288, III: 6.024, IV: 7.957, V: 10.79 },
+  furnitureWorks: { I: 2.189, II: 3.091, III: 4.317, IV: 5.506, V: 7.407 },
+  luxuryWorks: { I: 23.676, II: 31.359, III: 41.487, IV: 54.391, V: 70.596 },
+
 }
 
 const checkVA = (id: BuildingId, tier: number, expected: number): void => {

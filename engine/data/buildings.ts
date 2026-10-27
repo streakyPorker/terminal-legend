@@ -188,87 +188,87 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
   },
   coalMines: {
     output: { coal: 1.2 },
-    input: { machinery: 0.1 },
+    input: { machinery: 0.14 },
     labor: 0.6,
     gates: { tech: true },
     outputModifier: 'mineOutput',
     tiers: [
       {
         output: { coal: 1.56 },
-        input: { machinery: 0.1 },
+        input: { machinery: 0.182 },
         labor: 0.69,
       },
       {
         output: { coal: 2.028 },
-        input: { machinery: 0.1 },
+        input: { machinery: 0.237 },
         labor: 0.759,
       },
       {
         output: { coal: 2.636 },
-        input: { machinery: 0.1, electricity: 0.08 },
+        input: { machinery: 0.308, electricity: 0.08 },
         labor: 0.835,
       },
       {
         output: { coal: 3.375 },
-        input: { machinery: 0.1, electricity: 0.12 },
+        input: { machinery: 0.394, electricity: 0.12 },
         labor: 0.902,
       },
     ],
   },
   ironMines: {
     output: { iron: 1.2 },
-    input: { machinery: 0.06 },
+    input: { machinery: 0.088 },
     labor: 0.6,
     gates: { tech: true },
     outputModifier: 'mineOutput',
     tiers: [
       {
         output: { iron: 1.56 },
-        input: { machinery: 0.06 },
+        input: { machinery: 0.114 },
         labor: 0.69,
       },
       {
         output: { iron: 2.028 },
-        input: { machinery: 0.06 },
+        input: { machinery: 0.149 },
         labor: 0.759,
       },
       {
         output: { iron: 2.636 },
-        input: { machinery: 0.06, electricity: 0.08 },
+        input: { machinery: 0.193, electricity: 0.08 },
         labor: 0.835,
       },
       {
         output: { iron: 3.375 },
-        input: { machinery: 0.06, electricity: 0.12 },
+        input: { machinery: 0.247, electricity: 0.12 },
         labor: 0.902,
       },
     ],
   },
   lumberMills: {
     output: { wood: 0.96 },
-    input: { machinery: 0.06 },
+    input: { machinery: 0.085 },
     labor: 0.4,
     gates: { tech: true },
     outputModifier: 'mineOutput',
     tiers: [
       {
         output: { wood: 1.248 },
-        input: { machinery: 0.06 },
+        input: { machinery: 0.111 },
         labor: 0.46,
       },
       {
         output: { wood: 1.622 },
-        input: { machinery: 0.06 },
+        input: { machinery: 0.144 },
         labor: 0.506,
       },
       {
         output: { wood: 2.109 },
-        input: { machinery: 0.06, electricity: 0.08 },
+        input: { machinery: 0.187, electricity: 0.08 },
         labor: 0.557,
       },
       {
         output: { wood: 2.7 },
-        input: { machinery: 0.06, electricity: 0.12 },
+        input: { machinery: 0.239, electricity: 0.12 },
         labor: 0.601,
       },
     ],
@@ -289,30 +289,30 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     // garment mostly to the handicraft sector, so clothes can trade on both
     // sides (PT-002 reversal). Fabric output is raised to keep the mill's
     // value added — and with it the industrial margin band — intact.
-    output: { fabric: 1.773, clothes: 0.2 },
-    input: { grain: 1.0, coal: 0.18, wood: 0.1, machinery: 0.1 },
+    output: { fabric: 1.846, clothes: 0.2 },
+    input: { grain: 0.6, coal: 0.18, wood: 0.1, machinery: 0.167 },
     labor: 0.9,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
     tiers: [
       {
-        output: { fabric: 2.305, clothes: 0.26 },
-        input: { grain: 1.12, coal: 0.202, wood: 0.112, machinery: 0.112 },
+        output: { fabric: 2.4, clothes: 0.26 },
+        input: { grain: 0.672, coal: 0.202, wood: 0.112, machinery: 0.187 },
         labor: 0.99,
       },
       {
-        output: { fabric: 2.996, clothes: 0.338 },
-        input: { grain: 1.232, coal: 0.222, wood: 0.123, machinery: 0.123 },
+        output: { fabric: 3.12, clothes: 0.338 },
+        input: { grain: 0.739, coal: 0.222, wood: 0.123, machinery: 0.206 },
         labor: 1.04,
       },
       {
-        output: { fabric: 3.895, clothes: 0.439 },
-        input: { grain: 1.355, coal: 0.195, wood: 0.136, machinery: 0.136, electricity: 0.15 },
+        output: { fabric: 4.056, clothes: 0.439 },
+        input: { grain: 0.813, coal: 0.195, wood: 0.136, machinery: 0.226, electricity: 0.15 },
         labor: 1.091,
       },
       {
-        output: { fabric: 4.986, clothes: 0.562 },
-        input: { grain: 1.464, coal: 0.148, wood: 0.146, machinery: 0.146, electricity: 0.2 },
+        output: { fabric: 5.191, clothes: 0.562 },
+        input: { grain: 0.878, coal: 0.148, wood: 0.146, machinery: 0.244, electricity: 0.2 },
         labor: 1.124,
       },
     ],
@@ -321,29 +321,29 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     // B5-r2: scaled to 0.45 of the F7 recipe (output × input together) so the
     // work is small enough that other countries bid for furniture, while the
     // operating margin is preserved (value added scales with the recipe).
-    output: { furniture: 0.633 },
+    output: { furniture: 0.929 },
     input: { wood: 0.027, coal: 0.045, fabric: 0.315, steel: 0.081, machinery: 0.045 },
     labor: 0.7,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
     tiers: [
       {
-        output: { furniture: 0.823 },
+        output: { furniture: 1.208 },
         input: { wood: 0.03, coal: 0.05, fabric: 0.353, steel: 0.091, machinery: 0.05 },
         labor: 0.77,
       },
       {
-        output: { furniture: 1.07 },
+        output: { furniture: 1.57 },
         input: { wood: 0.033, coal: 0.055, fabric: 0.388, steel: 0.1, machinery: 0.055 },
         labor: 0.809,
       },
       {
-        output: { furniture: 1.391 },
+        output: { furniture: 2.041 },
         input: { wood: 0.037, coal: 0.049, fabric: 0.427, steel: 0.11, machinery: 0.061, electricity: 0.15 },
         labor: 0.849,
       },
       {
-        output: { furniture: 1.78 },
+        output: { furniture: 2.612 },
         input: { wood: 0.04, coal: 0.037, fabric: 0.461, steel: 0.119, machinery: 0.066, electricity: 0.2 },
         labor: 0.874,
       },
@@ -354,7 +354,7 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     // spirit output alone would have broken the light-industry margin band;
     // scaling the input basket with it keeps value added per building intact
     // while leaving room for other countries to bid for liquor (PT-002).
-    output: { liquor: 0.851 },
+    output: { liquor: 1.1 },
     input: { grain: 0.6075, coal: 0.09, wood: 0.0495, machinery: 0.0855 },
     labor: 0.6,
     gates: { tech: true, industrial: true },
@@ -363,58 +363,58 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     outputModifier: 'factoryOutput',
     tiers: [
       {
-        output: { liquor: 1.106 },
+        output: { liquor: 1.43 },
         input: { grain: 0.68, coal: 0.101, wood: 0.055, machinery: 0.096 },
         labor: 0.66,
       },
       {
-        output: { liquor: 1.438 },
+        output: { liquor: 1.859 },
         input: { grain: 0.748, coal: 0.111, wood: 0.061, machinery: 0.105 },
         labor: 0.693,
       },
       {
-        output: { liquor: 1.87 },
+        output: { liquor: 2.417 },
         input: { grain: 0.823, coal: 0.098, wood: 0.067, machinery: 0.116, electricity: 0.15 },
         labor: 0.728,
       },
       {
-        output: { liquor: 2.393 },
+        output: { liquor: 3.093 },
         input: { grain: 0.889, coal: 0.074, wood: 0.072, machinery: 0.125, electricity: 0.2 },
         labor: 0.749,
       },
     ],
   },
   machineryWorks: {
-    output: { machinery: 1.229 },
+    output: { machinery: 1.537 },
     input: { steel: 0.55, coal: 0.2, wood: 0.1, machinery: 0.18 },
     labor: 1.0,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
     tiers: [
       {
-        output: { machinery: 1.659 },
+        output: { machinery: 2.075 },
         input: { steel: 0.633, coal: 0.23, wood: 0.115, machinery: 0.207 },
         labor: 1.1,
       },
       {
-        output: { machinery: 2.24 },
+        output: { machinery: 2.801 },
         input: { steel: 0.708, coal: 0.258, wood: 0.129, machinery: 0.232 },
         labor: 1.155,
       },
       {
-        output: { machinery: 2.912 },
+        output: { machinery: 3.642 },
         input: { steel: 0.793, coal: 0.202, wood: 0.144, machinery: 0.26, electricity: 0.3 },
         labor: 1.213,
       },
       {
-        output: { machinery: 3.727 },
+        output: { machinery: 4.661 },
         input: { steel: 0.873, coal: 0.133, wood: 0.159, machinery: 0.286, electricity: 0.4 },
         labor: 1.237,
       },
     ],
   },
   steelMills: {
-    output: { steel: 4.0 },
+    output: { steel: 4.58 },
     // Ore (raw `iron`) + coal are smelted into steel: the only consumer of ore.
     input: { iron: 2.56, coal: 1.0, machinery: 0.1 },
     labor: 1.0,
@@ -425,80 +425,80 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     // input ×1.12, labor ×1.05 (cumulative, rounded to 3 decimals only here).
     tiers: [
       {
-        output: { steel: 5.4 },
+        output: { steel: 6.183 },
         input: { iron: 2.944, coal: 1.15, machinery: 0.115 },
         labor: 1.1,
       },
       {
-        output: { steel: 7.29 },
+        output: { steel: 8.347 },
         input: { iron: 3.297, coal: 1.288, machinery: 0.129 },
         labor: 1.155,
       },
       {
-        output: { steel: 9.477 },
+        output: { steel: 10.851 },
         input: { iron: 3.693, coal: 1.01, machinery: 0.144, electricity: 0.3 },
         labor: 1.213,
       },
       {
-        output: { steel: 12.131 },
+        output: { steel: 13.889 },
         input: { iron: 4.062, coal: 0.666, machinery: 0.159, electricity: 0.4 },
         labor: 1.237,
       },
     ],
   },
   arsenals: {
-    output: { arms: 1.137 },
+    output: { arms: 1.55 },
     input: { steel: 0.36, machinery: 0.18, coal: 0.12, iron: 0.18 },
     labor: 0.9,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
     tiers: [
       {
-        output: { arms: 1.535 },
+        output: { arms: 2.093 },
         input: { steel: 0.414, machinery: 0.207, coal: 0.138, iron: 0.207 },
         labor: 0.99,
       },
       {
-        output: { arms: 2.072 },
+        output: { arms: 2.825 },
         input: { steel: 0.464, machinery: 0.232, coal: 0.155, iron: 0.232 },
         labor: 1.04,
       },
       {
-        output: { arms: 2.694 },
+        output: { arms: 3.672 },
         input: { steel: 0.519, machinery: 0.26, coal: 0.121, iron: 0.26, electricity: 0.3 },
         labor: 1.091,
       },
       {
-        output: { arms: 3.448 },
+        output: { arms: 4.701 },
         input: { steel: 0.571, machinery: 0.286, coal: 0.08, iron: 0.286, electricity: 0.4 },
         labor: 1.113,
       },
     ],
   },
   luxuryWorks: {
-    output: { luxury: 0.968 },
+    output: { luxury: 1.345 },
     input: { fabric: 0.8, coal: 0.26, wood: 0.14, machinery: 0.12 },
     labor: 0.8,
     gates: { tech: true, industrial: true },
     outputModifier: 'factoryOutput',
     tiers: [
       {
-        output: { luxury: 1.258 },
+        output: { luxury: 1.749 },
         input: { fabric: 0.896, coal: 0.291, wood: 0.157, machinery: 0.134 },
         labor: 0.88,
       },
       {
-        output: { luxury: 1.636 },
+        output: { luxury: 2.273 },
         input: { fabric: 0.986, coal: 0.32, wood: 0.172, machinery: 0.148 },
         labor: 0.924,
       },
       {
-        output: { luxury: 2.127 },
+        output: { luxury: 2.955 },
         input: { fabric: 1.084, coal: 0.282, wood: 0.19, machinery: 0.163, electricity: 0.15 },
         labor: 0.97,
       },
       {
-        output: { luxury: 2.722 },
+        output: { luxury: 3.782 },
         input: { fabric: 1.171, coal: 0.213, wood: 0.205, machinery: 0.176, electricity: 0.2 },
         labor: 0.999,
       },
@@ -548,28 +548,28 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
   navalYards: {
     // PT-066: a yard lays down hulls. `ships` is a tradeable good; the naval
     // base below turns delivered hulls into `military.navy`.
-    output: { ships: 0.4, machinery: 0.03 },
+    output: { ships: 0.553, machinery: 0.03 },
     input: { steel: 0.3, wood: 0.3, machinery: 0.06 },
     labor: 0.8,
     gates: { tech: true, industrial: true },
     tiers: [
       {
-        output: { ships: 0.5, machinery: 0.033 },
+        output: { ships: 0.691, machinery: 0.033 },
         input: { steel: 0.33, wood: 0.33, machinery: 0.066 },
         labor: 0.88,
       },
       {
-        output: { ships: 0.75, machinery: 0.033 },
+        output: { ships: 1.037, machinery: 0.033 },
         input: { steel: 0.356, wood: 0.356, machinery: 0.071 },
         labor: 0.924,
       },
       {
-        output: { ships: 0.975, machinery: 0.033 },
+        output: { ships: 1.348, machinery: 0.033 },
         input: { steel: 0.385, wood: 0.385, machinery: 0.077, electricity: 0.2 },
         labor: 0.97,
       },
       {
-        output: { ships: 1.316, machinery: 0.033 },
+        output: { ships: 1.82, machinery: 0.033 },
         input: { steel: 0.408, wood: 0.408, machinery: 0.082, electricity: 0.28 },
         labor: 0.999,
       },
@@ -646,7 +646,7 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
   // plan 0015 S4 derived (not in 附录 B); tunable.
   chemicalWorks: {
     // VA = 1.5×3 − (0.5×1.6 + 1.25×1 + 0.2×5.2) = 1.41 → 0.313 of revenue.
-    output: { chemicals: 1.625 },
+    output: { chemicals: 2.03 },
     input: { coal: 0.5, iron: 1.25, machinery: 0.2 },
     labor: 1.0,
     gates: { tech: true, industrial: true },
@@ -656,22 +656,22 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     // substitution (×0.70 IV, ×0.60 V, cumulative) and its own electricity draw.
     tiers: [
       {
-        output: { chemicals: 2.194 },
+        output: { chemicals: 2.741 },
         input: { coal: 0.575, iron: 1.438, machinery: 0.23 },
         labor: 1.1,
       },
       {
-        output: { chemicals: 2.962 },
+        output: { chemicals: 3.7 },
         input: { coal: 0.644, iron: 1.61, machinery: 0.258 },
         labor: 1.155,
       },
       {
-        output: { chemicals: 3.85 },
+        output: { chemicals: 4.81 },
         input: { coal: 0.505, iron: 1.803, machinery: 0.289, electricity: 0.35 },
         labor: 1.213,
       },
       {
-        output: { chemicals: 4.928 },
+        output: { chemicals: 6.156 },
         input: { coal: 0.333, iron: 1.984, machinery: 0.317, electricity: 0.45 },
         labor: 1.237,
       },
@@ -679,7 +679,7 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
   },
   powerPlants: {
     // VA = 2.8×2 − (0.6×1.6 + 0.2×5.2 + 0.7×2.6) = 1.78 → 0.318 of revenue.
-    output: { electricity: 3.317 },
+    output: { electricity: 4.15 },
     input: { coal: 0.6, machinery: 0.2, steel: 0.7 },
     labor: 1.0,
     gates: { tech: true, industrial: true },
@@ -688,22 +688,22 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     // electricity, so its own input takes NO electricity and substitutes NO coal.
     tiers: [
       {
-        output: { electricity: 4.478 },
+        output: { electricity: 5.603 },
         input: { coal: 0.69, machinery: 0.23, steel: 0.805 },
         labor: 1.1,
       },
       {
-        output: { electricity: 6.045 },
+        output: { electricity: 7.563 },
         input: { coal: 0.773, machinery: 0.258, steel: 0.902 },
         labor: 1.155,
       },
       {
-        output: { electricity: 7.859 },
+        output: { electricity: 9.832 },
         input: { coal: 0.866, machinery: 0.289, steel: 1.01 },
         labor: 1.213,
       },
       {
-        output: { electricity: 10.059 },
+        output: { electricity: 12.585 },
         input: { coal: 0.952, machinery: 0.317, steel: 1.111 },
         labor: 1.237,
       },
@@ -711,7 +711,7 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
   },
   locomotiveWorks: {
     // VA = 0.8×8 − (1.0×2.6 + 0.2×5.2 + 0.4×1.6) = 2.12 → 0.331 of revenue.
-    output: { locomotives: 1.48 },
+    output: { locomotives: 1.68 },
     input: { steel: 1.0, machinery: 0.2, coal: 0.4 },
     labor: 1.0,
     gates: { tech: true, industrial: true },
@@ -720,22 +720,22 @@ export const BUILDING_RECIPES: Record<BuildingId, BuildingRecipe> = {
     // its own (lighter, 0.25/0.32) electricity draw.
     tiers: [
       {
-        output: { locomotives: 1.998 },
+        output: { locomotives: 2.268 },
         input: { steel: 1.15, machinery: 0.23, coal: 0.46 },
         labor: 1.1,
       },
       {
-        output: { locomotives: 2.697 },
+        output: { locomotives: 3.062 },
         input: { steel: 1.288, machinery: 0.258, coal: 0.515 },
         labor: 1.155,
       },
       {
-        output: { locomotives: 3.506 },
+        output: { locomotives: 3.98 },
         input: { steel: 1.443, machinery: 0.289, coal: 0.404, electricity: 0.25 },
         labor: 1.213,
       },
       {
-        output: { locomotives: 4.488 },
+        output: { locomotives: 5.095 },
         input: { steel: 1.587, machinery: 0.317, coal: 0.267, electricity: 0.32 },
         labor: 1.237,
       },
