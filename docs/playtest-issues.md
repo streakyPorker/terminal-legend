@@ -55,7 +55,7 @@
 | PT-092 | build 报价 0.10 金/点，forecast 仍按 0.20 金/点估 | 0006 / 手册 §4.6 | fixed（ab2720d） |
 | PT-093 | 企业所得税税基只认建筑经营利润，与全国利润池差四倍 | 0007 / ADR 0023 | fixed（a1f6587） |
 | PT-094 | 采掘建筑产量相对下游偏低：一座钢厂要三座铁矿喂 | 0011 F2/F7 | fixed（a261873） |
-| PT-096 | 建筑毛利与产业链比例整体失衡：越高级越不赚钱 | 手册 §4.3b / 0007 | fixed（3c62790） |
+| PT-096 | 建筑毛利与产业链比例整体失衡：越高级越不赚钱 | 手册 §4.3b / 0007 | fixed（1222c85） |
 
 <details><summary>已结（59 条，详情见 archive）</summary>
 
@@ -335,4 +335,4 @@
 - 关联：`engine/data/goods.ts`、`engine/data/buildings.ts`、`tests/tier-recipe-data.test.ts`、
   `tests/economy-recipe-calibration.test.ts`、`tests/tier-calibration.test.ts`、
   `tests/s5-electricity-balance.test.ts`、`tests/s4-new-industries.test.ts`、手册 §4.3b。
-- 状态：**fixed（待提交）**
+- 状态：**fixed（1222c85）**
